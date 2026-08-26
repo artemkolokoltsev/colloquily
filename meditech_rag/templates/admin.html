@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MediTech RAG Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero admin-hero">
+        <div>
+          <p class="eyebrow">Dashboard</p>
+          <h1>MediTech RAG Dashboard</h1>
+          <p class="section-copy">Systemstatus, Nutzung, Feedback und Retrieval-Analyse an einem Ort.</p>
+        </div>
+        <div class="hero-actions">
+          <details class="account-menu">
+            <summary class="user-badge user-badge-link">{{ user.username }}</summary>
+            <div class="account-menu-panel">
+              <a class="account-menu-link" href="{{ url_for('profile') }}">Mein Profil</a>
+              <a class="account-menu-link" href="{{ url_for('index') }}">Zur App</a>
+              <a class="account-menu-link" href="{{ url_for('admin') }}">Dashboard</a>
+              <a class="account-menu-link" href="{{ url_for('admin_eval') }}">Evaluation</a>
+              <a class="account-menu-link" href="{{ url_for('admin_settings') }}">Systemeinstellungen</a>
+              <a class="account-menu-link" href="{{ url_for('admin_documents') }}">Dokumentverwaltung</a>
+              <a class="account-menu-link" href="{{ url_for('admin_users') }}">Benutzerverwaltung</a>
+              <form action="{{ url_for('logout') }}" method="post">
+                <button type="submit" class="account-menu-button">Logout</button>
+              </form>
+            </div>
+          </details>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="card">
+            {% for category, message in messages %}
+              <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <section class="card">
+        <div class="stat-grid">
+          <article class="stat-card">
+            <span class="stat-label">Dokumente</span>
+            <strong class="stat-value">{{ stats.docs_count or 0 }}</strong>
+            <span class="stat-meta">lokal verfuegbar</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Chunks</span>
+            <strong class="stat-value">{{ stats.chunks_count or 0 }}</strong>
+            <span class="stat-meta">{{ current_config.chunking_strategy }} / {% if current_config.overlap_enabled %}mit{% else %}ohne{% endif %} Overlap</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Requests</span>
+            <strong class="stat-value">{{ analytics.requests_count or 0 }}</strong>
+            <span class="stat-meta">gesamt gespeichert</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Feedback</span>
+            <strong class="stat-value">{{ (analytics.feedback_summary.like or 0) + (analytics.feedback_summary.dislike or 0) }}</strong>
+            <span class="stat-meta">{{ analytics.feedback_summary.like or 0 }} positiv / {{ analytics.feedback_summary.dislike or 0 }} negativ</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="tab-bar admin-tab-bar" role="tablist" aria-label="Admin Bereiche">
+          <button type="button" class="tab-button active" data-admin-tab="admin-overview">Uebersicht</button>
+          <button type="button" class="tab-button" data-admin-tab="admin-activity">Aktivitaet</button>
+          <button type="button" class="tab-button" data-admin-tab="admin-debug">Debug</button>
+        </div>
+
+        <div id="admin-overview" class="tab-panel active">
+          <div class="section-head">
+            <div>
+              <h2>Uebersicht</h2>
+              <p class="section-copy">Kompakter Blick auf die wichtigsten Verteilungen und den aktuellen Systemzustand.</p>
+            </div>
+            <div class="status-chip-group">
+              <span class="status-chip">{{ current_config.embedding_backend }} / {{ current_config.embed_model }}</span>
+              <span class="status-chip">{{ current_config.llm_backend }} / {{ current_config.llm_model }}</span>
+            </div>
+          </div>
+
+          <div class="chart-canvas-grid">
+            <section class="chart-card">
+              <h3>Top Fragen</h3>
+              <canvas id="chart-questions" class="chart-canvas" width="420" height="240"></canvas>
+              <p class="chart-hint">Hover zeigt den exakten Fragetext und die Anzahl.</p>
+            </section>
+            <section class="chart-card">
+              <h3>Top Quellen-Seiten</h3>
+              <canvas id="chart-sources" class="chart-canvas" width="420" height="240"></canvas>
+              <p class="chart-hint">Zeigt, welche Seiten am haeufigsten als Quelle erscheinen.</p>
+            </section>
+            <section class="chart-card">
+              <h3>Top Concept Tags</h3>
+              <canvas id="chart-tags" class="chart-canvas" width="420" height="240"></canvas>
+              <p class="chart-hint">Themencluster des aktuellen Index.</p>
+            </section>
+            <section class="chart-card">
+              <h3>Structural Roles</h3>
+              <canvas id="chart-roles" class="chart-canvas" width="420" height="240"></canvas>
+              <p class="chart-hint">Verteilung erkannter Chunk-Rollen.</p>
+            </section>
+          </div>
+
+          <div class="admin-insight-grid">
+            <article class="subcard insight-card">
+              <span class="stat-label">Haeufigste Frage</span>
+              {% if analytics.top_questions %}
+                <strong class="insight-main" title="{{ analytics.top_questions[0].question }}">{{ analytics.top_questions[0].question }}</strong>
+                <span class="insight-meta">{{ analytics.top_questions[0].count }} Aufrufe</span>
+              {% else %}
+                <strong class="insight-main">Noch keine Frage gespeichert</strong>
+                <span class="insight-meta">Wird nach den ersten Requests sichtbar.</span>
+              {% endif %}
+            </article>
+            <article class="subcard insight-card">
+              <span class="stat-label">Hauefigste Quelle</span>
+              {% if analytics.top_sources %}
+                <strong class="insight-main" title="{{ analytics.top_sources[0].label }}">{{ analytics.top_sources[0].label }}</strong>
+                <span class="insight-meta">{{ analytics.top_sources[0].count }} Treffer</span>
+              {% else %}
+                <strong class="insight-main">Noch keine Quelle sichtbar</strong>
+                <span class="insight-meta">Erscheint mit gespeicherten Retrievals.</span>
+              {% endif %}
+            </article>
+            <article class="subcard insight-card">
+              <span class="stat-label">Staerkstes Konzept</span>
+              {% if debug_info.top_concept_tags %}
+                <strong class="insight-main">{{ debug_info.top_concept_tags[0].tag }}</strong>
+                <span class="insight-meta">{{ debug_info.top_concept_tags[0].count }} Chunks</span>
+              {% else %}
+                <strong class="insight-main">Noch kein Concept Tag</strong>
+                <span class="insight-meta">Wird nach Metadatenanreicherung sichtbar.</span>
+              {% endif %}
+            </article>
+          </div>
+
+          <div class="admin-grid admin-summary-grid">
+            <section class="subcard">
+              <h3>Systemstatus</h3>
+              <ul class="meta-list compact">
+                <li>Build: {{ stats.last_build_time or '-' }}</li>
+                <li>Chunking: {{ current_config.chunking_strategy }}</li>
+                <li>Overlap: {% if current_config.overlap_enabled %}an{% else %}aus{% endif %}</li>
+                <li>Metadata Rerank: {% if debug_info.metadata_rerank_enabled %}aktiv{% else %}inaktiv{% endif %}</li>
+              </ul>
+            </section>
+            <section class="subcard">
+              <h3>Debug Links</h3>
+              <ul class="meta-list compact">
+                <li><a class="admin-link" href="{{ url_for('structure') }}">Struktur JSON</a></li>
+                <li><a class="admin-link" href="{{ url_for('topics_debug') }}">Topic Debug</a></li>
+                <li>Aktive Strategie: {{ debug_info.current_chunking_strategy }}</li>
+                <li>Benutzer: {{ users|length }}</li>
+              </ul>
+            </section>
+          </div>
+        </div>
+
+        <div id="admin-activity" class="tab-panel">
+          <div class="section-head">
+            <div>
+              <h2>Aktivitaet</h2>
+              <p class="section-copy">Requests, Feedback und haeufige Muster aus der Nutzung.</p>
+            </div>
+          </div>
+          <div class="admin-grid">
+            <section class="subcard">
+              <h3>Hauefige Fragen</h3>
+              <div class="chart-list">
+                {% for item in analytics.top_questions %}
+                  <div class="chart-row" title="{{ item.question }}">
+                    <div class="chart-row-head">
+                      <div class="chart-label">{{ item.question }}</div>
+                      <div class="chart-value">{{ item.count }}</div>
+                    </div>
+                    <div class="chart-bar-wrap">
+                      <div class="chart-bar" style="width: {{ (item.count / analytics.top_questions[0].count * 100) if analytics.top_questions else 0 }}%"></div>
+                    </div>
+                  </div>
+                {% else %}
+                  <div>Noch keine Requests gespeichert.</div>
+                {% endfor %}
+              </div>
+            </section>
+            <section class="subcard">
+              <h3>Hauefige Quellen-Seiten</h3>
+              <div class="chart-list">
+                {% for item in analytics.top_sources %}
+                  <div class="chart-row" title="{{ item.label }}">
+                    <div class="chart-row-head">
+                      <div class="chart-label">{{ item.label }}</div>
+                      <div class="chart-value">{{ item.count }}</div>
+                    </div>
+                    <div class="chart-bar-wrap">
+                      <div class="chart-bar alt" style="width: {{ (item.count / analytics.top_sources[0].count * 100) if analytics.top_sources else 0 }}%"></div>
+                    </div>
+                  </div>
+                {% else %}
+                  <div>Keine Quellenhaeufigkeiten verfuegbar.</div>
+                {% endfor %}
+              </div>
+            </section>
+          </div>
+
+          <div class="admin-grid">
+            <section class="subcard">
+              <h3>Letzte Requests</h3>
+              <ul class="request-list admin-scroll-list">
+                {% for item in analytics.recent_requests %}
+                  <li>
+                    <strong>{{ item.created_at }}</strong> · {{ item.username }} · {{ item.request_type }} · {{ item.duration_ms|duration_human }}
+                    <div class="preview">Input: {{ item.input_text }}</div>
+                    <div class="preview">Output: {{ item.output_text }}</div>
+                  </li>
+                {% else %}
+                  <li>Noch keine Requests gespeichert.</li>
+                {% endfor %}
+              </ul>
+            </section>
+            <section class="subcard">
+              <h3>Letztes Feedback</h3>
+              <ul class="request-list admin-scroll-list">
+                {% for item in analytics.recent_feedback %}
+                  <li>
+                    <strong>{{ item.created_at }}</strong> · {{ item.username }} · {% if item.helpful %}Hilfreich{% else %}Nicht hilfreich{% endif %}
+                    <div class="preview">{{ item.input_text or '-' }}</div>
+                    {% if item.details %}
+                      <div class="preview">Kommentar: {{ item.details }}</div>
+                    {% endif %}
+                  </li>
+                {% else %}
+                  <li>Noch kein Feedback gespeichert.</li>
+                {% endfor %}
+              </ul>
+            </section>
+          </div>
+        </div>
+
+        <div id="admin-debug" class="tab-panel">
+          <div class="section-head">
+            <div>
+              <h2>Debug</h2>
+              <p class="section-copy">Retrieval-Signale, Chunk-Metadaten und Diagnosewerte fuer die Indexqualitaet.</p>
+            </div>
+            <div class="status-chip-group">
+              <a class="admin-link" href="{{ url_for('structure') }}">Struktur JSON</a>
+            </div>
+          </div>
+          <div class="admin-grid">
+            <section class="subcard">
+              <h3>Chunk Distribution</h3>
+              <div class="chart-list">
+                {% for key, value in debug_info.chunk_distribution.items() %}
+                  <div class="chart-row" title="{{ key }}">
+                    <div class="chart-row-head">
+                      <div class="chart-label">{{ key }}</div>
+                      <div class="chart-value">{{ value }}</div>
+                    </div>
+                    <div class="chart-bar-wrap">
+                      <div class="chart-bar alt" style="width: {{ (value / (debug_info.chunk_distribution.values()|list|max) * 100) if debug_info.chunk_distribution else 0 }}%"></div>
+                    </div>
+                  </div>
+                {% else %}
+                  <div>Keine Verteilung verfuegbar.</div>
+                {% endfor %}
+              </div>
+            </section>
+            <section class="subcard">
+              <h3>Top Concept Tags</h3>
+              <div class="chart-list">
+                {% for item in debug_info.top_concept_tags %}
+                  <div class="chart-row" title="{{ item.tag }}">
+                    <div class="chart-row-head">
+                      <div class="chart-label">{{ item.tag }}</div>
+                      <div class="chart-value">{{ item.count }}</div>
+                    </div>
+                    <div class="chart-bar-wrap">
+                      <div class="chart-bar" style="width: {{ (item.count / debug_info.top_concept_tags[0].count * 100) if debug_info.top_concept_tags else 0 }}%"></div>
+                    </div>
+                  </div>
+                {% else %}
+                  <div>Keine Tags verfuegbar.</div>
+                {% endfor %}
+              </div>
+            </section>
+            <section class="subcard">
+              <h3>Letzte Retrievals</h3>
+              <ul class="request-list admin-scroll-list">
+                {% for item in debug_info.recently_retrieved %}
+                  <li>
+                    <div class="preview">{{ item.question }}</div>
+                    <div class="preview">{{ item.pages|join(', ') }}</div>
+                    <div class="preview">Duplicate Ratio: {{ item.duplicate_ratio }}</div>
+                    {% if item.warnings %}
+                      <div class="preview">Warnungen: {{ item.warnings|join(', ') }}</div>
+                    {% endif %}
+                  </li>
+                {% else %}
+                  <li>Keine Retrieval-Historie verfuegbar.</li>
+                {% endfor %}
+              </ul>
+            </section>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script>
+      const dashboardCharts = {
+        questions: {{ analytics.top_questions|tojson }},
+        sources: {{ analytics.top_sources|tojson }},
+        tags: {{ debug_info.top_concept_tags|tojson }},
+        roles: [
+          {% for key, value in debug_info.structural_roles.items() %}
+            {"label": {{ key|tojson }}, "count": {{ value }}}{% if not loop.last %},{% endif %}
+          {% endfor %}
+        ]
+      };
+
+      document.querySelectorAll('[data-admin-tab]').forEach((button) => {
+        button.addEventListener('click', () => {
+          document.querySelectorAll('[data-admin-tab]').forEach((item) => item.classList.remove('active'));
+          document.querySelectorAll('main .tab-panel').forEach((panel) => panel.classList.remove('active'));
+          button.classList.add('active');
+          document.getElementById(button.dataset.adminTab)?.classList.add('active');
+        });
+      });
+
+      function toggleDocActions(id) {
+        const element = document.getElementById(`doc-actions-${id}`);
+        if (!element) {
+          return;
+        }
+        document.querySelectorAll('.doc-item-actions').forEach((item) => {
+          if (item !== element) {
+            item.classList.add('hidden');
+          }
+        });
+        element.classList.toggle('hidden');
+      }
+
+      function attachTooltip(container) {
+        let tooltip = container.querySelector('.chart-tooltip');
+        if (!tooltip) {
+          tooltip = document.createElement('div');
+          tooltip.className = 'chart-tooltip hidden';
+          container.appendChild(tooltip);
+        }
+        return tooltip;
+      }
+
+      function attachDetailPanel(container) {
+        let panel = container.querySelector('.chart-detail');
+        if (!panel) {
+          panel = document.createElement('div');
+          panel.className = 'chart-detail';
+          panel.innerHTML = `
+            <div class="chart-detail-label">Hover Detail</div>
+            <div class="chart-detail-value">Bewege den Cursor ueber einen Balken.</div>
+            <div class="chart-detail-meta">Hier erscheint der volle Titel und die genaue Kennzahl.</div>
+          `;
+          container.appendChild(panel);
+        }
+        return panel;
+      }
+
+      function updateDetailPanel(panel, label, value, meta = '') {
+        if (!panel) {
+          return;
+        }
+        panel.querySelector('.chart-detail-label').textContent = label || 'Hover Detail';
+        panel.querySelector('.chart-detail-value').textContent = value || 'Keine Daten';
+        panel.querySelector('.chart-detail-meta').textContent = meta || 'Hier erscheint der volle Titel und die genaue Kennzahl.';
+      }
+
+      function drawBarChart(canvasId, rawItems, labelField, countField, color) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) {
+          return;
+        }
+        const items = (rawItems || []).slice(0, 7);
+        if (!items.length) {
+          return;
+        }
+        const ctx = canvas.getContext('2d');
+        const container = canvas.parentElement;
+        const tooltip = attachTooltip(container);
+        const detailPanel = attachDetailPanel(container);
+        const width = canvas.width;
+        const height = canvas.height;
+        const pad = { top: 20, right: 18, bottom: 18, left: 18 };
+        const innerWidth = width - pad.left - pad.right;
+        const barHeight = 22;
+        const gap = 13;
+        const max = Math.max(...items.map((item) => Number(item[countField] || 0)), 1);
+        const bars = [];
+
+        function truncate(value, maxLength = 28) {
+          return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
+        }
+
+        function render(activeIndex = -1) {
+          ctx.clearRect(0, 0, width, height);
+          ctx.fillStyle = '#63767b';
+          ctx.font = '12px "Avenir Next", "Segoe UI", sans-serif';
+          items.forEach((item, index) => {
+            const label = String(item[labelField] || '-');
+            const count = Number(item[countField] || 0);
+            const y = pad.top + index * (barHeight + gap);
+            const valueWidth = Math.max(10, (count / max) * (innerWidth - 154));
+            const x = pad.left + 136;
+            const isActive = index === activeIndex;
+
+            ctx.fillStyle = isActive ? 'rgba(29, 42, 47, 0.08)' : 'rgba(23, 107, 90, 0.04)';
+            ctx.beginPath();
+            ctx.roundRect(0, y - 5, width, barHeight + 10, 10);
+            ctx.fill();
+
+            ctx.fillStyle = '#1d2a2f';
+            ctx.fillText(truncate(label, 24), pad.left, y + 15);
+
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.roundRect(x, y, valueWidth, barHeight, 10);
+            ctx.fill();
+
+            ctx.fillStyle = '#63767b';
+            ctx.fillText(String(count), x + valueWidth + 8, y + 14);
+
+            bars[index] = { x: 0, y: y - 5, width, height: barHeight + 10, label, count };
+          });
+        }
+
+        render();
+        if (bars[0]) {
+          updateDetailPanel(detailPanel, bars[0].label, `${bars[0].count}`, 'Erster Eintrag der aktuellen Verteilung.');
+        }
+
+        canvas.addEventListener('mousemove', (event) => {
+          const rect = canvas.getBoundingClientRect();
+          const scaleX = canvas.width / rect.width;
+          const scaleY = canvas.height / rect.height;
+          const x = (event.clientX - rect.left) * scaleX;
+          const y = (event.clientY - rect.top) * scaleY;
+          const activeIndex = bars.findIndex((bar) => x >= bar.x && x <= bar.x + bar.width && y >= bar.y && y <= bar.y + bar.height);
+          render(activeIndex);
+          if (activeIndex >= 0) {
+            const bar = bars[activeIndex];
+            tooltip.textContent = `${bar.label}: ${bar.count}`;
+            tooltip.style.left = `${event.offsetX}px`;
+            tooltip.style.top = `${event.offsetY}px`;
+            tooltip.classList.remove('hidden');
+            updateDetailPanel(detailPanel, bar.label, `${bar.count}`, 'Voller Labeltext und exakter Wert fuer diesen Balken.');
+          } else {
+            tooltip.classList.add('hidden');
+          }
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+          render(-1);
+          tooltip.classList.add('hidden');
+          if (bars[0]) {
+            updateDetailPanel(detailPanel, bars[0].label, `${bars[0].count}`, 'Erster Eintrag der aktuellen Verteilung.');
+          }
+        });
+      }
+
+      drawBarChart('chart-questions', dashboardCharts.questions, 'question', 'count', '#176b5a');
+      drawBarChart('chart-sources', dashboardCharts.sources, 'label', 'count', '#d6a757');
+      drawBarChart('chart-tags', dashboardCharts.tags, 'tag', 'count', '#176b5a');
+      drawBarChart('chart-roles', dashboardCharts.roles, 'label', 'count', '#d6a757');
+
+      document.querySelectorAll('form.async-form').forEach((form) => {
+        form.addEventListener('submit', () => {
+          const submitButton = form.querySelector('button[type="submit"]');
+          if (!submitButton) {
+            return;
+          }
+          submitButton.disabled = true;
+          submitButton.classList.add('is-loading');
+          if (!submitButton.querySelector('.spinner')) {
+            const spinner = document.createElement('span');
+            spinner.className = 'spinner';
+            submitButton.prepend(spinner);
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

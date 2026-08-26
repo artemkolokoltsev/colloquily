@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Evaluation | MediTech RAG</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero admin-hero">
+        <div>
+          <p class="eyebrow">Evaluation</p>
+          <h1>Eval- und Langtrace-Setup</h1>
+          <p class="section-copy">Metriken konfigurieren, Trace-Attribute pruefen und Annotationen fuer Langtrace vorbereiten.</p>
+        </div>
+        <div class="hero-actions">
+          <details class="account-menu">
+            <summary class="user-badge user-badge-link">{{ user.username }}</summary>
+            <div class="account-menu-panel">
+              <a class="account-menu-link" href="{{ url_for('profile') }}">Mein Profil</a>
+              <a class="account-menu-link" href="{{ url_for('index') }}">Zur App</a>
+              <a class="account-menu-link" href="{{ url_for('admin') }}">Dashboard</a>
+              <a class="account-menu-link" href="{{ url_for('admin_eval') }}">Evaluation</a>
+              <a class="account-menu-link" href="{{ url_for('admin_settings') }}">Systemeinstellungen</a>
+              <a class="account-menu-link" href="{{ url_for('admin_documents') }}">Dokumentverwaltung</a>
+              <a class="account-menu-link" href="{{ url_for('admin_users') }}">Benutzerverwaltung</a>
+              <form action="{{ url_for('logout') }}" method="post">
+                <button type="submit" class="account-menu-button">Logout</button>
+              </form>
+            </div>
+          </details>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="card">
+            {% for category, message in messages %}
+              <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Langtrace Status</h2>
+            <p class="section-copy">Lokaler Status der Tracing- und Feedback-Anbindung.</p>
+          </div>
+          <form action="{{ url_for('admin_eval_test_trace') }}" method="post" class="async-form">
+            <button type="submit">Send test eval trace to Langtrace</button>
+          </form>
+        </div>
+        <div class="stat-grid">
+          <article class="stat-card">
+            <span class="stat-label">Enabled</span>
+            <strong class="stat-value">{% if langtrace_status.enabled %}yes{% else %}no{% endif %}</strong>
+            <span class="stat-meta">{{ langtrace_status.mode }}</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">API Key</span>
+            <strong class="stat-value">{% if langtrace_status.api_key_present %}present{% else %}missing{% endif %}</strong>
+            <span class="stat-meta">{{ langtrace_status.api_key_masked }}</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">SDK Import</span>
+            <strong class="stat-value">{% if langtrace_status.sdk_import_ok %}ok{% else %}failed{% endif %}</strong>
+            <span class="stat-meta">{{ langtrace_status.sdk_error or 'ready' }}</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Trace IDs</span>
+            <strong class="stat-value">{{ langtrace_status.recent_with_trace_ids|length }}</strong>
+            <span class="stat-meta">recent requests with trace/span ids</span>
+          </article>
+        </div>
+        <ul class="meta-list compact">
+          <li>LANGTRACE_API_HOST: {{ langtrace_status.api_host }}</li>
+          <li>Recent trace capture: {% if langtrace_status.recent_trace_capture_ok %}ok{% else %}not seen yet{% endif %}</li>
+          {% if sync_result %}<li>Latest test: {{ sync_result }}</li>{% endif %}
+        </ul>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Metric Registry</h2>
+            <p class="section-copy">Persistiert unter data/eval/metrics/eval_metrics.json.</p>
+          </div>
+          <div class="status-chip-group">
+            <a class="button-link secondary-link" href="{{ url_for('admin_eval_export_metrics') }}">Export JSON</a>
+            <form action="{{ url_for('admin_eval_restore_metrics') }}" method="post">
+              <button type="submit" class="secondary">Restore defaults</button>
+            </form>
+          </div>
+        </div>
+
+        <form action="{{ url_for('admin_eval_update_metrics') }}" method="post" class="stacked async-form">
+          <div class="settings-parameter-stack">
+            {% for metric in metric_registry.metrics %}
+              <section class="settings-panel settings-param-panel">
+                <div class="settings-field-header">
+                  <div>
+                    <span class="settings-field-label">{{ metric.display_name }}</span>
+                    <span class="settings-field-key">{{ metric.key }} · {{ metric.type }} · {{ metric.scale }}</span>
+                  </div>
+                  <label class="settings-checkbox-label">
+                    <input type="checkbox" name="enabled__{{ metric.key }}" {% if metric.enabled %}checked{% endif %}>
+                    enabled
+                  </label>
+                </div>
+                <label class="settings-field-control-label" for="description__{{ metric.key }}">Description</label>
+                <textarea id="description__{{ metric.key }}" name="description__{{ metric.key }}" rows="2">{{ metric.description }}</textarea>
+                <label class="settings-field-control-label" for="rubric__{{ metric.key }}">Rubric / thresholds</label>
+                <textarea id="rubric__{{ metric.key }}" name="rubric__{{ metric.key }}" rows="4">{{ metric.rubric }}</textarea>
+                <p class="settings-field-detail">Langtrace attribute: {{ metric.langtrace_attribute_name }}</p>
+              </section>
+            {% endfor %}
+          </div>
+          <button type="submit">Metriken speichern</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Index Profiles</h2>
+            <p class="section-copy">Die App nutzt vorbereitete FAISS-Indizes aus data/indexes/. Normale Chat-Requests bauen keinen Index neu.</p>
+          </div>
+          <form action="{{ url_for('admin_eval_switch_index_profile') }}" method="post" class="inline-form">
+            <select name="active_index_name">
+              {% for profile in index_profiles %}
+                <option value="{{ profile.name }}" {% if profile.active %}selected{% endif %}>{{ profile.name }}{% if not profile.exists %} (missing){% endif %}</option>
+              {% endfor %}
+            </select>
+            <button type="submit">Profil aktivieren</button>
+          </form>
+        </div>
+        <div class="status-chip-group">
+          <span class="status-chip">active: {{ current_config.index_profile }}</span>
+          <span class="status-chip">low-text pages: {{ preprocessing_cache.low_text_pages_count }}</span>
+          <span class="status-chip">image-heavy possible: {{ preprocessing_cache.image_heavy_possible_pages_count }}</span>
+        </div>
+        <div class="admin-grid">
+          {% for profile in index_profiles %}
+            <article class="subcard">
+              <h3>{{ profile.name }}{% if profile.active %} · active{% endif %}</h3>
+              <ul class="meta-list compact">
+                <li>Status: {% if profile.exists %}prepared{% else %}missing{% endif %}</li>
+                <li>Chunks: {{ profile.chunks_count or '-' }}</li>
+                <li>Chunking: {{ profile.chunking_strategy }}</li>
+                <li>Overlap: {{ profile.overlap_enabled }}</li>
+                <li>Embedding: {{ profile.embedding_model }}</li>
+                <li>Rerank: {{ profile.metadata_rerank_enabled }}</li>
+                <li>Path: {{ profile.path }}</li>
+              </ul>
+            </article>
+          {% endfor %}
+        </div>
+        <p class="section-copy">Current system indexes native PDF text only. Low-text pages are flagged as possible image-heavy/OCR-needed; OCR and image captioning are future work.</p>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Langtrace Annotation Setup</h2>
+            <p class="section-copy">Automatic Langtrace annotation-test creation was not found in the installed SDK/API. The app is already logging metric definitions, automatic metric values, and feedback to traces. To manually evaluate in Langtrace, create these Annotation Tests using the names/rubrics below.</p>
+          </div>
+        </div>
+        <div class="admin-grid">
+          {% for metric in enabled_human_metrics %}
+            <article class="subcard">
+              <h3>{{ metric.display_name }}</h3>
+              <ul class="meta-list compact">
+                <li>Name/key: {{ metric.key }}</li>
+                <li>Scale: {{ metric.scale }}</li>
+                <li>Description: {{ metric.description }}</li>
+              </ul>
+              <pre>{{ metric.rubric }}</pre>
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Recent Evaluated Requests</h2>
+            <p class="section-copy">Neuere Requests mit automatischen Metriken, Retrieval, Feedback und Trace-IDs.</p>
+          </div>
+        </div>
+        <ul class="request-list admin-scroll-list">
+          {% for item in recent_requests %}
+            <li>
+              <strong>{{ item.timestamp or item.created_at }}</strong> · {{ item.workflow or item.request_type }} · {{ item.llm_model or '-' }}
+              <div class="preview">{{ item.input_text }}</div>
+              <div class="tag-row">
+                <span class="mini-tag">request {{ item.request_id }}</span>
+                <span class="mini-tag">chunking {{ item.chunking_strategy or '-' }}</span>
+                <span class="mini-tag">trace {{ item.trace_id or item.langtrace_trace_id or '-' }}</span>
+                <span class="mini-tag">span {{ item.span_id or item.langtrace_span_id or '-' }}</span>
+              </div>
+              <div class="preview">
+                Sources:
+                {% for source in item.sources or [] %}
+                  {{ source.doc_name }} S.{{ source.page_number }}{% if source.score is not none %} ({{ '%.3f'|format(source.score) }}){% endif %}{% if not loop.last %}; {% endif %}
+                {% else %}
+                  -
+                {% endfor %}
+              </div>
+              <pre>{{ item.automatic_metrics or {} }}</pre>
+              {% if item.user_feedback or item.feedback %}
+                <div class="preview">Feedback: {{ item.user_feedback or item.feedback }} · Langtrace sent: {{ item.langtrace_feedback_sent }}</div>
+              {% endif %}
+            </li>
+          {% else %}
+            <li>Noch keine Requests.</li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Gold Eval Dataset</h2>
+            <p class="section-copy">Dataset und vorhandene Eval-Runs fuer Retrieval-/Groundedness-Auswertung.</p>
+          </div>
+          <div class="status-chip-group">
+            <span class="status-chip">{{ dataset_summary.count }} Beispiele</span>
+            <span class="status-chip">Run command: python scripts/eval_chunking.py</span>
+          </div>
+        </div>
+        <div class="admin-grid">
+          <section class="subcard">
+            <h3>Examples</h3>
+            <pre>{{ dataset_summary.examples }}</pre>
+          </section>
+          <section class="subcard">
+            <h3>Latest Run</h3>
+            <pre>{{ latest_eval_run or 'Noch kein Eval-Run gefunden.' }}</pre>
+          </section>
+          <section class="subcard">
+            <h3>Latest Retrieval Profile Eval</h3>
+            <pre>{{ latest_retrieval_profile_run or 'Noch keine Retrieval-Profil-Evaluation gefunden.' }}</pre>
+          </section>
+          <section class="subcard">
+            <h3>Latest Answer Subset Eval</h3>
+            <pre>{{ latest_answer_subset_run or 'Noch keine Answer-Subset-Evaluation gefunden.' }}</pre>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      document.querySelectorAll('form.async-form').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+          const submitter = event.submitter;
+          const submitButton = submitter?.matches('button[type="submit"]') ? submitter : form.querySelector('button[type="submit"]');
+          if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.classList.add('is-loading');
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

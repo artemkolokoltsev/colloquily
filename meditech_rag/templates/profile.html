@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mein Profil | MediTech RAG</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero profile-hero">
+        <div>
+          <p class="eyebrow">Persoenliches Profil</p>
+          <h1>{{ user.username }}</h1>
+          <p class="section-copy">Dein Lern-Dashboard mit Aktivitaet, Quiz-Leistung und genutzten Quellen.</p>
+        </div>
+        <div class="hero-actions">
+          <details class="account-menu">
+            <summary class="user-badge user-badge-link">{{ user.username }}</summary>
+            <div class="account-menu-panel">
+              <a class="account-menu-link" href="{{ url_for('index') }}">Zur App</a>
+              <a class="account-menu-link" href="{{ url_for('profile') }}">Mein Profil</a>
+              {% if user.is_admin %}
+                <a class="account-menu-link" href="{{ url_for('admin') }}">Dashboard</a>
+              <a class="account-menu-link" href="{{ url_for('admin_eval') }}">Evaluation</a>
+                <a class="account-menu-link" href="{{ url_for('admin_settings') }}">Systemeinstellungen</a>
+                <a class="account-menu-link" href="{{ url_for('admin_users') }}">Benutzerverwaltung</a>
+              {% endif %}
+              <form action="{{ url_for('logout') }}" method="post">
+                <button type="submit" class="account-menu-button">Logout</button>
+              </form>
+            </div>
+          </details>
+        </div>
+      </header>
+
+      <section class="card profile-intro-card">
+        <div class="profile-intro">
+          <div>
+            <h2>Dashboard</h2>
+            <p class="section-copy">
+              {% if user_analytics.summary.favorite_request_type %}
+                Schwerpunkt: {{ user_analytics.summary.favorite_request_type }}. Die Kennzahlen unten zeigen dein aktuelles Lernmuster.
+              {% else %}
+                Starte mit Fragen, Zusammenfassungen oder Quizzen. Sobald Daten vorhanden sind, fuellt sich dieses Dashboard automatisch.
+              {% endif %}
+            </p>
+          </div>
+          <div class="status-chip-group">
+            <span class="status-chip">{{ user_analytics.summary.requests_total or 0 }} Requests</span>
+            <span class="status-chip">{{ user_analytics.summary.quizzes_total or 0 }} Quiz-Sessions</span>
+            <span class="status-chip">{{ user_analytics.summary.likes or 0 }} hilfreiche Bewertungen</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="stat-grid">
+          <article class="stat-card">
+            <span class="stat-label">Requests</span>
+            <strong class="stat-value">{{ user_analytics.summary.requests_total or 0 }}</strong>
+            <span class="stat-meta">gesamte Lernaktionen</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Antwortzeit</span>
+            <strong class="stat-value">{{ user_analytics.summary.avg_duration_ms|duration_human }}</strong>
+            <span class="stat-meta">durchschnittliche Dauer</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Quiz-Schnitt</span>
+            <strong class="stat-value">{{ '%.0f'|format(user_analytics.summary.avg_score_percent or 0) }}%</strong>
+            <span class="stat-meta">bester Wert {{ '%.0f'|format(user_analytics.summary.best_score_percent or 0) }}%</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Feedback</span>
+            <strong class="stat-value">{{ user_analytics.summary.likes or 0 }}</strong>
+            <span class="stat-meta">{{ user_analytics.summary.dislikes or 0 }} kritisch markiert</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="chart-canvas-grid profile-chart-grid">
+          <section class="chart-card">
+            <h3>Aktivitaet der letzten 14 Tage</h3>
+            <canvas id="chart-weekly-activity" class="chart-canvas" width="420" height="240"></canvas>
+            <p class="chart-hint">Tagesverlauf deiner Requests.</p>
+          </section>
+          <section class="chart-card">
+            <h3>Request-Typen</h3>
+            <canvas id="chart-request-types" class="chart-canvas" width="420" height="240"></canvas>
+            <p class="chart-hint">Welche Funktionen du am meisten nutzt.</p>
+          </section>
+          <section class="chart-card">
+            <h3>Quiz-Entwicklung</h3>
+            <canvas id="chart-quiz-trend" class="chart-canvas" width="420" height="240"></canvas>
+            <p class="chart-hint">Verlauf deiner letzten bewerteten Quizze.</p>
+          </section>
+          <section class="chart-card">
+            <h3>Top Quellen</h3>
+            <canvas id="chart-top-sources" class="chart-canvas" width="420" height="240"></canvas>
+            <p class="chart-hint">Seiten, die in deinen Antworten besonders oft auftauchen.</p>
+          </section>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="grid analytics-grid">
+          <section class="subcard">
+            <h3>Letzte Fragen</h3>
+            <ul class="request-list admin-scroll-list">
+              {% for item in user_analytics.recent_requests %}
+                <li>
+                  <strong>{{ item.created_at }}</strong> · {{ item.request_type }} · {{ item.duration_ms|duration_human }}
+                  <div class="preview">{{ item.input_text }}</div>
+                </li>
+              {% else %}
+                <li>Noch keine eigenen Requests.</li>
+              {% endfor %}
+            </ul>
+          </section>
+          <section class="subcard">
+            <h3>Letzte Quizze</h3>
+            <ul class="request-list admin-scroll-list">
+              {% for item in user_analytics.quizzes %}
+                <li>
+                  <strong>{{ item.created_at }}</strong> · {{ item.topic }}
+                  <div class="preview">Score: {{ '%.1f'|format(item.score_percent or 0) }}%</div>
+                </li>
+              {% else %}
+                <li>Noch keine Quiz-Auswertungen.</li>
+              {% endfor %}
+            </ul>
+          </section>
+        </div>
+      </section>
+    </main>
+    <script>
+      const profileCharts = {
+        weeklyActivity: {{ user_analytics.weekly_activity|tojson }},
+        requestTypes: {{ user_analytics.request_types|tojson }},
+        quizTrend: {{ user_analytics.quiz_trend|tojson }},
+        topSources: {{ user_analytics.top_sources|tojson }},
+      };
+
+      function attachTooltip(container) {
+        let tooltip = container.querySelector('.chart-tooltip');
+        if (!tooltip) {
+          tooltip = document.createElement('div');
+          tooltip.className = 'chart-tooltip hidden';
+          container.appendChild(tooltip);
+        }
+        return tooltip;
+      }
+
+      function attachDetailPanel(container) {
+        let panel = container.querySelector('.chart-detail');
+        if (!panel) {
+          panel = document.createElement('div');
+          panel.className = 'chart-detail';
+          panel.innerHTML = `
+            <div class="chart-detail-label">Hover Detail</div>
+            <div class="chart-detail-value">Bewege den Cursor ueber ein Diagramm.</div>
+            <div class="chart-detail-meta">Hier siehst du den vollen Titel und den genauen Wert.</div>
+          `;
+          container.appendChild(panel);
+        }
+        return panel;
+      }
+
+      function updateDetailPanel(panel, label, value, meta = '') {
+        if (!panel) {
+          return;
+        }
+        panel.querySelector('.chart-detail-label').textContent = label || 'Hover Detail';
+        panel.querySelector('.chart-detail-value').textContent = value || 'Keine Daten';
+        panel.querySelector('.chart-detail-meta').textContent = meta || 'Hier siehst du den vollen Titel und den genauen Wert.';
+      }
+
+      function drawBarChart(canvasId, rawItems, labelField, countField, color) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) {
+          return;
+        }
+        const items = (rawItems || []).slice(0, 8);
+        if (!items.length) {
+          return;
+        }
+        const ctx = canvas.getContext('2d');
+        const container = canvas.parentElement;
+        const tooltip = attachTooltip(container);
+        const detailPanel = attachDetailPanel(container);
+        const width = canvas.width;
+        const height = canvas.height;
+        const pad = { top: 20, right: 18, bottom: 18, left: 18 };
+        const innerWidth = width - pad.left - pad.right;
+        const barHeight = 22;
+        const gap = 13;
+        const max = Math.max(...items.map((item) => Number(item[countField] || 0)), 1);
+        const bars = [];
+
+        function truncate(value, maxLength = 24) {
+          return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
+        }
+
+        function render(activeIndex = -1) {
+          ctx.clearRect(0, 0, width, height);
+          ctx.font = '12px "Avenir Next", "Segoe UI", sans-serif';
+          items.forEach((item, index) => {
+            const label = String(item[labelField] || '-');
+            const count = Number(item[countField] || 0);
+            const y = pad.top + index * (barHeight + gap);
+            const valueWidth = Math.max(10, (count / max) * (innerWidth - 154));
+            const x = pad.left + 136;
+            const isActive = index === activeIndex;
+
+            ctx.fillStyle = isActive ? 'rgba(29, 42, 47, 0.08)' : 'rgba(23, 107, 90, 0.04)';
+            ctx.beginPath();
+            ctx.roundRect(0, y - 5, width, barHeight + 10, 10);
+            ctx.fill();
+
+            ctx.fillStyle = '#1d2a2f';
+            ctx.fillText(truncate(label, 24), pad.left, y + 15);
+
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.roundRect(x, y, valueWidth, barHeight, 10);
+            ctx.fill();
+
+            ctx.fillStyle = '#63767b';
+            ctx.fillText(String(count), x + valueWidth + 8, y + 14);
+            bars[index] = { x: 0, y: y - 5, width, height: barHeight + 10, label, value: count };
+          });
+        }
+
+        render();
+        if (bars[0]) {
+          updateDetailPanel(detailPanel, bars[0].label, `${bars[0].value}`, 'Erster Eintrag der aktuellen Statistik.');
+        }
+
+        canvas.addEventListener('mousemove', (event) => {
+          const rect = canvas.getBoundingClientRect();
+          const scaleX = canvas.width / rect.width;
+          const scaleY = canvas.height / rect.height;
+          const x = (event.clientX - rect.left) * scaleX;
+          const y = (event.clientY - rect.top) * scaleY;
+          const activeIndex = bars.findIndex((bar) => x >= bar.x && x <= bar.x + bar.width && y >= bar.y && y <= bar.y + bar.height);
+          render(activeIndex);
+          if (activeIndex >= 0) {
+            const bar = bars[activeIndex];
+            tooltip.textContent = `${bar.label}: ${bar.value}`;
+            tooltip.style.left = `${event.offsetX}px`;
+            tooltip.style.top = `${event.offsetY}px`;
+            tooltip.classList.remove('hidden');
+            updateDetailPanel(detailPanel, bar.label, `${bar.value}`, 'Voller Labeltext und exakter Wert.');
+          } else {
+            tooltip.classList.add('hidden');
+          }
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+          render(-1);
+          tooltip.classList.add('hidden');
+          if (bars[0]) {
+            updateDetailPanel(detailPanel, bars[0].label, `${bars[0].value}`, 'Erster Eintrag der aktuellen Statistik.');
+          }
+        });
+      }
+
+      function drawLineChart(canvasId, rawItems, labelField, valueField, lineColor, fillColor, suffix = '') {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) {
+          return;
+        }
+        const items = rawItems || [];
+        if (!items.length) {
+          return;
+        }
+        const ctx = canvas.getContext('2d');
+        const container = canvas.parentElement;
+        const tooltip = attachTooltip(container);
+        const detailPanel = attachDetailPanel(container);
+        const width = canvas.width;
+        const height = canvas.height;
+        const pad = { top: 20, right: 20, bottom: 32, left: 34 };
+        const max = Math.max(...items.map((item) => Number(item[valueField] || 0)), 1);
+        const min = 0;
+        const innerWidth = width - pad.left - pad.right;
+        const innerHeight = height - pad.top - pad.bottom;
+        const stepX = items.length > 1 ? innerWidth / (items.length - 1) : 0;
+        const points = [];
+
+        function yFor(value) {
+          return pad.top + innerHeight - ((value - min) / (max - min || 1)) * innerHeight;
+        }
+
+        function render(activeIndex = -1) {
+          ctx.clearRect(0, 0, width, height);
+          ctx.strokeStyle = 'rgba(99, 118, 123, 0.2)';
+          ctx.lineWidth = 1;
+          for (let index = 0; index < 4; index += 1) {
+            const y = pad.top + (innerHeight / 3) * index;
+            ctx.beginPath();
+            ctx.moveTo(pad.left, y);
+            ctx.lineTo(width - pad.right, y);
+            ctx.stroke();
+          }
+
+          ctx.fillStyle = '#63767b';
+          ctx.font = '12px "Avenir Next", "Segoe UI", sans-serif';
+          items.forEach((item, index) => {
+            const x = pad.left + stepX * index;
+            const value = Number(item[valueField] || 0);
+            const y = yFor(value);
+            points[index] = { x, y, label: String(item[labelField] || '-'), value };
+            ctx.fillText(String(item[labelField] || '').slice(5), x - 14, height - 10);
+          });
+
+          ctx.beginPath();
+          points.forEach((point, index) => {
+            if (index === 0) {
+              ctx.moveTo(point.x, point.y);
+            } else {
+              ctx.lineTo(point.x, point.y);
+            }
+          });
+          ctx.lineTo(points[points.length - 1].x, height - pad.bottom);
+          ctx.lineTo(points[0].x, height - pad.bottom);
+          ctx.closePath();
+          ctx.fillStyle = fillColor;
+          ctx.fill();
+
+          ctx.beginPath();
+          points.forEach((point, index) => {
+            if (index === 0) {
+              ctx.moveTo(point.x, point.y);
+            } else {
+              ctx.lineTo(point.x, point.y);
+            }
+          });
+          ctx.strokeStyle = lineColor;
+          ctx.lineWidth = 3;
+          ctx.stroke();
+
+          points.forEach((point, index) => {
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, index === activeIndex ? 6 : 4, 0, Math.PI * 2);
+            ctx.fillStyle = index === activeIndex ? '#1d2a2f' : lineColor;
+            ctx.fill();
+          });
+        }
+
+        render();
+        if (points[0]) {
+          updateDetailPanel(detailPanel, points[0].label, `${points[0].value}${suffix}`, 'Erster Wert im zeitlichen Verlauf.');
+        }
+
+        canvas.addEventListener('mousemove', (event) => {
+          const rect = canvas.getBoundingClientRect();
+          const scaleX = canvas.width / rect.width;
+          const scaleY = canvas.height / rect.height;
+          const x = (event.clientX - rect.left) * scaleX;
+          const y = (event.clientY - rect.top) * scaleY;
+          const activeIndex = points.findIndex((point) => Math.hypot(point.x - x, point.y - y) <= 12);
+          render(activeIndex);
+          if (activeIndex >= 0) {
+            const point = points[activeIndex];
+            tooltip.textContent = `${point.label}: ${point.value}${suffix}`;
+            tooltip.style.left = `${event.offsetX}px`;
+            tooltip.style.top = `${event.offsetY - 8}px`;
+            tooltip.classList.remove('hidden');
+            updateDetailPanel(detailPanel, point.label, `${point.value}${suffix}`, 'Zeitpunkt mit vollem Label und exaktem Messwert.');
+          } else {
+            tooltip.classList.add('hidden');
+          }
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+          render(-1);
+          tooltip.classList.add('hidden');
+          if (points[0]) {
+            updateDetailPanel(detailPanel, points[0].label, `${points[0].value}${suffix}`, 'Erster Wert im zeitlichen Verlauf.');
+          }
+        });
+      }
+
+      drawLineChart('chart-weekly-activity', profileCharts.weeklyActivity, 'label', 'count', '#176b5a', 'rgba(23, 107, 90, 0.12)');
+      drawBarChart('chart-request-types', profileCharts.requestTypes, 'label', 'count', '#d6a757');
+      drawLineChart('chart-quiz-trend', profileCharts.quizTrend, 'label', 'score', '#d6a757', 'rgba(214, 167, 87, 0.16)', '%');
+      drawBarChart('chart-top-sources', profileCharts.topSources, 'label', 'count', '#176b5a');
+    </script>
+  </body>
+</html>

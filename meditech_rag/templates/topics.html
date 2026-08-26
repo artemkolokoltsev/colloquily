@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MediTech RAG Topic Debug</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero admin-hero">
+        <div>
+          <p class="eyebrow">Topic Debug</p>
+          <h1>Hierarchische Dokumentstruktur</h1>
+          <p class="section-copy">Dokumente, Seiten, Chunks, Topics und Topic-Regionen zur schnellen Inspektion.</p>
+        </div>
+        <div class="hero-actions">
+          <details class="account-menu">
+            <summary class="user-badge user-badge-link">{{ user.username }}</summary>
+            <div class="account-menu-panel">
+              <a class="account-menu-link" href="{{ url_for('profile') }}">Mein Profil</a>
+              <a class="account-menu-link" href="{{ url_for('admin') }}">Dashboard</a>
+              <a class="account-menu-link" href="{{ url_for('admin_eval') }}">Evaluation</a>
+              <a class="account-menu-link" href="{{ url_for('admin_settings') }}">Systemeinstellungen</a>
+              <a class="account-menu-link" href="{{ url_for('admin_users') }}">Benutzerverwaltung</a>
+              <a class="account-menu-link" href="{{ url_for('structure') }}">Struktur JSON</a>
+              <form action="{{ url_for('logout') }}" method="post">
+                <button type="submit" class="account-menu-button">Logout</button>
+              </form>
+            </div>
+          </details>
+        </div>
+      </header>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Dokumente und Topic-Regionen</h2>
+            <p class="section-copy">Zeigt Dateihints, erkannte Dokument-Topics und zusammenhaengende Seitenbereiche.</p>
+          </div>
+        </div>
+        <div class="admin-grid">
+          {% for document in topic_debug.documents %}
+            <section class="subcard">
+              <h3>{{ document.filename }}</h3>
+              <p class="preview">Hints: {{ document.filename_topic_hints|join(', ') or '-' }}</p>
+              <p class="preview">Document topics: {{ document.document_topic_tags|join(', ') or '-' }}</p>
+              <ul class="request-list compact-list">
+                {% for region in topic_debug.topic_regions if region.doc_id == document.doc_id %}
+                  <li>S. {{ region.start_page }}-{{ region.end_page }} · {{ region.topic }} · {{ '%.2f'|format(region.score) }}</li>
+                {% else %}
+                  <li>Keine Topic-Regionen erkannt.</li>
+                {% endfor %}
+              </ul>
+            </section>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Seiten Drilldown</h2>
+            <p class="section-copy">Seiten-Titel, Haupttopic, Untertopics und Chunk-Rollen.</p>
+          </div>
+        </div>
+        <div class="admin-grid">
+          {% for page in topic_debug.pages[:24] %}
+            <section class="subcard">
+              <h3>{{ page.doc_name }} · Seite {{ page.page_number }}</h3>
+              <p class="preview">{{ page.page_title_guess or page.section_title_guess or 'Kein Titel erkannt' }}</p>
+              <p class="preview">Main topic: {{ page.main_topic or '-' }}</p>
+              <p class="preview">Topics: {{ page.topic_tags|join(', ') or '-' }}</p>
+              <ul class="request-list compact-list">
+                {% for chunk in topic_debug.chunks if chunk.page_id == page.page_id %}
+                  <li>{{ chunk.structural_role or chunk.chunk_type }} · {{ chunk.topic_tags|join(', ') or '-' }}</li>
+                {% else %}
+                  <li>Keine Chunks gespeichert.</li>
+                {% endfor %}
+              </ul>
+            </section>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Topic Vorkommen</h2>
+            <p class="section-copy">Top Topics ueber Seiten und Chunks hinweg.</p>
+          </div>
+        </div>
+        <div class="admin-grid">
+          {% for topic in topic_debug.topics[:18] %}
+            <section class="subcard">
+              <h3>{{ topic.topic }}</h3>
+              <p class="preview">{{ topic.description or 'Keine Beschreibung' }}</p>
+              <p class="preview">{{ topic.pages|length }} Seiten · {{ topic.chunks|length }} Chunks</p>
+              <ul class="request-list compact-list">
+                {% for page in topic.pages[:5] %}
+                  <li>{{ page.doc_name }} · S. {{ page.page_number }} · {{ page.page_title_guess or page.main_topic or '-' }}</li>
+                {% else %}
+                  <li>Keine Seitenzuordnung.</li>
+                {% endfor %}
+              </ul>
+            </section>
+          {% endfor %}
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

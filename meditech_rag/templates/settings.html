@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Systemeinstellungen | MediTech RAG</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero admin-hero">
+        <div>
+          <p class="eyebrow">Admin Settings</p>
+          <h1>Systemeinstellungen</h1>
+          <p class="section-copy">Systemparameter, Parsing, Retrieval und Modelle in einer aufgeraeumten Konfigurationsansicht.</p>
+        </div>
+        <div class="hero-actions">
+          <details class="account-menu">
+            <summary class="user-badge user-badge-link">{{ user.username }}</summary>
+            <div class="account-menu-panel">
+              <a class="account-menu-link" href="{{ url_for('profile') }}">Mein Profil</a>
+              <a class="account-menu-link" href="{{ url_for('index') }}">Zur App</a>
+              <a class="account-menu-link" href="{{ url_for('admin') }}">Dashboard</a>
+              <a class="account-menu-link" href="{{ url_for('admin_eval') }}">Evaluation</a>
+              <a class="account-menu-link" href="{{ url_for('admin_settings') }}">Systemeinstellungen</a>
+              <a class="account-menu-link" href="{{ url_for('admin_documents') }}">Dokumentverwaltung</a>
+              <a class="account-menu-link" href="{{ url_for('admin_users') }}">Benutzerverwaltung</a>
+              <form action="{{ url_for('logout') }}" method="post">
+                <button type="submit" class="account-menu-button">Logout</button>
+              </form>
+            </div>
+          </details>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="card">
+            {% for category, message in messages %}
+              <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <section class="card settings-overview-card">
+        <div class="settings-hero">
+          <div>
+            <p class="eyebrow">Status</p>
+            <h2>Aktueller Systemstand</h2>
+            <p class="section-copy">Die wichtigsten Kennzahlen fuer die aktuelle Laufzeitkonfiguration und den bestehenden Index.</p>
+          </div>
+          <div class="settings-hero-side">
+            <div class="status-chip-group">
+              <span class="status-chip">{{ stats.docs_count or 0 }} Dokumente</span>
+              <span class="status-chip">{{ stats.pages_count or 0 }} Seiten</span>
+              <span class="status-chip">{{ stats.chunks_count or 0 }} Chunks</span>
+              <span class="status-chip">{{ current_config.chunking_strategy }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-workspace">
+        <aside class="card settings-nav-card">
+          <div class="settings-panel-head">
+            <p class="eyebrow">Navigation</p>
+            <h2>Parameterbereiche</h2>
+            <p class="section-copy">Waehle links einen Bereich. Rechts wird nur diese Einstellungsgruppe angezeigt. Dokumente liegen separat, damit diese Seite nur Parameter enthaelt.</p>
+          </div>
+          <nav class="settings-anchor-nav" aria-label="Parameterbereiche">
+            {% for section in settings_sections %}
+              <a href="#{{ section.anchor }}" class="settings-anchor-link{% if loop.first %} active{% endif %}" data-settings-target="{{ section.anchor }}">
+                {{ section.section }}
+              </a>
+            {% endfor %}
+            {% if langtrace_ui_url %}
+              <a href="{{ langtrace_ui_url }}" target="_blank" rel="noopener noreferrer" class="settings-anchor-link settings-anchor-link-external">
+                Langtrace UI
+              </a>
+            {% endif %}
+          </nav>
+
+          <div class="settings-panel settings-callout-panel">
+            <div class="settings-panel-head">
+              <p class="eyebrow">Hinweis</p>
+              <h3>Wann neu bauen?</h3>
+              <p class="section-copy">Parser-, Chunking-, Embedding- oder Modellwechsel greifen erst vollstaendig nach einem Index-Neuaufbau.</p>
+            </div>
+            <a class="text-link" href="{{ url_for('admin_documents') }}">Neuaufbau in der Dokumentverwaltung starten</a>
+          </div>
+        </aside>
+
+        <section class="card settings-main-card">
+          <div class="settings-section-head">
+            <div>
+              <p class="eyebrow">Parameter</p>
+              <h2>System- und Modellparameter</h2>
+            </div>
+            <p class="section-copy">Jede Karte trennt Zweck und Einfluss auf das Endergebnis, damit Einstellungen schneller beurteilbar bleiben.</p>
+          </div>
+
+          <form action="{{ url_for('update_runtime_settings_route') }}" method="post" class="stacked async-form">
+            <div class="settings-parameter-stack">
+              {% for section in settings_sections %}
+                <section id="{{ section.anchor }}" class="settings-panel settings-param-panel settings-section-panel{% if not loop.first %} hidden{% endif %}" data-settings-section="{{ section.anchor }}">
+                  <div class="settings-panel-head">
+                    <p class="eyebrow">Bereich</p>
+                    <h3>{{ section.section }}</h3>
+                    <p class="section-copy">{{ section.description }}</p>
+                  </div>
+
+                  {% if section.anchor == 'tracing' %}
+                    <div class="settings-inline-summary">
+                      <div class="settings-inline-summary-item">
+                        <span class="settings-field-detail-label">Empfohlener lokaler Modus</span>
+                        <span>self_hosted mit `http://localhost:3000/api/trace`</span>
+                      </div>
+                      <div class="settings-inline-summary-item">
+                        <span class="settings-field-detail-label">API-Key</span>
+                        <span>Wird in der Langtrace-Oberflaeche erzeugt und hier hinterlegt.</span>
+                      </div>
+                      <div class="settings-inline-summary-item">
+                        <span class="settings-field-detail-label">UI</span>
+                        <span>{% if langtrace_ui_url %}<a class="text-link" href="{{ langtrace_ui_url }}" target="_blank" rel="noopener noreferrer">{{ langtrace_ui_url }}</a>{% else %}Nicht konfiguriert{% endif %}</span>
+                      </div>
+                    </div>
+                  {% endif %}
+
+                  <div class="settings-form-grid">
+                    {% for field in section.fields %}
+                      <article class="settings-field-card">
+                        <div class="settings-field-header">
+                          <div>
+                            <span class="settings-field-label">{{ field.label }}</span>
+                            <div class="settings-field-description">{{ field.description }}</div>
+                          </div>
+                          <span class="settings-field-key">{{ field.key }}</span>
+                        </div>
+                        <label class="settings-field-control">
+                          <span class="settings-field-control-label">Wert</span>
+                          {% if field.type == 'select' %}
+                            <select name="{{ field.key }}">
+                              {% for option in field.options %}
+                                <option value="{{ option }}" {% if field.value == option %}selected{% endif %}>{{ option }}</option>
+                              {% endfor %}
+                            </select>
+                          {% elif field.type == 'bool' %}
+                            <span class="settings-toggle-row">
+                              <input type="checkbox" name="{{ field.key }}" {% if field.value %}checked{% endif %}>
+                              <span class="settings-checkbox-label">{{ 'Aktiviert' if field.value else 'Deaktiviert' }}</span>
+                            </span>
+                          {% elif field.type == 'password' %}
+                            <input type="password" name="{{ field.key }}" placeholder="{% if field.has_saved_value %}Gespeichert; leer lassen zum Beibehalten{% else %}Optional{% endif %}">
+                          {% else %}
+                            <input type="{% if field.type in ['int', 'float'] %}number{% else %}text{% endif %}" name="{{ field.key }}" value="{{ field.value }}" {% if field.type == 'float' %}step="0.01"{% endif %}>
+                          {% endif %}
+                        </label>
+                        <div class="settings-field-meta-grid">
+                          <div class="settings-field-detail">
+                            <span class="settings-field-detail-label">Wirkung</span>
+                            <span class="settings-field-impact">{{ field.influences }}</span>
+                          </div>
+                        </div>
+                      </article>
+                    {% endfor %}
+                  </div>
+                </section>
+              {% endfor %}
+            </div>
+            <div class="settings-submit-row">
+              <button type="submit">Parameter speichern</button>
+            </div>
+          </form>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      const settingsNavButtons = Array.from(document.querySelectorAll('[data-settings-target]'));
+      const settingsPanels = Array.from(document.querySelectorAll('[data-settings-section]'));
+
+      function showSettingsSection(sectionId) {
+        settingsNavButtons.forEach((button) => {
+          button.classList.toggle('active', button.dataset.settingsTarget === sectionId);
+        });
+        settingsPanels.forEach((panel) => {
+          panel.classList.toggle('hidden', panel.dataset.settingsSection !== sectionId);
+        });
+      }
+
+      settingsNavButtons.forEach((button) => {
+        button.addEventListener('click', (event) => {
+          event.preventDefault();
+          const sectionId = button.dataset.settingsTarget;
+          showSettingsSection(sectionId);
+          window.history.replaceState(null, '', `#${sectionId}`);
+        });
+      });
+
+      const initialSection = window.location.hash.replace('#', '');
+      const knownSection = settingsPanels.find((panel) => panel.dataset.settingsSection === initialSection);
+      if (knownSection) {
+        showSettingsSection(initialSection);
+      } else if (settingsNavButtons.length) {
+        showSettingsSection(settingsNavButtons[0].dataset.settingsTarget);
+      }
+    </script>
+  </body>
+</html>

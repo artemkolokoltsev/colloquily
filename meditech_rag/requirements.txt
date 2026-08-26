@@ -1,0 +1,10 @@
+flask
+pymupdf
+sentence-transformers
+faiss-cpu
+numpy
+requests
+torch
+# Optional tracing/evaluation:
+langtrace-python-sdk
+opentelemetry-exporter-otlp-proto-common

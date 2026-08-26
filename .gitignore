@@ -1,0 +1,35 @@
+.env
+.env.local
+.env.langtrace
+.env.langtrace.local
+
+.DS_Store
+
+# Python bytecode and test/tool caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local virtual environments
+.venv/
+venv/
+env/
+
+# Runtime data, generated indexes, model caches, uploads, and local DBs
+meditech_rag/data/
+meditech_rag/**/*.db
+meditech_rag/**/*.sqlite
+meditech_rag/**/*.sqlite3
+*.faiss
+
+# Generated/local document artifacts that are not part of the codebase
+Literature/
+*.pptx
+*.potx
+test.pdf
+meditech_rag/Fragenkatalog.pdf

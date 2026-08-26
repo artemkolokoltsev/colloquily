@@ -1,0 +1,829 @@
+from __future__ import annotations
+
+import logging
+import os
+import re
+from urllib.parse import urlparse, urlunparse
+from functools import lru_cache
+from functools import wraps
+
+from flask import Flask, flash, g, jsonify, redirect, render_template, request, send_from_directory, session, url_for
+from markupsafe import Markup, escape
+
+import config
+from services.langtrace_service import init_langtrace, reset_langtrace, span_identity, trace_workflow
+
+# Langtrace must be initialized before importing RAG/LLM services so local
+# self-hosted tracing can instrument the full request path.
+init_langtrace()
+
+from services.database import (
+    authenticate_user,
+    build_admin_analytics,
+    build_user_analytics,
+    create_quiz_session,
+    create_user,
+    get_quiz_session,
+    get_user_by_id,
+    init_db,
+    list_users,
+    request_exists,
+    save_quiz_evaluation,
+    store_feedback,
+    store_request,
+)
+from services.pdf_loader import save_uploaded_file
+from services.eval_metrics import (
+    dataset_summary,
+    enabled_metrics,
+    latest_eval_run_summary,
+    latest_eval_run_summary_by_prefix,
+    load_metric_registry,
+    request_langtrace_attributes,
+    restore_default_metrics,
+    update_metric_registry,
+)
+from services.index_profiles import get_active_index_name, profile_statuses, set_active_index_name
+from services.langtrace_eval import attach_eval_attributes, get_langtrace_status, record_langtrace_feedback, send_eval_setup_test_trace
+from services.persistence import get_request_log, load_request_history, update_request_langtrace_ids
+from services.preprocessing_cache import cache_stats
+from services.rag_engine import RAGEngine
+from services.runtime_settings import build_settings_sections, initialize_runtime_settings, load_runtime_settings, save_runtime_settings_from_form
+
+
+def configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.DEBUG if config.DEBUG else logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+
+
+configure_logging()
+LOGGER = logging.getLogger(__name__)
+LOGGER.info("Application startup")
+initialize_runtime_settings()
+init_db()
+
+app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "meditech-rag-local-secret")
+
+
+@lru_cache(maxsize=1)
+def get_engine() -> RAGEngine:
+    LOGGER.info("Initializing RAG engine")
+    return RAGEngine()
+
+
+def reset_engine() -> None:
+    get_engine.cache_clear()
+
+
+def _current_config() -> dict:
+    runtime_settings = load_runtime_settings()
+    runtime = get_engine().get_runtime_settings()
+    return {
+        "chunking_strategy": runtime["chunking_strategy"],
+        "overlap_enabled": runtime["overlap_enabled"],
+        "index_profile": runtime.get("index_profile", get_active_index_name()),
+        "metadata_rerank_enabled": runtime.get("metadata_rerank_enabled", config.ENABLE_METADATA_RERANK),
+        "embedding_backend": config.EMBED_BACKEND,
+        "llm_backend": config.LLM_BACKEND,
+        "embed_model": config.ST_EMBED_MODEL if config.EMBED_BACKEND == "st" else config.LMSTUDIO_EMBED_MODEL,
+        "llm_model": config.OLLAMA_LLM_MODEL if config.LLM_BACKEND == "ollama" else config.LMSTUDIO_LLM_MODEL,
+        "host": config.HOST,
+        "port": config.PORT,
+        "runtime_settings": runtime_settings,
+    }
+
+
+def _format_duration_ms(value: int | float | None) -> str:
+    if value is None:
+        return "0 s"
+    try:
+        total_seconds = max(0, int(round(float(value) / 1000.0)))
+    except (TypeError, ValueError):
+        return "0 s"
+    if 0 < float(value) < 1000:
+        total_seconds = 1
+    minutes, seconds = divmod(total_seconds, 60)
+    if minutes:
+        return f"{minutes} min {seconds} s"
+    return f"{seconds} s"
+
+
+@app.template_filter("duration_human")
+def duration_human_filter(value: int | float | None) -> str:
+    return _format_duration_ms(value)
+
+
+def login_required(view_func):
+    @wraps(view_func)
+    def wrapped(*args, **kwargs):
+        if not g.user:
+            return redirect(url_for("login"))
+        return view_func(*args, **kwargs)
+
+    return wrapped
+
+
+def admin_required(view_func):
+    @wraps(view_func)
+    def wrapped(*args, **kwargs):
+        if not g.user:
+            return redirect(url_for("login"))
+        if not g.user.get("is_admin"):
+            flash("Nur Admins duerfen diese Seite aufrufen.", "error")
+            return redirect(url_for("index"))
+        return view_func(*args, **kwargs)
+
+    return wrapped
+
+
+@app.before_request
+def load_current_user():
+    user_id = session.get("user_id")
+    g.user = get_user_by_id(user_id) if user_id else None
+
+
+def _render_index(**kwargs):
+    engine = get_engine()
+    return render_template(
+        "index.html",
+        stats=engine.get_stats(),
+        documents=engine.get_available_documents(),
+        current_config=_current_config(),
+        user=g.user,
+        user_analytics=build_user_analytics(g.user["id"]) if g.user else {"recent_requests": [], "quizzes": []},
+        debug_info=engine.get_analysis_debug(),
+        **kwargs,
+    )
+
+
+def _render_profile():
+    return render_template(
+        "profile.html",
+        user=g.user,
+        user_analytics=build_user_analytics(g.user["id"]) if g.user else {},
+        current_config=_current_config(),
+    )
+
+
+def _quiz_progress_key(session_id: int) -> str:
+    return f"quiz_progress_{session_id}"
+
+
+def _get_quiz_progress(session_id: int) -> dict:
+    return session.get(_quiz_progress_key(session_id), {"answers": {}, "current_index": 0})
+
+
+def _set_quiz_progress(session_id: int, progress: dict) -> None:
+    session[_quiz_progress_key(session_id)] = progress
+    session.modified = True
+
+
+def _clear_quiz_progress(session_id: int) -> None:
+    session.pop(_quiz_progress_key(session_id), None)
+    session.modified = True
+
+
+def _render_answer_with_citations(answer: str | None, sources: list[dict]) -> Markup | None:
+    if not answer:
+        return None
+    citation_map = {source.get("citation_id"): source for source in sources if source.get("citation_id")}
+    parts: list[str] = []
+    position = 0
+    for match in re.finditer(r"\[(Q\d+)\]", answer):
+        parts.append(escape(answer[position:match.start()]))
+        citation_id = match.group(1)
+        source = citation_map.get(citation_id)
+        if source:
+            parts.append(
+                f'<button type="button" class="citation-link" '
+                f'data-citation="{escape(citation_id)}" '
+                f'data-doc="{escape(source.get("doc_name", "-"))}" '
+                f'data-page="{escape(source.get("page_number", "-"))}" '
+                f'data-chunk="{escape(source.get("chunk_type", "-"))}" '
+                f'data-source-type="{escape(source.get("source_type", "-"))}" '
+                f'data-preview="{escape(source.get("preview", ""))}" '
+                f'data-pdf-url="{escape(url_for("serve_pdf", filename=source.get("doc_name", "")))}">[{escape(citation_id)}]</button>'
+            )
+        position = match.end()
+    parts.append(escape(answer[position:]))
+    return Markup("".join(parts).replace("\n", "<br>"))
+
+
+def _render_admin():
+    engine = get_engine()
+    return render_template(
+        "admin.html",
+        analytics=build_admin_analytics(),
+        stats=engine.get_stats(),
+        documents=engine.get_available_documents(),
+        document_inventory=engine.get_document_inventory(),
+        current_config=_current_config(),
+        users=list_users(),
+        user=g.user,
+        debug_info=engine.get_analysis_debug(),
+    )
+
+
+def _render_admin_eval(sync_result: dict | None = None):
+    history = list(reversed(load_request_history()))[:25]
+    return render_template(
+        "admin_eval.html",
+        user=g.user,
+        current_config=_current_config(),
+        langtrace_status=get_langtrace_status(),
+        metric_registry=load_metric_registry(),
+        enabled_human_metrics=enabled_metrics("human"),
+        recent_requests=history,
+        dataset_summary=dataset_summary(),
+        latest_eval_run=latest_eval_run_summary(),
+        latest_retrieval_profile_run=latest_eval_run_summary_by_prefix("retrieval_profiles_"),
+        latest_answer_subset_run=latest_eval_run_summary_by_prefix("answer_subset_"),
+        index_profiles=profile_statuses(),
+        preprocessing_cache=cache_stats(),
+        sync_result=sync_result,
+        langtrace_annotation_auto_create_available=False,
+    )
+
+
+def _render_settings():
+    engine = get_engine()
+    runtime_values = load_runtime_settings()
+    langtrace_ui_url = _build_langtrace_ui_url()
+    return render_template(
+        "settings.html",
+        stats=engine.get_stats(),
+        documents=engine.get_available_documents(),
+        document_inventory=engine.get_document_inventory(),
+        current_config=_current_config(),
+        settings_sections=build_settings_sections(runtime_values),
+        langtrace_ui_url=langtrace_ui_url,
+        user=g.user,
+    )
+
+
+def _render_documents():
+    engine = get_engine()
+    return render_template(
+        "documents.html",
+        stats=engine.get_stats(),
+        document_inventory=engine.get_document_inventory(),
+        current_config=_current_config(),
+        user=g.user,
+    )
+
+
+def _build_langtrace_ui_url() -> str | None:
+    api_host = getattr(config, "LANGTRACE_API_HOST", "") or ""
+    if not api_host:
+        return "http://localhost:3000"
+    parsed = urlparse(api_host)
+    if not parsed.scheme or not parsed.netloc:
+        return "http://localhost:3000"
+    cleaned_path = parsed.path or ""
+    if cleaned_path.endswith("/api/trace"):
+        cleaned_path = cleaned_path[: -len("/api/trace")] or "/"
+    return urlunparse((parsed.scheme, parsed.netloc, cleaned_path.rstrip("/") or "/", "", "", ""))
+
+
+def _render_user_management():
+    return render_template(
+        "users.html",
+        users=list_users(),
+        analytics=build_admin_analytics(),
+        current_config=_current_config(),
+        user=g.user,
+    )
+
+
+def _capture_langtrace_request_context(span, request_id: str | None) -> dict | None:
+    if not request_id:
+        return None
+    identity = span_identity(span, request_id)
+    update_request_langtrace_ids(request_id, identity.get("trace_id"), identity.get("span_id"))
+    request_entry = get_request_log(request_id)
+    if request_entry:
+        attrs = request_langtrace_attributes(request_entry)
+        if g.user:
+            attrs["app.user_id"] = str(g.user["id"])
+        attach_eval_attributes(attrs)
+    return request_entry
+
+
+@app.get("/")
+@login_required
+def index():
+    return _render_index(
+        answer=None,
+        answer_html=None,
+        sources=[],
+        summary=None,
+        quiz=None,
+        quiz_session=None,
+        quiz_question=None,
+        quiz_question_index=None,
+        quiz_total_questions=None,
+        answer_request_id=None,
+        summary_request_id=None,
+        quiz_request_id=None,
+    )
+
+
+@app.get("/profile")
+@login_required
+def profile():
+    return _render_profile()
+
+
+@app.get("/admin")
+@admin_required
+def admin():
+    return _render_admin()
+
+
+@app.get("/admin/settings")
+@admin_required
+def admin_settings():
+    return _render_settings()
+
+
+@app.get("/admin/eval")
+@admin_required
+def admin_eval():
+    return _render_admin_eval()
+
+
+@app.post("/admin/eval/metrics")
+@admin_required
+def admin_eval_update_metrics():
+    update_metric_registry(request.form)
+    flash("Eval-Metriken gespeichert.", "success")
+    return redirect(url_for("admin_eval"))
+
+
+@app.post("/admin/eval/metrics/restore")
+@admin_required
+def admin_eval_restore_metrics():
+    restore_default_metrics()
+    flash("Default-Eval-Metriken wiederhergestellt.", "success")
+    return redirect(url_for("admin_eval"))
+
+
+@app.get("/admin/eval/metrics/export")
+@admin_required
+def admin_eval_export_metrics():
+    return jsonify(load_metric_registry())
+
+
+@app.post("/admin/eval/test-trace")
+@admin_required
+def admin_eval_test_trace():
+    result = send_eval_setup_test_trace(enabled_metrics())
+    flash(result.get("message", "Test trace completed."), "success" if result.get("ok") else "error")
+    return _render_admin_eval(sync_result=result)
+
+
+@app.post("/admin/eval/index-profile")
+@admin_required
+def admin_eval_switch_index_profile():
+    profile_name = request.form.get("active_index_name", "").strip()
+    try:
+        set_active_index_name(profile_name)
+        reset_engine()
+        flash(f"Index-Profil gewechselt: {profile_name}", "success")
+    except Exception:
+        LOGGER.exception("Index profile switch failed", extra={"profile": profile_name})
+        flash("Index-Profil konnte nicht gewechselt werden.", "error")
+    return redirect(url_for("admin_eval"))
+
+
+@app.get("/admin/documents")
+@admin_required
+def admin_documents():
+    return _render_documents()
+
+
+@app.get("/admin/users")
+@admin_required
+def admin_users():
+    return _render_user_management()
+
+
+@app.get("/structure")
+@login_required
+def structure():
+    doc_name = request.args.get("doc_name", "").strip() or None
+    doc_id = request.args.get("doc_id", "").strip() or None
+    topic = request.args.get("topic", "").strip() or None
+    start_page = request.args.get("start_page", "").strip() or None
+    end_page = request.args.get("end_page", "").strip() or None
+    return jsonify(
+        get_engine().get_structure(
+            doc_name,
+            doc_id=doc_id,
+            topic=topic,
+            start_page=int(start_page) if start_page else None,
+            end_page=int(end_page) if end_page else None,
+        )
+    )
+
+
+@app.get("/topics")
+@login_required
+def topics_debug():
+    return render_template(
+        "topics.html",
+        topic_debug=get_engine().get_topic_debug(),
+        user=g.user,
+        current_config=_current_config(),
+    )
+
+
+@app.get("/login")
+def login():
+    if g.user:
+        return redirect(url_for("index"))
+    return render_template("login.html")
+
+
+@app.post("/login")
+def login_post():
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "").strip()
+    user = authenticate_user(username, password)
+    if not user:
+        flash("Login fehlgeschlagen.", "error")
+        return redirect(url_for("login"))
+    session["user_id"] = user["id"]
+    flash(f"Angemeldet als {user['username']}.", "success")
+    return redirect(url_for("index"))
+
+
+@app.post("/logout")
+@login_required
+def logout():
+    session.clear()
+    flash("Abgemeldet.", "success")
+    return redirect(url_for("login"))
+
+
+@app.get("/pdf/<path:filename>")
+@login_required
+def serve_pdf(filename: str):
+    return send_from_directory(config.PDF_FOLDER, filename, mimetype="application/pdf", as_attachment=False)
+
+
+@app.post("/upload")
+@admin_required
+def upload():
+    files = request.files.getlist("pdf_files")
+    saved = 0
+    for file_storage in files:
+        if not file_storage or not file_storage.filename:
+            continue
+        try:
+            save_uploaded_file(file_storage)
+            saved += 1
+        except Exception as exc:
+            LOGGER.exception("Upload failed")
+            flash(f"Upload fehlgeschlagen fuer {file_storage.filename}: {exc}", "error")
+    if saved:
+        flash(f"{saved} PDF-Datei(en) gespeichert.", "success")
+    next_page = request.form.get("next_page", "").strip()
+    return redirect(next_page or url_for("admin_documents"))
+
+
+@app.post("/reindex")
+@admin_required
+def reindex():
+    engine = get_engine()
+    chunking_strategy = request.form.get("chunking_strategy", "").strip() or None
+    overlap_enabled = request.form.get("overlap_mode", "on") == "on"
+    try:
+        stats = engine.rebuild_index(chunking_strategy=chunking_strategy, overlap_enabled=overlap_enabled)
+        flash(f"Index aktualisiert. {stats.get('chunks_count', 0)} Chunks verfuegbar.", "success")
+    except Exception:
+        LOGGER.exception("Reindex failed")
+        flash("Indexierung fehlgeschlagen. Details stehen im Log.", "error")
+    next_page = request.form.get("next_page", "").strip()
+    return redirect(next_page or url_for("admin_documents"))
+
+
+@app.post("/admin/settings/runtime")
+@admin_required
+def update_runtime_settings_route():
+    try:
+        save_runtime_settings_from_form(request.form)
+        reset_langtrace()
+        reset_engine()
+        flash("Runtime-Parameter aktualisiert. Fuer Parser-, Chunking-, Embedding- oder LLM-Wechsel den Index neu aufbauen.", "success")
+    except Exception:
+        LOGGER.exception("Runtime settings update failed")
+        flash("Runtime-Parameter konnten nicht gespeichert werden.", "error")
+    return redirect(url_for("admin_settings"))
+
+
+@app.post("/admin/documents/delete")
+@admin_required
+def delete_document_route():
+    engine = get_engine()
+    doc_name = request.form.get("doc_name", "").strip()
+    delete_pdf = request.form.get("delete_pdf", "on") == "on"
+    if not doc_name:
+        flash("Bitte ein Dokument auswaehlen.", "error")
+        return redirect(url_for("admin_documents"))
+    try:
+        result = engine.remove_document(doc_name, delete_pdf=delete_pdf)
+        flash(
+            f"Dokument entfernt: {result['doc_name']} "
+            f"({result['removed_pages']} Seiten, {result['removed_chunks']} Chunks).",
+            "success",
+        )
+    except Exception:
+        LOGGER.exception("Document deletion failed")
+        flash("Dokument konnte nicht entfernt werden. Details stehen im Log.", "error")
+    next_page = request.form.get("next_page", "").strip()
+    return redirect(next_page or url_for("admin_documents"))
+
+
+@app.post("/ask")
+@login_required
+def ask():
+    engine = get_engine()
+    question = request.form.get("question", "").strip()
+    if not question:
+        flash("Bitte eine Frage eingeben.", "error")
+        return redirect(url_for("index"))
+    with trace_workflow(
+        "app.ask",
+        {
+            "workflow": "ask",
+            "user_id": g.user["id"],
+            "username": g.user["username"],
+            "question_length": len(question),
+        },
+    ) as span:
+        result = engine.answer_question(question)
+        request_entry = _capture_langtrace_request_context(span, result.get("request_id"))
+    request_entry = request_entry or get_request_log(result.get("request_id"))
+    if request_entry:
+        store_request(g.user["id"], request_entry)
+    return _render_index(
+        answer=result["answer"],
+        answer_html=_render_answer_with_citations(result["answer"], result["contexts"]),
+        sources=result["contexts"],
+        summary=None,
+        quiz=None,
+        answer_request_id=result.get("request_id"),
+        summary_request_id=None,
+        quiz_request_id=None,
+    )
+
+
+@app.post("/summarize")
+@login_required
+def summarize():
+    engine = get_engine()
+    doc_name = request.form.get("doc_name", "").strip()
+    start_page = request.form.get("start_page", "").strip()
+    end_page = request.form.get("end_page", "").strip()
+    mode = request.form.get("mode", "combined")
+    if not doc_name:
+        flash("Bitte ein Dokument auswaehlen.", "error")
+        return redirect(url_for("index"))
+    with trace_workflow(
+        "app.summarize",
+        {
+            "workflow": "summarize",
+            "user_id": g.user["id"],
+            "username": g.user["username"],
+            "doc_name": doc_name,
+            "mode": mode,
+            "start_page": int(start_page) if start_page else None,
+            "end_page": int(end_page) if end_page else None,
+        },
+    ) as span:
+        summary = engine.summarize_pages(
+            doc_name,
+            int(start_page) if start_page else None,
+            int(end_page) if end_page else None,
+            mode=mode,
+        )
+        request_entry = _capture_langtrace_request_context(span, summary.get("request_id"))
+    request_entry = request_entry or get_request_log(summary.get("request_id"))
+    if request_entry:
+        store_request(g.user["id"], request_entry)
+    return _render_index(
+        answer=None,
+        answer_html=None,
+        sources=[],
+        summary=summary,
+        quiz=None,
+        answer_request_id=None,
+        summary_request_id=summary.get("request_id"),
+        quiz_request_id=None,
+    )
+
+
+@app.post("/quiz")
+@login_required
+def quiz():
+    engine = get_engine()
+    topic = request.form.get("topic", "").strip()
+    n_questions = request.form.get("n_questions", "5").strip()
+    with trace_workflow(
+        "app.quiz.generate",
+        {
+            "workflow": "quiz",
+            "user_id": g.user["id"],
+            "username": g.user["username"],
+            "topic": topic or "Quiz",
+            "n_questions": int(n_questions or 5),
+        },
+    ) as span:
+        result = engine.generate_quiz(topic, n_questions=int(n_questions or 5))
+        request_entry = _capture_langtrace_request_context(span, result.get("request_id"))
+    request_entry = request_entry or get_request_log(result.get("request_id"))
+    if request_entry:
+        store_request(g.user["id"], request_entry)
+    quiz_session_id = create_quiz_session(g.user["id"], topic or "Quiz", result.get("request_id"), result.get("questions", []))
+    quiz_session = get_quiz_session(quiz_session_id)
+    _set_quiz_progress(quiz_session_id, {"answers": {}, "current_index": 0})
+    return _render_index(
+        answer=None,
+        answer_html=None,
+        sources=result["contexts"],
+        summary=None,
+        quiz=None,
+        quiz_session=quiz_session,
+        quiz_question=quiz_session["questions"][0] if quiz_session and quiz_session["questions"] else None,
+        quiz_question_index=1 if quiz_session and quiz_session["questions"] else None,
+        quiz_total_questions=len(quiz_session["questions"]) if quiz_session else None,
+        quiz_report=None,
+        answer_request_id=None,
+        summary_request_id=None,
+        quiz_request_id=result.get("request_id"),
+    )
+
+
+@app.post("/quiz/submit")
+@login_required
+def quiz_submit():
+    session_id = int(request.form.get("quiz_session_id", "0"))
+    quiz_session = get_quiz_session(session_id)
+    if not quiz_session or quiz_session["user_id"] != g.user["id"]:
+        flash("Quiz-Session nicht gefunden.", "error")
+        return redirect(url_for("index"))
+    progress = _get_quiz_progress(session_id)
+    current_index = int(progress.get("current_index", 0))
+    if current_index >= len(quiz_session["questions"]):
+        current_index = len(quiz_session["questions"]) - 1
+    current_question = quiz_session["questions"][current_index]
+    selected_answer = request.form.get(f"question_{current_question['id']}", "").strip()
+    if not selected_answer:
+        flash("Bitte eine Antwort auswaehlen.", "error")
+        return _render_index(
+            answer=None,
+            answer_html=None,
+            sources=[],
+            summary=None,
+            quiz=None,
+            quiz_session=quiz_session,
+            quiz_question=current_question,
+            quiz_question_index=current_index + 1,
+            quiz_total_questions=len(quiz_session["questions"]),
+            quiz_report=None,
+            answer_request_id=None,
+            summary_request_id=None,
+            quiz_request_id=None,
+        )
+    answers = dict(progress.get("answers", {}))
+    answers[str(current_question["id"])] = selected_answer
+    next_index = current_index + 1
+    if next_index < len(quiz_session["questions"]):
+        _set_quiz_progress(session_id, {"answers": answers, "current_index": next_index})
+        next_question = quiz_session["questions"][next_index]
+        return _render_index(
+            answer=None,
+            answer_html=None,
+            sources=[],
+            summary=None,
+            quiz=None,
+            quiz_session=quiz_session,
+            quiz_question=next_question,
+            quiz_question_index=next_index + 1,
+            quiz_total_questions=len(quiz_session["questions"]),
+            quiz_report=None,
+            answer_request_id=None,
+            summary_request_id=None,
+            quiz_request_id=None,
+        )
+
+    user_answers = answers
+    evaluation = get_engine().evaluate_quiz_answers(quiz_session["questions"], user_answers)
+    save_quiz_evaluation(session_id, evaluation["score_percent"], evaluation["report"], evaluation["attempts"])
+    _clear_quiz_progress(session_id)
+    flash("Quiz ausgewertet.", "success")
+    return _render_index(
+        answer=None,
+        answer_html=None,
+        sources=[],
+        summary=None,
+        quiz=None,
+        quiz_session=get_quiz_session(session_id),
+        quiz_question=None,
+        quiz_question_index=None,
+        quiz_total_questions=len(quiz_session["questions"]),
+        quiz_report=evaluation,
+        answer_request_id=None,
+        summary_request_id=None,
+        quiz_request_id=None,
+    )
+
+
+@app.post("/feedback")
+@login_required
+def feedback():
+    request_id = request.form.get("request_id", "").strip()
+    vote = request.form.get("vote", "").strip()
+    details = request.form.get("details", "").strip()
+    rating = request.form.get("rating", "").strip()
+    if not request_id or vote not in {"like", "dislike"}:
+        flash("Feedback konnte nicht gespeichert werden.", "error")
+        return redirect(url_for("index"))
+    request_entry = get_request_log(request_id)
+    if not request_exists(request_id) and not request_entry:
+        flash("Feedback konnte keinem Request zugeordnet werden.", "error")
+        return redirect(url_for("index"))
+    helpful = vote == "like"
+    feedback_score = int(rating) if rating.isdigit() else (1 if helpful else -1)
+    history_saved = False
+    db_saved = False
+    try:
+        history_saved = get_engine().save_feedback(request_id, helpful, details, score=feedback_score, label=vote)
+    except Exception:
+        LOGGER.exception("Feedback history persistence failed", extra={"request_id": request_id})
+    try:
+        store_feedback(g.user["id"], request_id, helpful, details)
+        db_saved = True
+    except Exception:
+        LOGGER.exception("Feedback database persistence failed", extra={"request_id": request_id, "user_id": g.user["id"]})
+    request_entry = request_entry or get_request_log(request_id)
+    feedback_metadata = {
+        "request_id": request_id,
+        "workflow": (request_entry or {}).get("workflow") or (request_entry or {}).get("request_type"),
+        "metric_source": "user_feedback",
+        "app": "meditech-rag",
+        "chunking_strategy": (request_entry or {}).get("chunking_strategy"),
+        "embedding_model": (request_entry or {}).get("embed_model"),
+        "llm_model": (request_entry or {}).get("llm_model"),
+    }
+    langtrace_saved = record_langtrace_feedback(
+        (request_entry or {}).get("trace_id") or (request_entry or {}).get("langtrace_trace_id"),
+        (request_entry or {}).get("span_id") or (request_entry or {}).get("langtrace_span_id"),
+        feedback_score,
+        details,
+        user_id=g.user["id"],
+        metadata=feedback_metadata,
+    )
+    if history_saved:
+        get_engine().save_feedback(request_id, helpful, details, score=feedback_score, label=vote, langtrace_sent=langtrace_saved)
+    langtrace_expected = config.ENABLE_LANGTRACE and config.LANGTRACE_MODE != "disabled" and bool(config.LANGTRACE_API_KEY)
+    if not langtrace_saved:
+        LOGGER.info("Feedback saved locally without Langtrace evaluation", extra={"request_id": request_id})
+    if (history_saved or db_saved) and langtrace_expected and langtrace_saved:
+        flash("Feedback gespeichert und an Langtrace uebermittelt.", "success")
+    elif history_saved or db_saved:
+        if langtrace_expected:
+            flash("Feedback lokal gespeichert, aber nicht an Langtrace uebermittelt.", "error")
+        else:
+            flash("Feedback gespeichert.", "success")
+    elif langtrace_saved:
+        flash("Feedback gespeichert.", "success")
+    else:
+        flash("Feedback konnte nicht gespeichert werden.", "error")
+    return redirect(url_for("index"))
+
+
+@app.post("/admin/users")
+@admin_required
+def create_user_route():
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "").strip()
+    is_admin = request.form.get("is_admin") == "on"
+    if not username or not password:
+        flash("Benutzername und Passwort sind erforderlich.", "error")
+        return redirect(url_for("admin_users"))
+    try:
+        create_user(username, password, is_admin=is_admin)
+        flash(f"Benutzer {username} angelegt.", "success")
+    except Exception:
+        LOGGER.exception("User creation failed")
+        flash("Benutzer konnte nicht angelegt werden. Existiert der Name bereits?", "error")
+    return redirect(url_for("admin_users"))
+
+
+if __name__ == "__main__":
+    app.run(host=config.HOST, port=config.PORT, debug=config.DEBUG)

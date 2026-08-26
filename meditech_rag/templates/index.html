@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MediTech RAG Lernhilfe</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Lokaler RAG-Assistent</p>
+          <h1>MediTech RAG Lernhilfe</h1>
+          <p>PDF-basierte Klausurvorbereitung fuer deutsche Medizintechnik-Vorlesungen.</p>
+        </div>
+        <div class="hero-actions">
+          <details class="account-menu">
+            <summary class="user-badge user-badge-link">{{ user.username }}</summary>
+            <div class="account-menu-panel">
+              <a class="account-menu-link" href="{{ url_for('profile') }}">Mein Profil</a>
+              {% if user.is_admin %}
+                <a class="account-menu-link" href="{{ url_for('admin') }}">Dashboard</a>
+                <a class="account-menu-link" href="{{ url_for('admin_eval') }}">Evaluation</a>
+                <a class="account-menu-link" href="{{ url_for('admin_settings') }}">Systemeinstellungen</a>
+                <a class="account-menu-link" href="{{ url_for('admin_users') }}">Benutzerverwaltung</a>
+              {% endif %}
+              <form action="{{ url_for('logout') }}" method="post">
+                <button type="submit" class="account-menu-button">Logout</button>
+              </form>
+            </div>
+          </details>
+          <p class="disclaimer">Kein medizinischer Rat, nur Lernhilfe.</p>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="card">
+            {% for category, message in messages %}
+              <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Lernbereich</h2>
+            <p class="section-copy">Fragen stellen, Inhalte zusammenfassen und Quizze zur Pruefungsvorbereitung starten.</p>
+          </div>
+          <div class="status-chip-group">
+            <span class="status-chip">{{ stats.docs_count or 0 }} Dokumente</span>
+            <span class="status-chip">{{ stats.chunks_count or 0 }} Chunks</span>
+            <span class="status-chip">{{ current_config.llm_model }}</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="tab-bar" role="tablist" aria-label="Lernfunktionen">
+          <button type="button" class="tab-button active" data-tab-target="tab-chat">Chat / Frage</button>
+          <button type="button" class="tab-button" data-tab-target="tab-summary">Zusammenfassung</button>
+          <button type="button" class="tab-button" data-tab-target="tab-quiz">Quiz</button>
+        </div>
+
+        <div id="tab-chat" class="tab-panel active">
+          <h2>Chat / Frage stellen</h2>
+          <form action="{{ url_for('ask') }}" method="post" class="stacked async-form">
+            <textarea name="question" rows="4" placeholder="Beispiel: Erklaere den Unterschied zwischen diagnostischen und therapeutischen Medizinprodukten."></textarea>
+            <button type="submit">Frage beantworten</button>
+          </form>
+          {% if answer %}
+            <div class="result">
+              <h3>Antwort</h3>
+              {% if answer_html %}
+                <div class="answer-text">{{ answer_html }}</div>
+              {% else %}
+                <pre>{{ answer }}</pre>
+              {% endif %}
+              {% if answer_request_id %}
+                <form action="{{ url_for('feedback') }}" method="post" class="feedback-form async-form">
+                  <input type="hidden" name="request_id" value="{{ answer_request_id }}">
+                  <div class="feedback-actions">
+                    <button type="submit" name="vote" value="like" class="icon-button" aria-label="Hilfreich">👍</button>
+                    <button type="button" class="secondary icon-button" onclick="toggleFeedback('answer-feedback')" aria-label="Nicht hilfreich">👎</button>
+                  </div>
+                  <div id="answer-feedback" class="feedback-details hidden">
+                    <textarea name="details" rows="3" placeholder="Tell us what exactly went wrong?"></textarea>
+                    <button type="submit" name="vote" value="dislike">Feedback senden</button>
+                  </div>
+                </form>
+              {% endif %}
+            </div>
+          {% endif %}
+          {% if sources %}
+            <div class="result">
+              <h3>Quellen</h3>
+              <ul class="source-list">
+                {% for source in sources %}
+                  <li>
+                    <button
+                      type="button"
+                      class="source-link"
+                      data-citation="{{ source.citation_id or '-' }}"
+                      data-doc="{{ source.doc_name }}"
+                      data-page="{{ source.page_number }}"
+                      data-chunk="{{ source.chunk_type }}"
+                      data-source-type="{{ source.source_type }}"
+                      data-preview="{{ source.preview }}"
+                      data-pdf-url="{{ url_for('serve_pdf', filename=source.doc_name) }}"
+                    >
+                      <strong>{{ source.citation_id or 'Quelle' }}</strong> - {{ source.doc_name }} - Seite {{ source.page_number }} - chunk_type={{ source.chunk_type }} - source_type={{ source.source_type }}{% if source.score is defined %} - score={{ '%.3f'|format(source.score) }}{% endif %}
+                    </button>
+                    <div class="tag-row">
+                      {% for tag in source.topic_tags or source.concept_tags or [] %}
+                        <span class="mini-tag">{{ tag }}</span>
+                      {% endfor %}
+                      {% if source.structural_role %}
+                        <span class="mini-tag role">{{ source.structural_role }}</span>
+                      {% endif %}
+                      {% for flag in source.quality_flags or [] %}
+                        <span class="mini-tag muted">{{ flag }}</span>
+                      {% endfor %}
+                    </div>
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+        </div>
+
+        <div id="tab-summary" class="tab-panel">
+          <h2>Zusammenfassung</h2>
+          <form action="{{ url_for('summarize') }}" method="post" class="stacked async-form">
+            <select name="doc_name">
+              <option value="">Dokument waehlen</option>
+              {% for doc in documents %}
+                <option value="{{ doc }}">{{ doc }}</option>
+              {% endfor %}
+            </select>
+            <div class="inline-fields">
+              <input type="number" name="start_page" min="1" placeholder="Startseite">
+              <input type="number" name="end_page" min="1" placeholder="Endseite">
+            </div>
+            <select name="mode">
+              <option value="combined">Kombiniert</option>
+              <option value="page-by-page">Folie zu Folie</option>
+            </select>
+            <button type="submit">Zusammenfassung erzeugen</button>
+          </form>
+          {% if summary %}
+            <div class="result">
+              <h3>{{ summary.title }}</h3>
+              <pre>{{ summary.result }}</pre>
+              {% if summary_request_id %}
+                <form action="{{ url_for('feedback') }}" method="post" class="feedback-form async-form">
+                  <input type="hidden" name="request_id" value="{{ summary_request_id }}">
+                  <div class="feedback-actions">
+                    <button type="submit" name="vote" value="like" class="icon-button" aria-label="Hilfreich">👍</button>
+                    <button type="button" class="secondary icon-button" onclick="toggleFeedback('summary-feedback')" aria-label="Nicht hilfreich">👎</button>
+                  </div>
+                  <div id="summary-feedback" class="feedback-details hidden">
+                    <textarea name="details" rows="3" placeholder="Tell us what exactly went wrong?"></textarea>
+                    <button type="submit" name="vote" value="dislike">Feedback senden</button>
+                  </div>
+                </form>
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
+
+        <div id="tab-quiz" class="tab-panel">
+          <h2>Quiz-Generator</h2>
+          <form action="{{ url_for('quiz') }}" method="post" class="stacked async-form">
+            <textarea name="topic" rows="4" placeholder="Beispiel: Erzeuge Fragen zu Biokompatibilitaet und Medizinprodukte-Klassifizierung."></textarea>
+            <input type="number" name="n_questions" min="1" max="10" value="5">
+            <button type="submit">Quiz generieren</button>
+          </form>
+          {% if quiz_session or quiz_report %}
+            <div class="result">
+              <button type="button" onclick="document.getElementById('quiz-modal').classList.remove('hidden'); document.getElementById('quiz-modal').setAttribute('aria-hidden', 'false');">Quiz-Popup oeffnen</button>
+            </div>
+          {% endif %}
+        </div>
+      </section>
+    </main>
+    <div id="source-modal" class="modal source-modal hidden" aria-hidden="true">
+      <div class="modal-panel source-modal-panel">
+        <div class="modal-header">
+          <div>
+            <h3 id="modal-doc-title">Original PDF</h3>
+            <p id="modal-chunk-meta" class="preview modal-subtitle"></p>
+          </div>
+          <button type="button" class="icon-close" onclick="closeSourceModal()" aria-label="Schliessen">×</button>
+        </div>
+        <div class="modal-body">
+          <div id="modal-chunk-preview" class="chunk-preview-card preview"></div>
+          <iframe id="modal-pdf-frame" class="pdf-frame" title="Original PDF"></iframe>
+        </div>
+      </div>
+    </div>
+    <div id="quiz-modal" class="modal {% if not quiz_session and not quiz_report %}hidden{% endif %}" aria-hidden="{% if quiz_session or quiz_report %}false{% else %}true{% endif %}">
+      <div class="modal-panel quiz-panel">
+        <div class="modal-header">
+          <h3>Quiz-Modus</h3>
+          <button type="button" class="secondary" onclick="closeQuizModal()">Schliessen</button>
+        </div>
+        {% if quiz_session and quiz_question %}
+          <div class="quiz-progress">Frage {{ quiz_question_index }} von {{ quiz_total_questions }}</div>
+          <form action="{{ url_for('quiz_submit') }}" method="post" class="stacked async-form quiz-form">
+            <input type="hidden" name="quiz_session_id" value="{{ quiz_session.id }}">
+            <div class="quiz-question-card">
+              <div class="quiz-question-top">
+                <div>
+                  <h4>Frage {{ quiz_question_index }}</h4>
+                  <p class="quiz-question-text">{{ quiz_question.question_text }}</p>
+                </div>
+                <aside class="quiz-question-aside">
+                  <span class="quiz-chip">Multiple Choice</span>
+                  <span class="quiz-chip">{{ quiz_total_questions - quiz_question_index + 1 }} verbleibend</span>
+                  <p class="quiz-question-hint">Waehle die plausibelste Antwort. Die Darstellung ist luftiger gehalten, damit lange Antwortoptionen leichter vergleichbar sind.</p>
+                </aside>
+              </div>
+              <div class="option-group">
+                {% for option in quiz_question.options %}
+                  <label class="option-pill">
+                    <input type="radio" name="question_{{ quiz_question.id }}" value="{{ option }}" required>
+                    <span class="option-pill-text">{{ option }}</span>
+                  </label>
+                {% endfor %}
+              </div>
+            </div>
+            <button type="submit">{% if quiz_question_index == quiz_total_questions %}Quiz auswerten{% else %}Naechste Frage{% endif %}</button>
+          </form>
+        {% endif %}
+        {% if quiz_report %}
+          <div class="result quiz-result">
+            <div class="score-circle">
+              <span>{{ '%.0f'|format(quiz_report.score_percent) }}%</span>
+            </div>
+            <h3>Auswertung</h3>
+            <pre class="quiz-feedback-report">{{ quiz_report.report }}</pre>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+    <script>
+      function toggleFeedback(id) {
+        const element = document.getElementById(id);
+        if (element) {
+          element.classList.toggle('hidden');
+        }
+      }
+
+      function openSourceModal(button) {
+        const modal = document.getElementById('source-modal');
+        const rawDoc = button.dataset.doc || '';
+        const docTitle = rawDoc.replace(/\.pdf$/i, '');
+        document.getElementById('modal-doc-title').textContent = docTitle || 'Original PDF';
+        document.getElementById('modal-chunk-meta').textContent =
+          `Seite ${button.dataset.page} · ${button.dataset.chunk} · ${button.dataset.sourceType}`;
+        document.getElementById('modal-chunk-preview').textContent = button.dataset.preview || 'Keine Chunk-Vorschau verfuegbar.';
+        document.getElementById('modal-pdf-frame').src = `${button.dataset.pdfUrl}#page=${button.dataset.page}`;
+        modal.classList.remove('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('modal-open');
+      }
+
+      function closeSourceModal() {
+        const modal = document.getElementById('source-modal');
+        document.getElementById('modal-doc-title').textContent = 'Original PDF';
+        document.getElementById('modal-chunk-meta').textContent = '';
+        document.getElementById('modal-chunk-preview').textContent = '';
+        document.getElementById('modal-pdf-frame').src = '';
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('modal-open');
+      }
+
+      document.querySelectorAll('.citation-link, .source-link').forEach((button) => {
+        button.addEventListener('click', () => openSourceModal(button));
+      });
+
+      document.getElementById('source-modal').addEventListener('click', (event) => {
+        if (event.target.id === 'source-modal') {
+          closeSourceModal();
+        }
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          closeSourceModal();
+          closeQuizModal();
+        }
+      });
+
+      function closeQuizModal() {
+        const modal = document.getElementById('quiz-modal');
+        if (modal) {
+          modal.classList.add('hidden');
+          modal.setAttribute('aria-hidden', 'true');
+        }
+      }
+
+      document.getElementById('quiz-modal')?.addEventListener('click', (event) => {
+        if (event.target.id === 'quiz-modal') {
+          closeQuizModal();
+        }
+      });
+
+      document.querySelectorAll('form.async-form').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+          const submitter = event.submitter;
+          if (submitter && submitter.name) {
+            form.querySelectorAll(`input[data-submitter-value="${submitter.name}"]`).forEach((input) => input.remove());
+            const hiddenValue = document.createElement('input');
+            hiddenValue.type = 'hidden';
+            hiddenValue.name = submitter.name;
+            hiddenValue.value = submitter.value;
+            hiddenValue.dataset.submitterValue = submitter.name;
+            form.appendChild(hiddenValue);
+          }
+          const submitButton = submitter?.matches('button[type="submit"]') ? submitter : form.querySelector('button[type="submit"]');
+          if (!submitButton) {
+            return;
+          }
+          submitButton.disabled = true;
+          submitButton.classList.add('is-loading');
+          if (!submitButton.querySelector('.spinner')) {
+            const spinner = document.createElement('span');
+            spinner.className = 'spinner';
+            submitButton.prepend(spinner);
+          }
+        });
+      });
+
+      document.querySelectorAll('.tab-button').forEach((button) => {
+        button.addEventListener('click', () => {
+          document.querySelectorAll('.tab-button').forEach((item) => item.classList.remove('active'));
+          document.querySelectorAll('.tab-panel').forEach((panel) => panel.classList.remove('active'));
+          button.classList.add('active');
+          const target = document.getElementById(button.dataset.tabTarget);
+          if (target) {
+            target.classList.add('active');
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

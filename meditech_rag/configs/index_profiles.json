@@ -1,0 +1,28 @@
+{
+  "profiles": [
+    {
+      "name": "baseline_page_minilm",
+      "chunking_strategy": "page",
+      "overlap_enabled": false,
+      "embedding_backend": "st",
+      "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+      "metadata_rerank_enabled": false
+    },
+    {
+      "name": "paragraph_overlap_mpnet",
+      "chunking_strategy": "paragraph",
+      "overlap_enabled": true,
+      "embedding_backend": "st",
+      "embedding_model": "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
+      "metadata_rerank_enabled": false
+    },
+    {
+      "name": "final_paragraph_overlap_mpnet_rerank",
+      "chunking_strategy": "paragraph",
+      "overlap_enabled": true,
+      "embedding_backend": "st",
+      "embedding_model": "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
+      "metadata_rerank_enabled": true
+    }
+  ]
+}
