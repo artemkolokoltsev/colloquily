@@ -21,7 +21,7 @@ class LMStudioLLMClient:
         self.timeout = timeout
         self.logger = logging.getLogger(__name__)
 
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str, *, temperature: float | None = None) -> str:
         start = time.perf_counter()
 
         def _call() -> str:
@@ -31,7 +31,7 @@ class LMStudioLLMClient:
                     {"role": "system", "content": "Du bist ein lokaler Lernassistent fuer Medizintechnik."},
                     {"role": "user", "content": prompt},
                 ],
-                "temperature": config.LLM_TEMPERATURE,
+                "temperature": config.LLM_TEMPERATURE if temperature is None else temperature,
                 "max_tokens": config.LMSTUDIO_MAX_TOKENS,
             }
             try:
@@ -54,7 +54,7 @@ class LMStudioLLMClient:
 
         return trace_llm_call(
             "lmstudio.generate",
-            {"backend": "lmstudio", "model": self.model_name, "timeout_seconds": self.timeout, "temperature": config.LLM_TEMPERATURE},
+            {"backend": "lmstudio", "model": self.model_name, "timeout_seconds": self.timeout, "temperature": config.LLM_TEMPERATURE if temperature is None else temperature},
             _call,
             prompt=prompt,
         )

@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Question pool | Oral Exam Trainer</title><link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}"></head>
+<body><main class="page">
+  <header class="hero"><div><p class="eyebrow">Validated question pool</p><h1>{{ subject.name }}</h1><p>Generated questions remain unavailable for training until reviewed and accepted.</p></div><a class="button-link secondary-link" href="{{ url_for('admin_subjects', subject_id=subject.id) }}">Back to subject</a></header>
+  {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<section class="card">{% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}</section>{% endif %}{% endwith %}
+  <section class="card"><form action="{{ url_for('generate_subject_questions', subject_id=subject.id) }}" method="post" class="inline-fields"><label>Number of questions<input type="number" name="count" min="1" max="10" value="5"></label><button type="submit">Generate locally from accepted evidence</button></form></section>
+  {% for question in questions %}<article class="card"><div class="section-head"><div><p class="eyebrow">{{ question.question_type }} · {{ question.difficulty }}</p><h2>{{ question.question_text }}</h2></div><span class="status-chip">{{ question.review_status }}</span></div>
+    <h3>Expected core points</h3><ul>{% for point in question.expected_core_points %}<li>{{ point.text }} <span class="mini-tag">{{ point.priority }}</span> {% for evidence_id in point.evidence_ids %}<span class="mini-tag">E{{ evidence_id }}</span>{% endfor %}</li>{% endfor %}</ul>
+    <p><strong>Evidence:</strong> {% for evidence_id in question.evidence_ids %}<span class="mini-tag">E{{ evidence_id }}</span>{% endfor %}</p>
+    <form action="{{ url_for('review_subject_question', subject_id=subject.id, question_id=question.id) }}" method="post" class="review-actions"><button name="status" value="accepted">Accept</button><button class="secondary" name="status" value="quarantined">Quarantine</button><button class="secondary" name="status" value="rejected">Reject</button></form>
+  </article>{% else %}<section class="card"><p>No generated questions yet.</p></section>{% endfor %}
+</main></body></html>

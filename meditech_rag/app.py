@@ -57,10 +57,12 @@ from services.preprocessing_cache import cache_stats
 from services.rag_engine import RAGEngine
 from services.factory import get_llm_client
 from services.knowledge_repository import list_documents as list_subject_documents, list_review_units, review_unit
+from services.grounded_training import generate_grounded_questions
 from services.quality_pipeline import process_subject
 from services.subject_index import SubjectIndex
 from services.subject_rag import answer_subject_question
 from services.subject_workspace import workspace_for
+from services.training_repository import coverage_map, list_questions, review_question
 from services.runtime_settings import build_settings_sections, initialize_runtime_settings, load_runtime_settings, save_runtime_settings_from_form
 
 
@@ -438,6 +440,7 @@ def admin_subjects():
         active_subject=g.active_subject,
         selected_subject=selected,
         documents=list_subject_documents(selected["id"]) if selected else [],
+        coverage=coverage_map(selected["id"]) if selected else [],
     )
 
 
@@ -582,6 +585,43 @@ def review_subject_unit(subject_id: int, unit_id: int):
     except Exception as exc:
         flash(f"Review decision failed: {exc}", "error")
     return redirect(url_for("subject_review", subject_id=subject_id))
+
+
+@app.get("/admin/subjects/<int:subject_id>/questions")
+@admin_required
+def subject_questions(subject_id: int):
+    subject = get_subject(subject_id)
+    if not subject:
+        return redirect(url_for("admin_subjects"))
+    return render_template("questions.html", user=g.user, subject=subject, questions=list_questions(subject_id))
+
+
+@app.post("/admin/subjects/<int:subject_id>/questions/generate")
+@admin_required
+def generate_subject_questions(subject_id: int):
+    subject = get_subject(subject_id)
+    if not subject:
+        return redirect(url_for("admin_subjects"))
+    try:
+        created = generate_grounded_questions(subject, request.form.get("count", type=int) or 5)
+        flash(f"Generated {len(created)} evidence-grounded question(s) for review.", "success")
+    except Exception as exc:
+        LOGGER.exception("Grounded question generation failed")
+        flash(f"Question generation failed: {exc}", "error")
+    return redirect(url_for("subject_questions", subject_id=subject_id))
+
+
+@app.post("/admin/subjects/<int:subject_id>/questions/<int:question_id>/review")
+@admin_required
+def review_subject_question(subject_id: int, question_id: int):
+    try:
+        question = review_question(question_id, request.form.get("status", "needs_review"))
+        if question["subject_id"] != subject_id:
+            raise ValueError("Question does not belong to this subject")
+        flash("Question review status saved.", "success")
+    except Exception as exc:
+        flash(f"Question review failed: {exc}", "error")
+    return redirect(url_for("subject_questions", subject_id=subject_id))
 
 
 @app.get("/subjects/<int:subject_id>/raw/<path:filename>")

@@ -37,7 +37,7 @@
 
       {% if selected_subject %}
       <section class="card">
-        <div class="section-head"><div><p class="eyebrow">{{ selected_subject.slug }}</p><h2>{{ selected_subject.name }}</h2><p>{{ selected_subject.description or 'No description yet.' }}</p></div><a class="button-link" href="{{ url_for('subject_review', subject_id=selected_subject.id) }}">Review suspicious content</a></div>
+        <div class="section-head"><div><p class="eyebrow">{{ selected_subject.slug }}</p><h2>{{ selected_subject.name }}</h2><p>{{ selected_subject.description or 'No description yet.' }}</p></div><div class="review-actions"><a class="button-link" href="{{ url_for('subject_review', subject_id=selected_subject.id) }}">Review suspicious content</a><a class="button-link" href="{{ url_for('subject_questions', subject_id=selected_subject.id) }}">Question pool</a></div></div>
         <div class="grid">
           <form action="{{ url_for('edit_subject_route', subject_id=selected_subject.id) }}" method="post" class="subcard stacked">
             <h3>Configuration</h3><input name="name" value="{{ selected_subject.name }}" required><label>Workspace slug<input value="{{ selected_subject.slug }}" disabled></label><textarea name="description">{{ selected_subject.description }}</textarea><div class="inline-fields"><input name="language" value="{{ selected_subject.language }}"><input type="number" name="exam_duration_minutes" min="1" value="{{ selected_subject.exam_duration_minutes }}"></div><button type="submit">Save</button>
@@ -54,6 +54,7 @@
         </div>
       </section>
       <section class="card"><h2>Documents</h2><div class="table-wrap"><table><thead><tr><th>Path</th><th>Type</th><th>Processing</th><th>Quality</th><th>Accepted</th><th>Review</th><th>Quarantined</th></tr></thead><tbody>{% for doc in documents %}<tr><td>{{ doc.relative_path }}</td><td>{{ doc.source_type }}</td><td>{{ doc.processing_status }}</td><td>{{ doc.quality_status }}</td><td>{{ doc.accepted_count or 0 }}</td><td>{{ doc.review_count or 0 }}</td><td>{{ doc.quarantined_count or 0 }}</td></tr>{% else %}<tr><td colspan="7">No discovered material.</td></tr>{% endfor %}</tbody></table></div></section>
+      <section class="card"><h2>Coverage map</h2><div class="coverage-grid">{% for item in coverage %}<article class="subcard coverage-{{ item.strength }}"><strong>{{ item.topic_name }}</strong><p>{{ item.accepted_evidence }} accepted · {{ item.weak_evidence }} review · {{ item.conflicts }} conflicts</p><span class="status-chip">{{ item.strength }}</span></article>{% else %}<p>No processed knowledge yet.</p>{% endfor %}</div></section>
       <section class="card danger-zone"><h2>Delete subject record</h2><p>Database entities are deleted; the raw workspace stays on disk for recovery.</p><form action="{{ url_for('delete_subject_route', subject_id=selected_subject.id) }}" method="post"><button class="secondary" type="submit">Delete subject</button></form></section>
       {% endif %}
     </main>

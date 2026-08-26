@@ -21,7 +21,7 @@ class OllamaLLMClient:
         self.timeout = timeout
         self.logger = logging.getLogger(__name__)
 
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str, *, temperature: float | None = None) -> str:
         start = time.perf_counter()
 
         def _call() -> str:
@@ -30,7 +30,7 @@ class OllamaLLMClient:
                 "prompt": prompt,
                 "stream": False,
                 "options": {
-                    "temperature": config.LLM_TEMPERATURE,
+                    "temperature": config.LLM_TEMPERATURE if temperature is None else temperature,
                     "num_predict": config.OLLAMA_NUM_PREDICT,
                 },
             }
@@ -56,7 +56,7 @@ class OllamaLLMClient:
 
         return trace_llm_call(
             "ollama.generate",
-            {"backend": "ollama", "model": self.model_name, "timeout_seconds": self.timeout, "temperature": config.LLM_TEMPERATURE},
+            {"backend": "ollama", "model": self.model_name, "timeout_seconds": self.timeout, "temperature": config.LLM_TEMPERATURE if temperature is None else temperature},
             _call,
             prompt=prompt,
         )

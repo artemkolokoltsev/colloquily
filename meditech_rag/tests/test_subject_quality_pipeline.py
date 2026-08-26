@@ -18,8 +18,10 @@ from services.knowledge_repository import (
     review_unit,
 )
 from services.quality_pipeline import deterministic_cleanup, process_subject
+from services.grounded_training import evaluate_grounded_answer, generate_grounded_questions
 from services.subject_index import SubjectIndex
 from services.subject_workspace import workspace_for
+from services.training_repository import list_questions, review_question
 
 
 class FakeEmbedder:
@@ -36,6 +38,14 @@ class FakeEmbedder:
                 ]
             )
         return np.asarray(vectors, dtype=np.float32)
+
+
+class FakeLLM:
+    def __init__(self, response_factory) -> None:
+        self.response_factory = response_factory
+
+    def generate(self, prompt: str, **_kwargs) -> str:
+        return self.response_factory(prompt)
 
 
 def valid_cleanup(prompt: str) -> str:
@@ -198,6 +208,107 @@ class SubjectQualityPipelineTest(unittest.TestCase):
         ).fetchone()
         self.assertEqual(migrated[0], 1)
         self.assertEqual(get_subject(1)["slug"], "meditech")
+
+    def _accepted_subject(self) -> tuple[dict, int]:
+        subject = self.subject("Grounded Training")
+        self.write_raw(
+            subject,
+            "theory.md",
+            "Behaviorism explains observable learning behavior through reinforcement and environmental consequences.",
+        )
+        process_subject(subject["id"])
+        return subject, accepted_units(subject["id"])[0]["id"]
+
+    def _question_response(self, evidence_id: int) -> str:
+        return json.dumps(
+            {
+                "questions": [
+                    {
+                        "question_text": "How does reinforcement function in behaviorism?",
+                        "question_type": "explanation",
+                        "difficulty": "medium",
+                        "expected_duration_seconds": 60,
+                        "expected_core_points": [
+                            {"text": "Connect reinforcement with observable behavior.", "evidence_ids": [evidence_id], "priority": "must_know"}
+                        ],
+                        "optional_details": [],
+                        "evidence_ids": [evidence_id],
+                        "quality_score": 0.94,
+                    }
+                ]
+            }
+        )
+
+    def test_questions_require_same_subject_accepted_evidence(self) -> None:
+        subject, evidence_id = self._accepted_subject()
+        created = generate_grounded_questions(subject, 1, llm_client=FakeLLM(lambda _: self._question_response(evidence_id)))
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created[0]["evidence_ids"], [evidence_id])
+        self.assertEqual(created[0]["review_status"], "needs_review")
+        review_question(created[0]["id"], "accepted")
+        self.assertEqual(list_questions(subject["id"], accepted_only=True)[0]["id"], created[0]["id"])
+
+    def test_question_with_unknown_evidence_is_rejected(self) -> None:
+        subject, _ = self._accepted_subject()
+        with self.assertRaises(ValueError):
+            generate_grounded_questions(subject, 1, llm_client=FakeLLM(lambda _: self._question_response(999999)))
+        self.assertEqual(list_questions(subject["id"]), [])
+
+    def test_evaluation_rejects_claim_without_valid_evidence(self) -> None:
+        subject, evidence_id = self._accepted_subject()
+        question = generate_grounded_questions(
+            subject, 1, llm_client=FakeLLM(lambda _: self._question_response(evidence_id))
+        )[0]
+        payload = self._evaluation_payload(evidence_id)
+        payload["missing"] = [{"text": "Invalid claim", "evidence_ids": [999999], "contradicted_by_evidence": False}]
+        with self.assertRaises(ValueError):
+            evaluate_grounded_answer(
+                subject["id"], question["id"], "Reinforcement changes behavior.", 45,
+                llm_client=FakeLLM(lambda _: json.dumps(payload)),
+            )
+
+    def _evaluation_payload(self, evidence_id: int) -> dict:
+        return {
+            "status": "evaluated",
+            "score": 4,
+            "correct": [{"text": "The answer links reinforcement and behavior.", "evidence_ids": [evidence_id], "contradicted_by_evidence": False}],
+            "missing": [],
+            "incorrect": [],
+            "unsupported": ["A researcher attribution is absent from the accepted material."],
+            "clarity": "Clear and concise.",
+            "time_use": "appropriate",
+            "better_oral_answer": f"Reinforcement shapes observable behavior [E{evidence_id}].",
+            "likely_follow_up": "What role do environmental consequences play?",
+            "follow_up_evidence_ids": [evidence_id],
+            "evidence_ids": [evidence_id],
+            "scores": {
+                "conceptual_correctness": 4, "must_know_coverage": 4, "relevance": 5,
+                "example_quality": 3, "clarity": 4, "time_management": 5,
+            },
+            "confidence": 0.91,
+        }
+
+    def test_evaluation_distinguishes_unsupported_from_incorrect(self) -> None:
+        subject, evidence_id = self._accepted_subject()
+        question = generate_grounded_questions(
+            subject, 1, llm_client=FakeLLM(lambda _: self._question_response(evidence_id))
+        )[0]
+        payload = self._evaluation_payload(evidence_id)
+        result = evaluate_grounded_answer(
+            subject["id"], question["id"], "Reinforcement changes behavior and was invented by Dr Example.", 55,
+            llm_client=FakeLLM(lambda _: json.dumps(payload)),
+        )
+        self.assertEqual(result["incorrect"], [])
+        self.assertEqual(len(result["unsupported"]), 1)
+        invalid = self._evaluation_payload(evidence_id)
+        invalid["incorrect"] = [
+            {"text": "Claim is wrong", "evidence_ids": [evidence_id], "contradicted_by_evidence": False}
+        ]
+        with self.assertRaises(ValueError):
+            evaluate_grounded_answer(
+                subject["id"], question["id"], "answer", 30,
+                llm_client=FakeLLM(lambda _: json.dumps(invalid)),
+            )
 
 
 if __name__ == "__main__":
