@@ -13,6 +13,7 @@ from services.knowledge_repository import accepted_units
 from services.quality_pipeline import process_subject
 from services.subject_workspace import workspace_for
 from services.training_repository import create_question, review_question
+from services.progress import subject_progress
 
 
 class ExamStateTest(unittest.TestCase):
@@ -124,6 +125,10 @@ class ExamStateTest(unittest.TestCase):
         self.assertEqual(result["session"]["status"], "completed")
         self.assertTrue(result["show_evaluation"])
         self.assertEqual(result["evaluation"]["score"], 3)
+        progress = subject_progress(self.user_id, subject["id"])
+        self.assertEqual(progress["attempts_count"], 1)
+        self.assertEqual(progress["last_score"], 3.0)
+        self.assertEqual(progress["due_questions"][0]["question_id"], question["id"])
 
     def test_trainer_routes_render_for_ready_subject(self) -> None:
         subject, evidence = self.create_ready_subject("Route Smoke")

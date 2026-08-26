@@ -88,12 +88,14 @@ def list_questions(subject_id: int, *, accepted_only: bool = False) -> list[dict
         return [_decode_question(row) for row in connection.execute(query, (subject_id,)).fetchall()]
 
 
-def review_question(question_id: int, status: str) -> dict:
+def review_question(question_id: int, status: str, *, subject_id: int | None = None) -> dict:
     if status not in {"accepted", "needs_review", "quarantined", "rejected"}:
         raise ValueError("Invalid question status")
     question = get_question(question_id)
     if not question:
         raise ValueError("Question not found")
+    if subject_id is not None and question["subject_id"] != subject_id:
+        raise ValueError("Question does not belong to subject")
     evidence_ids = question["evidence_ids"]
     if status == "accepted" and set(accepted_evidence_map(question["subject_id"], evidence_ids)) != set(evidence_ids):
         raise ValueError("Question evidence is no longer accepted")

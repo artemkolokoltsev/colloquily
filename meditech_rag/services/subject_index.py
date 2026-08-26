@@ -11,7 +11,7 @@ import numpy as np
 
 import config
 from services.database import get_subject
-from services.factory import get_embedder
+from services.local_models import subject_embedder
 from services.knowledge_repository import accepted_units
 from services.subject_workspace import workspace_for
 
@@ -35,7 +35,7 @@ class SubjectIndex:
         self.subject = subject
         self.subject_id = int(subject_id)
         self.workspace = workspace_for(subject)
-        self.embedder = embedder or get_embedder()
+        self.embedder = embedder or subject_embedder(subject)
         self.index_path = self.workspace.folder("index") / "vectors.faiss"
         self.metadata_path = self.workspace.folder("index") / "knowledge_units.json"
         self.index: faiss.Index | None = None

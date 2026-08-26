@@ -61,6 +61,15 @@ def list_documents(subject_id: int) -> list[dict]:
         return [dict(row) for row in rows]
 
 
+def list_topics(subject_id: int) -> list[dict]:
+    with closing(_connect()) as connection:
+        return [
+            dict(row) for row in connection.execute(
+                "SELECT * FROM topics WHERE subject_id = ? ORDER BY name", (subject_id,)
+            ).fetchall()
+        ]
+
+
 def prepare_document_units(document_id: int, *, force: bool = False) -> None:
     with closing(_connect()) as connection:
         connection.execute("DELETE FROM knowledge_units WHERE document_id = ? AND manually_authoritative = 0", (document_id,))
@@ -86,6 +95,21 @@ def insert_knowledge_units(subject_id: int, document_id: int, units: list[dict])
         for unit in units:
             if unit["source_location"] in protected:
                 continue
+            topic_id = None
+            detected_topic = str(unit.get("detected_topic") or "").strip()
+            if detected_topic:
+                connection.execute(
+                    """
+                    INSERT OR IGNORE INTO topics (subject_id, name, description, review_status)
+                    VALUES (?, ?, '', 'needs_review')
+                    """,
+                    (subject_id, detected_topic[:160]),
+                )
+                topic_row = connection.execute(
+                    "SELECT id FROM topics WHERE subject_id = ? AND name = ?",
+                    (subject_id, detected_topic[:160]),
+                ).fetchone()
+                topic_id = int(topic_row["id"])
             cursor = connection.execute(
                 """
                 INSERT OR IGNORE INTO knowledge_units (
@@ -93,10 +117,10 @@ def insert_knowledge_units(subject_id: int, document_id: int, units: list[dict])
                     source_location, source_start, source_end, source_hash, quality_score,
                     confidence, quality_problems_json, source_support, review_status,
                     enabled_for_retrieval, manually_authoritative, created_at, updated_at
-                ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
                 """,
                 (
-                    subject_id, document_id, unit["raw_content"], unit["cleaned_content"], unit["content_type"],
+                    subject_id, document_id, topic_id, unit["raw_content"], unit["cleaned_content"], unit["content_type"],
                     unit["source_location"], unit.get("source_start"), unit.get("source_end"), unit["source_hash"],
                     unit["quality_score"], unit["extraction_confidence"],
                     json.dumps(unit["quality_problems"], ensure_ascii=False), unit["source_support"],
@@ -182,6 +206,15 @@ def finalize_document(document_id: int) -> dict:
             """,
             (quality_status, int(accepted > 0), now, document_id),
         )
+        connection.execute(
+            """
+            UPDATE topics SET evidence_count = (
+                SELECT COUNT(*) FROM knowledge_units ku
+                WHERE ku.topic_id = topics.id AND ku.review_status = 'accepted'
+            ) WHERE subject_id = (SELECT subject_id FROM documents WHERE id = ?)
+            """,
+            (document_id,),
+        )
         connection.commit()
         return {"document_id": document_id, "quality_status": quality_status, "counts": counts}
 
@@ -201,7 +234,16 @@ def accepted_units(subject_id: int) -> list[dict]:
         return [dict(row) for row in rows]
 
 
-def list_review_units(subject_id: int, *, suspicious_only: bool = False) -> list[dict]:
+def list_review_units(
+    subject_id: int,
+    *,
+    suspicious_only: bool = False,
+    document_id: int | None = None,
+    topic_id: int | None = None,
+    max_confidence: float | None = None,
+    issue: str | None = None,
+    status: str | None = None,
+) -> list[dict]:
     query = """
         SELECT ku.*, d.relative_path, d.title AS document_title
         FROM knowledge_units ku JOIN documents d ON d.id = ku.document_id
@@ -210,6 +252,21 @@ def list_review_units(subject_id: int, *, suspicious_only: bool = False) -> list
     params: list[object] = [subject_id]
     if suspicious_only:
         query += " AND ku.review_status != 'accepted'"
+    if document_id is not None:
+        query += " AND ku.document_id = ?"
+        params.append(document_id)
+    if topic_id is not None:
+        query += " AND ku.topic_id = ?"
+        params.append(topic_id)
+    if max_confidence is not None:
+        query += " AND ku.confidence <= ?"
+        params.append(max_confidence)
+    if issue:
+        query += " AND ku.quality_problems_json LIKE ?"
+        params.append(f"%{issue}%")
+    if status:
+        query += " AND ku.review_status = ?"
+        params.append(status)
     query += " ORDER BY ku.confidence ASC, d.relative_path, ku.source_start"
     with closing(_connect()) as connection:
         rows = connection.execute(query, params).fetchall()
@@ -221,7 +278,67 @@ def list_review_units(subject_id: int, *, suspicious_only: bool = False) -> list
         return items
 
 
-def review_unit(unit_id: int, status: str, *, content: str | None = None, user_id: int | None = None) -> dict:
+def batch_accept_high_confidence(subject_id: int, unit_ids: list[int], user_id: int | None = None) -> int:
+    accepted = 0
+    for unit in list_review_units(subject_id, suspicious_only=True):
+        if unit["id"] not in unit_ids:
+            continue
+        if unit["confidence"] < 0.9:
+            raise ValueError("Batch approval is restricted to confidence >= 0.90")
+        if set(unit["quality_problems"]) & {"meaningless_fragment", "corrupted_table", "broken_formula", "source_traceability_failure"}:
+            raise ValueError("Suspicious extraction problems require individual review")
+        review_unit(unit["id"], "accepted", user_id=user_id, subject_id=subject_id)
+        accepted += 1
+    return accepted
+
+
+def document_quality_report(document_id: int) -> dict:
+    with closing(_connect()) as connection:
+        document = connection.execute("SELECT * FROM documents WHERE id = ?", (document_id,)).fetchone()
+        if not document:
+            raise ValueError("Document not found")
+        units = connection.execute(
+            "SELECT * FROM knowledge_units WHERE document_id = ? ORDER BY source_start, id", (document_id,)
+        ).fetchall()
+        issue_counts: dict[str, int] = {}
+        unit_rows = []
+        statuses: dict[str, int] = {}
+        for row in units:
+            item = dict(row)
+            problems = json.loads(item.pop("quality_problems_json") or "[]")
+            statuses[item["review_status"]] = statuses.get(item["review_status"], 0) + 1
+            for problem in problems:
+                issue_counts[problem] = issue_counts.get(problem, 0) + 1
+            unit_rows.append(
+                {
+                    "id": item["id"], "source_location": item["source_location"],
+                    "status": item["review_status"], "confidence": item["confidence"],
+                    "problems": problems,
+                }
+            )
+        return {
+            "document_id": document_id, "relative_path": document["relative_path"],
+            "source_hash": document["source_hash"], "statuses": statuses,
+            "issues": issue_counts, "units": unit_rows,
+            "coverage_warnings": [
+                warning for warning, present in (
+                    ("no_accepted_evidence", not statuses.get("accepted")),
+                    ("original_visual_inspection_required", bool(issue_counts.get("visual_fragment"))),
+                    ("broken_tables_present", bool(issue_counts.get("corrupted_table"))),
+                    ("broken_formulas_present", bool(issue_counts.get("broken_formula"))),
+                ) if present
+            ],
+        }
+
+
+def review_unit(
+    unit_id: int,
+    status: str,
+    *,
+    content: str | None = None,
+    user_id: int | None = None,
+    subject_id: int | None = None,
+) -> dict:
     if status not in {"accepted", "quarantined", "rejected", "needs_review"}:
         raise ValueError("Invalid review status")
     now = datetime.now().isoformat(timespec="seconds")
@@ -229,6 +346,8 @@ def review_unit(unit_id: int, status: str, *, content: str | None = None, user_i
         row = connection.execute("SELECT * FROM knowledge_units WHERE id = ?", (unit_id,)).fetchone()
         if not row:
             raise ValueError("Knowledge unit not found")
+        if subject_id is not None and int(row["subject_id"]) != int(subject_id):
+            raise ValueError("Knowledge unit does not belong to subject")
         new_content = row["content"] if content is None else content.strip()
         if status == "accepted" and not new_content:
             raise ValueError("Accepted knowledge cannot be empty")

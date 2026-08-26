@@ -28,7 +28,7 @@ class LMStudioLLMClient:
             payload = {
                 "model": self.model_name,
                 "messages": [
-                    {"role": "system", "content": "Du bist ein lokaler Lernassistent fuer Medizintechnik."},
+                    {"role": "system", "content": "Du bist ein lokaler, quellengebundener Lernassistent fuer Universitaetsfaecher."},
                     {"role": "user", "content": prompt},
                 ],
                 "temperature": config.LLM_TEMPERATURE if temperature is None else temperature,

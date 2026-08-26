@@ -55,8 +55,13 @@ from services.langtrace_eval import attach_eval_attributes, get_langtrace_status
 from services.persistence import get_request_log, load_request_history, update_request_langtrace_ids
 from services.preprocessing_cache import cache_stats
 from services.rag_engine import RAGEngine
-from services.factory import get_llm_client
-from services.knowledge_repository import list_documents as list_subject_documents, list_review_units, review_unit
+from services.knowledge_repository import (
+    batch_accept_high_confidence,
+    list_documents as list_subject_documents,
+    list_review_units,
+    list_topics as list_subject_topics,
+    review_unit,
+)
 from services.grounded_training import generate_grounded_questions
 from services.grounded_training import evaluate_grounded_answer
 from services.exam_state import (
@@ -73,6 +78,9 @@ from services.subject_index import SubjectIndex
 from services.subject_rag import answer_subject_question
 from services.subject_workspace import workspace_for
 from services.training_repository import coverage_map, list_questions, review_question
+from services.local_models import TASKS, detect_local_models, merged_model_config, subject_task_llm
+from services.progress import correct_evaluation, subject_progress
+from services.exam_packs import generate_exam_pack, list_exam_pack_sections, review_exam_pack_section
 from services.runtime_settings import build_settings_sections, initialize_runtime_settings, load_runtime_settings, save_runtime_settings_from_form
 
 
@@ -544,7 +552,8 @@ def upload_subject_material(subject_id: int):
 def process_subject_route(subject_id: int):
     try:
         use_local_llm = request.form.get("use_local_llm") == "on"
-        client = get_llm_client() if use_local_llm else None
+        subject = get_subject(subject_id)
+        client = subject_task_llm(subject, "cleaning") if use_local_llm else None
         result = process_subject(
             subject_id,
             force=request.form.get("force") == "on",
@@ -580,9 +589,19 @@ def subject_review(subject_id: int):
     if not subject:
         return redirect(url_for("admin_subjects"))
     suspicious = request.args.get("suspicious", "1") != "0"
+    document_id = request.args.get("document_id", type=int)
+    topic_id = request.args.get("topic_id", type=int)
+    max_confidence = request.args.get("max_confidence", type=float)
+    issue = request.args.get("issue", "").strip() or None
+    review_status = request.args.get("status", "").strip() or None
     return render_template(
         "review.html", user=g.user, subject=subject,
-        units=list_review_units(subject_id, suspicious_only=suspicious), suspicious_only=suspicious,
+        units=list_review_units(
+            subject_id, suspicious_only=suspicious, document_id=document_id, topic_id=topic_id,
+            max_confidence=max_confidence, issue=issue, status=review_status,
+        ),
+        documents=list_subject_documents(subject_id), topics=list_subject_topics(subject_id),
+        suspicious_only=suspicious,
     )
 
 
@@ -590,10 +609,25 @@ def subject_review(subject_id: int):
 @admin_required
 def review_subject_unit(subject_id: int, unit_id: int):
     try:
-        review_unit(unit_id, request.form.get("status", "needs_review"), content=request.form.get("content"), user_id=g.user["id"])
+        review_unit(
+            unit_id, request.form.get("status", "needs_review"), content=request.form.get("content"),
+            user_id=g.user["id"], subject_id=subject_id,
+        )
         flash("Review decision saved.", "success")
     except Exception as exc:
         flash(f"Review decision failed: {exc}", "error")
+    return redirect(url_for("subject_review", subject_id=subject_id))
+
+
+@app.post("/admin/subjects/<int:subject_id>/review/batch")
+@admin_required
+def batch_review_subject_units(subject_id: int):
+    unit_ids = [int(item) for item in request.form.getlist("unit_ids") if item.isdigit()]
+    try:
+        accepted = batch_accept_high_confidence(subject_id, unit_ids, user_id=g.user["id"])
+        flash(f"Batch accepted {accepted} high-confidence unit(s).", "success")
+    except Exception as exc:
+        flash(f"Batch approval failed: {exc}", "error")
     return redirect(url_for("subject_review", subject_id=subject_id))
 
 
@@ -613,7 +647,10 @@ def generate_subject_questions(subject_id: int):
     if not subject:
         return redirect(url_for("admin_subjects"))
     try:
-        created = generate_grounded_questions(subject, request.form.get("count", type=int) or 5)
+        created = generate_grounded_questions(
+            subject, request.form.get("count", type=int) or 5,
+            llm_client=subject_task_llm(subject, "question_generation"),
+        )
         flash(f"Generated {len(created)} evidence-grounded question(s) for review.", "success")
     except Exception as exc:
         LOGGER.exception("Grounded question generation failed")
@@ -625,13 +662,49 @@ def generate_subject_questions(subject_id: int):
 @admin_required
 def review_subject_question(subject_id: int, question_id: int):
     try:
-        question = review_question(question_id, request.form.get("status", "needs_review"))
-        if question["subject_id"] != subject_id:
-            raise ValueError("Question does not belong to this subject")
+        review_question(question_id, request.form.get("status", "needs_review"), subject_id=subject_id)
         flash("Question review status saved.", "success")
     except Exception as exc:
         flash(f"Question review failed: {exc}", "error")
     return redirect(url_for("subject_questions", subject_id=subject_id))
+
+
+@app.get("/admin/subjects/<int:subject_id>/exam-pack")
+@admin_required
+def subject_exam_pack(subject_id: int):
+    subject = get_subject(subject_id)
+    if not subject:
+        return redirect(url_for("admin_subjects"))
+    return render_template(
+        "exam_pack.html", user=g.user, subject=subject,
+        sections=list_exam_pack_sections(subject_id),
+    )
+
+
+@app.post("/admin/subjects/<int:subject_id>/exam-pack/generate")
+@admin_required
+def generate_subject_exam_pack(subject_id: int):
+    subject = get_subject(subject_id)
+    if not subject:
+        return redirect(url_for("admin_subjects"))
+    try:
+        sections = generate_exam_pack(subject, subject_task_llm(subject, "question_generation"))
+        flash(f"Generated {len(sections)} exam-pack section(s) for review.", "success")
+    except Exception as exc:
+        LOGGER.exception("Exam-pack generation failed")
+        flash(f"Exam-pack generation failed: {exc}", "error")
+    return redirect(url_for("subject_exam_pack", subject_id=subject_id))
+
+
+@app.post("/admin/subjects/<int:subject_id>/exam-pack/<int:section_id>/review")
+@admin_required
+def review_subject_exam_pack(subject_id: int, section_id: int):
+    try:
+        review_exam_pack_section(section_id, request.form.get("status", "needs_review"), subject_id=subject_id)
+        flash("Exam-pack review status saved.", "success")
+    except Exception as exc:
+        flash(f"Exam-pack review failed: {exc}", "error")
+    return redirect(url_for("subject_exam_pack", subject_id=subject_id))
 
 
 @app.get("/subjects/<int:subject_id>/raw/<path:filename>")
@@ -650,6 +723,71 @@ def trainer():
         "trainer.html", user=g.user, subjects=g.subjects, active_subject=g.active_subject,
         question_counts={subject["id"]: len(list_questions(subject["id"], accepted_only=True)) for subject in g.subjects},
     )
+
+
+@app.get("/progress/<int:subject_id>")
+@login_required
+def progress_dashboard(subject_id: int):
+    subject = get_subject(subject_id)
+    if not subject:
+        return ("Not found", 404)
+    return render_template(
+        "progress.html", user=g.user, subject=subject,
+        progress=subject_progress(g.user["id"], subject_id),
+    )
+
+
+@app.post("/progress/<int:subject_id>/attempts/<int:attempt_id>/correct")
+@login_required
+def correct_attempt_route(subject_id: int, attempt_id: int):
+    try:
+        corrected = request.get_json(silent=True) if request.is_json else __import__("json").loads(request.form.get("evaluation_json", "{}"))
+        correct_evaluation(attempt_id, g.user["id"], subject_id, corrected)
+        flash("Corrected evaluation saved as a regression fixture.", "success")
+    except Exception as exc:
+        flash(f"Evaluation correction failed: {exc}", "error")
+    return redirect(url_for("progress_dashboard", subject_id=subject_id))
+
+
+@app.get("/admin/subjects/<int:subject_id>/models")
+@admin_required
+def subject_models(subject_id: int):
+    subject = get_subject(subject_id)
+    if not subject:
+        return redirect(url_for("admin_subjects"))
+    return render_template(
+        "models.html", user=g.user, subject=subject, tasks=TASKS,
+        model_config=merged_model_config(subject), detected=detect_local_models(),
+    )
+
+
+@app.post("/admin/subjects/<int:subject_id>/models")
+@admin_required
+def update_subject_models(subject_id: int):
+    subject = get_subject(subject_id)
+    if not subject:
+        return redirect(url_for("admin_subjects"))
+    try:
+        llm_config = {
+            "backend": request.form.get("backend", "ollama"),
+            "task_models": {task: request.form.get(f"model_{task}", "").strip() for task in TASKS},
+            "context_window": max(512, request.form.get("context_window", type=int) or 4096),
+            "batch_size": max(1, request.form.get("batch_size", type=int) or 8),
+            "temperature": max(0.0, request.form.get("temperature", type=float) or 0.0),
+            "timeout_seconds": max(10, request.form.get("timeout_seconds", type=int) or 300),
+        }
+        if any(not model for model in llm_config["task_models"].values()):
+            raise ValueError("Every local-model task requires a model name")
+        embedding_config = {
+            "backend": request.form.get("embedding_backend", "st"),
+            "model": request.form.get("embedding_model", config.ST_EMBED_MODEL).strip(),
+            "timeout_seconds": max(10, request.form.get("embedding_timeout_seconds", type=int) or 120),
+        }
+        update_subject(subject_id, {"local_llm_config": llm_config, "embedding_config": embedding_config})
+        flash("Subject-local model configuration saved.", "success")
+    except Exception as exc:
+        flash(f"Model configuration failed: {exc}", "error")
+    return redirect(url_for("subject_models", subject_id=subject_id))
 
 
 @app.post("/trainer/start")
@@ -725,7 +863,8 @@ def answer_trainer_session(session_id: int):
         result = submit_exam_answer(
             session_id, answer, request.form.get("response_duration_seconds", type=int) or 0,
             lambda subject_id, question_id, answer_text, duration: evaluate_grounded_answer(
-                subject_id, question_id, answer_text, duration
+                subject_id, question_id, answer_text, duration,
+                llm_client=subject_task_llm(get_subject(subject_id), "answer_evaluation"),
             ),
         )
         if result["session"]["status"] in {"completed", "time_expired"}:

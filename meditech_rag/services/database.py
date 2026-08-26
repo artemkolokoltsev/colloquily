@@ -303,10 +303,36 @@ def init_db() -> None:
                 FOREIGN KEY(knowledge_unit_id) REFERENCES knowledge_units(id) ON DELETE CASCADE,
                 FOREIGN KEY(user_id) REFERENCES users(id)
             );
+
+            CREATE TABLE IF NOT EXISTS evaluation_corrections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                attempt_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                previous_evaluation_json TEXT NOT NULL,
+                corrected_evaluation_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(attempt_id) REFERENCES attempts(id) ON DELETE CASCADE,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS exam_pack_sections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject_id INTEGER NOT NULL,
+                concept TEXT NOT NULL,
+                generated_content_json TEXT NOT NULL,
+                evidence_ids_json TEXT NOT NULL,
+                quality_status TEXT NOT NULL DEFAULT 'needs_review',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
+            );
             """
         )
         _migrate_subject_scope(connection)
         _migrate_exam_state(connection)
+        migration_time = datetime.now().isoformat(timespec="seconds")
+        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (3, ?)", (migration_time,))
+        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (4, ?)", (migration_time,))
         connection.commit()
     seed_admin_user()
     LOGGER.info("SQLite database initialized", extra={"db_path": config.DB_PATH})

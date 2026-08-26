@@ -190,7 +190,9 @@ LANGTRACE_BATCH = _env_flag("LANGTRACE_BATCH", True)
 LANGTRACE_WRITE_SPANS_TO_CONSOLE = _env_flag("LANGTRACE_WRITE_SPANS_TO_CONSOLE", False)
 LANGTRACE_CAPTURE_CONTENT = _env_flag("LANGTRACE_CAPTURE_CONTENT", True)
 
-TOPIC_VOCAB = {
+# Optional compatibility vocabulary for importing the original course. It is
+# disabled by default so newly created subjects never inherit medical topics.
+LEGACY_MEDITECH_TOPIC_VOCAB = {
     "medizinprodukt": {
         "aliases": ["medizinprodukt", "medizinprodukte", "medical device"],
         "description": "Grundlagen und Definitionen zu Medizinprodukten",
@@ -222,6 +224,9 @@ TOPIC_VOCAB = {
         "parent_topic": None,
     },
 }
+
+ENABLE_LEGACY_MEDITECH_COMPAT = _env_flag("ENABLE_LEGACY_MEDITECH_COMPAT", False)
+TOPIC_VOCAB = LEGACY_MEDITECH_TOPIC_VOCAB if ENABLE_LEGACY_MEDITECH_COMPAT else {}
 
 DOMAIN_CONCEPTS = {
     topic: list(values.get("aliases", []))

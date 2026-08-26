@@ -6,7 +6,7 @@ from datetime import datetime
 from uuid import uuid4
 
 import config
-from services.factory import get_llm_client
+from services.local_models import subject_task_llm
 from services.subject_index import INSUFFICIENT_EVIDENCE_MESSAGE, SubjectIndex
 
 
@@ -38,7 +38,7 @@ def answer_subject_question(subject_id: int, question: str, *, embedder=None, ll
     if not context["sufficient"]:
         answer = INSUFFICIENT_EVIDENCE_MESSAGE
     else:
-        client = llm_client or get_llm_client()
+        client = llm_client or subject_task_llm(subject_index.subject, "examiner_follow_up")
         answer = client.generate(_prompt(subject_index.subject, question, context["evidence"]))
         if answer != INSUFFICIENT_EVIDENCE_MESSAGE and not _valid_citations(answer, context["evidence"]):
             answer = INSUFFICIENT_EVIDENCE_MESSAGE

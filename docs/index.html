@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MediTech RAG Documentation</title>
+  <title>Oral Exam Trainer Documentation</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism.min.css">
   <style>
@@ -259,7 +259,7 @@
   <div class="layout">
     <aside>
       <div class="brand">
-        <h1>MediTech RAG</h1>
+        <h1>Oral Exam Trainer</h1>
         <p>Static project documentation</p>
       </div>
       <nav aria-label="Documentation sections">
@@ -280,13 +280,13 @@
     <main>
       <div class="hero">
         <span class="status">Open as docs/index.html</span>
-        <h2>MediTech RAG Documentation</h2>
+        <h2>Oral Exam Trainer Documentation</h2>
         <p>Documentation for the local Flask RAG learning assistant: application structure, runtime data, indexing, retrieval, evaluation, and operation notes.</p>
       </div>
 
       <section id="overview">
         <h2>Overview</h2>
-        <p>MediTech RAG is a local study assistant for German medical technology lecture PDFs. It lets an admin upload documents, build FAISS indexes, retrieve relevant chunks, and use a local LLM backend to answer questions, summarize content, and generate quizzes with source citations.</p>
+        <p>Oral Exam Trainer is a completely local, multi-subject study assistant for reviewed Markdown and PDF course material. It builds separate accepted-only indexes, generates evidence-bound questions, evaluates typed oral answers, and runs timed subject simulations with exact citations.</p>
         <div class="grid">
           <div class="card">
             <h3>Local First</h3>
@@ -300,6 +300,15 @@
             <h3>Experiment Friendly</h3>
             <p>Prepared index profiles, evaluation scripts, metrics, feedback, and optional Langtrace traces support retrieval quality comparisons.</p>
           </div>
+        </div>
+        <div class="card">
+          <h3>Multi-subject quality workflow</h3>
+          <p>Each subject owns a workspace under <code>data/subjects/&lt;slug&gt;/</code> with immutable raw input, preprocessing checkpoints, review reports, generated exam packs, and a physically separate FAISS index. Only accepted knowledge units can be embedded or cited.</p>
+          <p>The admin subject workspace supports recursive Markdown/PDF discovery, hash-based incremental processing, structured local-model cleanup, suspicious-content review, question and exam-pack approval, and task-specific Ollama or LM Studio configuration.</p>
+        </div>
+        <div class="card">
+          <h3>Timed oral exams</h3>
+          <p>Single-question, rapid-practice, subject-simulation, and multi-subject modes use server-side session deadlines. A multi-subject test creates one full-duration session per selected subject and a transition between them; retrieval and scoring never cross subject boundaries.</p>
         </div>
       </section>
 

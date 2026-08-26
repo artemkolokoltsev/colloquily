@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from services.factory import get_llm_client
 from services.training_repository import accepted_evidence_map, create_question, get_question
+from services.structured_json import parse_json_object
 
 
 class CorePoint(BaseModel):
@@ -68,9 +69,7 @@ class GroundedEvaluation(BaseModel):
 
 def _validate(model, payload: str | dict):
     if isinstance(payload, str):
-        if hasattr(model, "model_validate_json"):
-            return model.model_validate_json(payload)
-        return model.parse_raw(payload)
+        payload = parse_json_object(payload)
     if hasattr(model, "model_validate"):
         return model.model_validate(payload)
     return model.parse_obj(payload)

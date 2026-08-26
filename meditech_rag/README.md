@@ -26,6 +26,32 @@ data/subjects/<slug>/
 
 SQLite migrations preserve existing requests, sources, quizzes, and attempts under the automatically created `MediTech` subject. No legacy runtime files are deleted.
 
+## Training workflow
+
+- `/trainer` provides single-question, 30/60/90-second rapid practice, full subject simulations, and separate-session multi-subject exams.
+- `/progress/<subject-id>` shows score and response-time trends, missing core points, misconceptions, weak topics, mock history, and spaced-repetition priorities.
+- Generated questions, evaluations, follow-ups, and exam packs are rejected when evidence IDs do not resolve to accepted units in the active subject.
+- Manual knowledge edits and corrected evaluations are persisted as authoritative review/audit records.
+
+## Local model verification
+
+Model roles are configured separately per subject under **Subjects → Local models**. Ollama and LM Studio are supported for cleaning, topic extraction, question generation, evaluation, and examiner follow-ups. SentenceTransformer remains the default embedding backend.
+
+Run the disposable local-model smoke test with:
+
+```bash
+python3.11 scripts/smoke_oral_exam_trainer.py
+```
+
+It creates a temporary synthetic subject, validates an actual Ollama cleanup response, verifies raw-file immutability, and removes the temporary workspace.
+
+## Known limitations
+
+- Browser audio recording is optional and remains only in the active tab; automatic speech-to-text is intentionally not enabled because browser implementations may use non-local services.
+- Adaptive simulation follow-ups are selected from the reviewed subject question pool. The system does not risk an unvalidated dynamic question when no grounded follow-up is available.
+- The Python package directory keeps its historical `meditech_rag` name for migration compatibility; all user-facing active workflows are branded Oral Exam Trainer.
+- Legacy PDF summary and multiple-choice routes remain available for the migrated MediTech subject, while new subjects use the stricter accepted-evidence workflows.
+
 ## Dokumentation
 
 Die ausfuehrliche Projektdokumentation liegt als statische HTML-Dokumentation im Repository:

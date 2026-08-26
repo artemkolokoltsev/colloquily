@@ -1,6 +1,6 @@
-# MediTech RAG
+# Oral Exam Trainer
 
-MediTech RAG is a local Flask application for studying German medical technology lecture PDFs with retrieval-augmented generation. It stores uploaded PDFs locally, builds FAISS indexes, retrieves source-backed context, and provides question answering, summaries, quizzes, admin analytics, evaluation tooling, and optional Langtrace observability.
+Oral Exam Trainer is a reusable, completely local Flask application for preparing evidence-grounded university oral exams. It supports subject-isolated Markdown/PDF ingestion, quality review, accepted-only FAISS indexes, grounded questions and evaluation, timed single- and multi-subject exams, and progress tracking.
 
 The main application lives in [`meditech_rag/`](meditech_rag/).
 
@@ -50,7 +50,7 @@ make langtrace-down
 |-- docs/                         Static browser documentation
 |-- docker/                       Langtrace database bootstrap files
 |-- Literature/                   Research PDFs and references
-|-- meditech_rag/                 Flask RAG application
+|-- meditech_rag/                 Oral Exam Trainer application (legacy folder name retained)
 |   |-- app.py                    Flask routes and UI workflow orchestration
 |   |-- config.py                 Runtime defaults, paths, model settings
 |   |-- configs/                  Prepared index profile definitions

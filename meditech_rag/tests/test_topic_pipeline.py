@@ -18,12 +18,19 @@ from services.topic_tagger import score_topics, topic_assignment
 
 class TopicPipelineTest(unittest.TestCase):
     def test_topic_assignment_detects_multiple_labels(self) -> None:
-        text = "MDR und CE-Kennzeichnung fuer Medizinprodukte sowie Klassifizierung in Klasse II."
-        scores = score_topics(text, title="Regulatorik und Risikoklasse")
-        topic_info = topic_assignment(scores)
-        self.assertIn("regulatorik", topic_info["topic_tags"])
-        self.assertIn("risikoklasse", topic_info["topic_tags"])
-        self.assertEqual(topic_info["main_topic"], topic_info["topic_tags"][0])
+        original = config.TOPIC_VOCAB
+        config.TOPIC_VOCAB = {
+            "behaviorism": {"aliases": ["behavior", "reinforcement"], "description": "", "parent_topic": None},
+            "learning_theory": {"aliases": ["learning theory"], "description": "", "parent_topic": None},
+        }
+        try:
+            scores = score_topics("Behaviorism is a learning theory based on reinforcement.", title="Learning theory")
+            topic_info = topic_assignment(scores)
+            self.assertIn("behaviorism", topic_info["topic_tags"])
+            self.assertIn("learning_theory", topic_info["topic_tags"])
+            self.assertEqual(topic_info["main_topic"], topic_info["topic_tags"][0])
+        finally:
+            config.TOPIC_VOCAB = original
 
     def test_chunk_metadata_and_structure_export(self) -> None:
         page = {

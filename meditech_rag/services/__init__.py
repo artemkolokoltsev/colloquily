@@ -1,2 +1,1 @@
-"""Service layer for the Medizintechnik RAG application."""
-
+"""Service layer for the subject-independent Oral Exam Trainer."""

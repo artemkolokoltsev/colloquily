@@ -1496,6 +1496,7 @@ th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border)
 .exam-question h2 { font-size: clamp(1.5rem, 4vw, 2.4rem); line-height: 1.25; }
 .transition-card { text-align: center; padding: 36px; }
 .evaluation-card .score-circle { margin: 0 0 20px; }
+.filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; align-items: end; }
 
 .flash {
   padding: 12px 14px;

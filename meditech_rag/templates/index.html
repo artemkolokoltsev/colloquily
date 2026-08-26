@@ -20,6 +20,7 @@
             <div class="account-menu-panel">
               <a class="account-menu-link" href="{{ url_for('profile') }}">Mein Profil</a>
               <a class="account-menu-link" href="{{ url_for('trainer') }}">Time-Pressure Trainer</a>
+              {% if active_subject %}<a class="account-menu-link" href="{{ url_for('progress_dashboard', subject_id=active_subject.id) }}">Subject progress</a>{% endif %}
               {% if user.is_admin %}
                 <a class="account-menu-link" href="{{ url_for('admin') }}">Dashboard</a>
                 <a class="account-menu-link" href="{{ url_for('admin_eval') }}">Evaluation</a>
@@ -191,7 +192,7 @@
         <div id="tab-quiz" class="tab-panel">
           <h2>Quiz-Generator</h2>
           <form action="{{ url_for('quiz') }}" method="post" class="stacked async-form">
-            <textarea name="topic" rows="4" placeholder="Beispiel: Erzeuge Fragen zu Biokompatibilitaet und Medizinprodukte-Klassifizierung."></textarea>
+            <textarea name="topic" rows="4" placeholder="Describe the topic and desired difficulty for the active subject."></textarea>
             <input type="number" name="n_questions" min="1" max="10" value="5">
             <button type="submit">Quiz generieren</button>
           </form>

@@ -14,6 +14,7 @@ import config
 from services.database import get_subject
 from services.knowledge_repository import (
     checkpoint,
+    document_quality_report,
     finalize_document,
     insert_knowledge_units,
     prepare_document_units,
@@ -22,6 +23,7 @@ from services.knowledge_repository import (
 )
 from services.pdf_loader import parse_pdf
 from services.subject_workspace import content_sha256, workspace_for
+from services.structured_json import parse_json_object
 
 
 ReviewStatus = Literal["accepted", "needs_review", "quarantined", "rejected"]
@@ -54,9 +56,7 @@ FORMULA_PATTERN = re.compile(r"[=∑√]|\b(?:sqrt|sin|cos|log)\s*\(", re.I)
 
 def _validate_batch(payload: str | dict) -> CleanupBatch:
     if isinstance(payload, str):
-        if hasattr(CleanupBatch, "model_validate_json"):
-            return CleanupBatch.model_validate_json(payload)
-        return CleanupBatch.parse_raw(payload)
+        payload = parse_json_object(payload)
     if hasattr(CleanupBatch, "model_validate"):
         return CleanupBatch.model_validate(payload)
     return CleanupBatch.parse_obj(payload)
@@ -188,10 +188,11 @@ def deterministic_cleanup(unit: dict) -> dict:
         status = "needs_review"
     else:
         status = "accepted"
+    detected_topic = re.sub(r"^#{1,6}\s+", "", text).strip() if heading else None
     result = {
         "cleaned_content": text,
         "content_type": content_type,
-        "detected_topic": None,
+        "detected_topic": detected_topic,
         "is_complete": complete,
         "is_meaningful": meaningful,
         "contains_academic_information": academic,
@@ -250,6 +251,8 @@ def process_subject(
     force: bool = False,
     cleanup_generate: Callable[[str], str] | None = None,
     local_model: str | None = None,
+    relative_path: str | None = None,
+    retry_failed: bool = False,
 ) -> dict:
     subject = get_subject(subject_id)
     if not subject:
@@ -257,9 +260,14 @@ def process_subject(
     workspace = workspace_for(subject)
     summary = {"subject_id": subject_id, "discovered": 0, "processed": 0, "skipped": 0, "failed": []}
     for source in workspace.discover_sources():
+        if relative_path and source["relative_path"] != relative_path:
+            continue
         summary["discovered"] += 1
         document, changed = upsert_document(subject_id, source)
         existing_checkpoint = checkpoint(document["id"], source["source_hash"], "cleaned_candidate")
+        if retry_failed and existing_checkpoint and not existing_checkpoint["failed_batches"]:
+            summary["skipped"] += 1
+            continue
         if not force and not changed and document["processing_status"] == "accepted" and existing_checkpoint:
             summary["skipped"] += 1
             continue
@@ -296,7 +304,8 @@ def process_subject(
                         prompt_version=config.CLEANING_PROMPT_VERSION, output_path=str(output_path),
                     )
                     workspace.atomic_json(output_path, {"document": source["relative_path"], "units": all_output})
-            report = finalize_document(document["id"])
+            finalize_document(document["id"])
+            report = document_quality_report(document["id"])
             workspace.atomic_json(workspace.folder("reports") / f"document-{document['id']}.json", report)
             summary["processed"] += 1
         except Exception as exc:

@@ -24,7 +24,7 @@ def build_qa_prompt(question: str, contexts: list[dict], strict_rag: bool = True
         else "Bevorzuge die Quellen. Wenn etwas fehlt, kennzeichne die Unsicherheit deutlich."
     )
     return (
-        "Du bist ein lokaler Lernassistent fuer Medizintechnik. Antworte auf Deutsch, praezise und lernorientiert.\n"
+        "Du bist ein lokaler Lernassistent fuer ein Universitaetsfach. Antworte praezise und lernorientiert.\n"
         f"{strict_line}\n"
         "Setze direkte Quellenhinweise unmittelbar nach den relevanten Aussagen in der Form [Q1], [Q2] oder [Q1][Q2].\n"
         "Nutze nur die angegebenen Quellen-IDs. Wenn eine Aussage nicht belegt ist, sage das klar.\n\n"
@@ -80,7 +80,7 @@ def build_quiz_prompt(topic_or_instruction: str, contexts: list[dict], n_questio
         context_blocks.append(f"[{label}]\n{_trim(item['text'], 900)}")
     joined = "\n\n".join(context_blocks) if context_blocks else "Keine Quellen verfuegbar."
     return (
-        "Erstelle deutsche klausurartige Uebungsfragen fuer Medizintechnik.\n"
+        "Erstelle klausurartige Uebungsfragen fuer das durch die Quellen definierte Universitaetsfach.\n"
         f"Erzeuge genau {n_questions} Fragen. Mische kurze Freitextfragen und Multiple-Choice, wenn passend.\n"
         "Gib zu jeder Frage eine kurze Musterloesung oder Loesungsschluessel an und nenne passende Quellen.\n"
         f"Thema oder Anweisung: {topic_or_instruction}\n\n"
@@ -97,7 +97,7 @@ def build_quiz_json_prompt(topic_or_instruction: str, contexts: list[dict], n_qu
         context_blocks.append(f"[{label}]\n{_trim(item['text'], 700)}")
     joined = "\n\n".join(context_blocks) if context_blocks else "Keine Quellen verfuegbar."
     return (
-        "Erstelle Multiple-Choice-Lernfragen fuer Medizintechnik und antworte ausschliesslich als JSON.\n"
+        "Erstelle quellenbasierte Multiple-Choice-Lernfragen und antworte ausschliesslich als JSON.\n"
         f"Erzeuge genau {n_questions} Fragen.\n"
         "JSON-Format: "
         '[{"question":"...","options":["A","B","C","D"],"correct_answer":"...","explanation":"...","sources":["Q1","Q2"]}]\n'

@@ -11,14 +11,18 @@ import numpy as np
 
 import config
 from services.database import create_subject, get_subject, init_db
+from services.database import _connect
 from services.knowledge_repository import (
     accepted_units,
+    batch_accept_high_confidence,
     checkpoint,
+    document_quality_report,
     list_review_units,
     review_unit,
 )
 from services.quality_pipeline import deterministic_cleanup, process_subject
 from services.grounded_training import evaluate_grounded_answer, generate_grounded_questions
+from services.exam_packs import generate_exam_pack, list_exam_pack_sections, review_exam_pack_section
 from services.subject_index import SubjectIndex
 from services.subject_workspace import workspace_for
 from services.training_repository import list_questions, review_question
@@ -309,6 +313,54 @@ class SubjectQualityPipelineTest(unittest.TestCase):
                 subject["id"], question["id"], "answer", 30,
                 llm_client=FakeLLM(lambda _: json.dumps(invalid)),
             )
+
+    def test_exam_pack_requires_resolvable_evidence_and_review(self) -> None:
+        subject, evidence_id = self._accepted_subject()
+        response = {
+            "sections": [
+                {
+                    "concept": "Reinforcement",
+                    "definition": {"text": "Reinforcement shapes behavior.", "evidence_ids": [evidence_id]},
+                    "core_idea": {"text": "Consequences influence observable responses.", "evidence_ids": [evidence_id]},
+                    "components_or_process": [], "main_distinctions": [],
+                    "subject_relevance": {"text": "It explains a learning mechanism.", "evidence_ids": [evidence_id]},
+                    "simple_example": {"text": "A rewarded response is repeated.", "evidence_ids": [evidence_id]},
+                    "oral_answer": f"Reinforcement links consequences with observable behavior [E{evidence_id}].",
+                    "follow_up_questions": [{"question": "How do consequences matter?", "evidence_ids": [evidence_id]}],
+                    "must_know": [{"text": "Behavior and consequence are linked.", "evidence_ids": [evidence_id]}],
+                    "useful_detail": [], "low_priority": [],
+                }
+            ]
+        }
+        generated = generate_exam_pack(subject, FakeLLM(lambda _: json.dumps(response)))
+        self.assertEqual(generated[0]["quality_status"], "needs_review")
+        stored = list_exam_pack_sections(subject["id"])
+        review_exam_pack_section(stored[0]["id"], "accepted")
+        self.assertEqual(list_exam_pack_sections(subject["id"])[0]["quality_status"], "accepted")
+        response["sections"][0]["oral_answer"] = "Unsupported oral answer [E999999]."
+        with self.assertRaises(ValueError):
+            generate_exam_pack(subject, FakeLLM(lambda _: json.dumps(response)))
+
+    def test_batch_approval_enforces_confidence_and_quality_report_traceability(self) -> None:
+        subject, _ = self._accepted_subject()
+        unit = list_review_units(subject["id"])[0]
+        with _connect() as connection:
+            connection.execute(
+                "UPDATE knowledge_units SET review_status = 'needs_review', confidence = 0.95 WHERE id = ?",
+                (unit["id"],),
+            )
+            connection.commit()
+        self.assertEqual(batch_accept_high_confidence(subject["id"], [unit["id"]]), 1)
+        report = document_quality_report(unit["document_id"])
+        self.assertEqual(report["units"][0]["source_location"], "lines 1-1")
+        with _connect() as connection:
+            connection.execute(
+                "UPDATE knowledge_units SET review_status = 'needs_review', confidence = 0.5 WHERE id = ?",
+                (unit["id"],),
+            )
+            connection.commit()
+        with self.assertRaises(ValueError):
+            batch_accept_high_confidence(subject["id"], [unit["id"]])
 
 
 if __name__ == "__main__":
