@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import re
 from contextlib import closing
 from datetime import datetime
 
@@ -12,11 +13,13 @@ import config
 
 
 LOGGER = logging.getLogger(__name__)
+LEGACY_SUBJECT_ID = 1
 
 
 def _connect() -> sqlite3.Connection:
     connection = sqlite3.connect(config.DB_PATH, timeout=10)
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
     return connection
 
 
@@ -105,11 +108,324 @@ def init_db() -> None:
                 FOREIGN KEY(session_id) REFERENCES quiz_sessions(id),
                 FOREIGN KEY(question_id) REFERENCES quiz_questions(id)
             );
+
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS subjects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                slug TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                language TEXT NOT NULL DEFAULT 'de',
+                exam_duration_minutes INTEGER NOT NULL DEFAULT 15,
+                local_llm_config_json TEXT NOT NULL DEFAULT '{}',
+                embedding_config_json TEXT NOT NULL DEFAULT '{}',
+                active_index_profile TEXT NOT NULL DEFAULT 'default',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                relative_path TEXT NOT NULL,
+                source_type TEXT NOT NULL CHECK(source_type IN ('markdown', 'pdf')),
+                source_hash TEXT NOT NULL,
+                processing_status TEXT NOT NULL DEFAULT 'raw',
+                quality_status TEXT NOT NULL DEFAULT 'needs_review',
+                enabled_for_training INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(subject_id, relative_path),
+                FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS topics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject_id INTEGER NOT NULL,
+                parent_topic_id INTEGER,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                priority INTEGER NOT NULL DEFAULT 0,
+                evidence_count INTEGER NOT NULL DEFAULT 0,
+                review_status TEXT NOT NULL DEFAULT 'needs_review',
+                UNIQUE(subject_id, name),
+                FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE,
+                FOREIGN KEY(parent_topic_id) REFERENCES topics(id) ON DELETE SET NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS knowledge_units (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject_id INTEGER NOT NULL,
+                document_id INTEGER NOT NULL,
+                topic_id INTEGER,
+                raw_content TEXT NOT NULL,
+                content TEXT NOT NULL,
+                content_type TEXT NOT NULL DEFAULT 'paragraph',
+                source_location TEXT NOT NULL,
+                source_start INTEGER,
+                source_end INTEGER,
+                source_hash TEXT NOT NULL,
+                quality_score REAL NOT NULL DEFAULT 0,
+                confidence REAL NOT NULL DEFAULT 0,
+                quality_problems_json TEXT NOT NULL DEFAULT '[]',
+                source_support TEXT NOT NULL DEFAULT '',
+                review_status TEXT NOT NULL DEFAULT 'needs_review',
+                enabled_for_retrieval INTEGER NOT NULL DEFAULT 0,
+                manually_authoritative INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(document_id, source_location, source_hash),
+                FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE,
+                FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE,
+                FOREIGN KEY(topic_id) REFERENCES topics(id) ON DELETE SET NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS processing_checkpoints (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject_id INTEGER NOT NULL,
+                document_id INTEGER NOT NULL,
+                source_hash TEXT NOT NULL,
+                stage TEXT NOT NULL,
+                total_batches INTEGER NOT NULL DEFAULT 0,
+                completed_batches_json TEXT NOT NULL DEFAULT '[]',
+                failed_batches_json TEXT NOT NULL DEFAULT '[]',
+                local_model TEXT,
+                prompt_version TEXT NOT NULL,
+                output_path TEXT,
+                started_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(document_id, source_hash, stage),
+                FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE,
+                FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS questions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject_id INTEGER NOT NULL,
+                topic_id INTEGER,
+                question_type TEXT NOT NULL,
+                question_text TEXT NOT NULL,
+                difficulty TEXT NOT NULL DEFAULT 'medium',
+                expected_duration_seconds INTEGER NOT NULL DEFAULT 60,
+                expected_core_points_json TEXT NOT NULL DEFAULT '[]',
+                optional_details_json TEXT NOT NULL DEFAULT '[]',
+                evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+                quality_score REAL NOT NULL DEFAULT 0,
+                review_status TEXT NOT NULL DEFAULT 'needs_review',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE,
+                FOREIGN KEY(topic_id) REFERENCES topics(id) ON DELETE SET NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS exam_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                subject_id INTEGER NOT NULL,
+                parent_session_id INTEGER,
+                mode TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'created',
+                duration_seconds INTEGER NOT NULL,
+                started_at TEXT,
+                ended_at TEXT,
+                evaluation_json TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id),
+                FOREIGN KEY(subject_id) REFERENCES subjects(id),
+                FOREIGN KEY(parent_session_id) REFERENCES exam_sessions(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS attempts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                subject_id INTEGER NOT NULL,
+                exam_session_id INTEGER,
+                question_id INTEGER NOT NULL,
+                parent_attempt_id INTEGER,
+                answer_text TEXT NOT NULL DEFAULT '',
+                duration_seconds INTEGER NOT NULL DEFAULT 0,
+                evaluation_json TEXT,
+                evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+                scores_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id),
+                FOREIGN KEY(subject_id) REFERENCES subjects(id),
+                FOREIGN KEY(exam_session_id) REFERENCES exam_sessions(id),
+                FOREIGN KEY(question_id) REFERENCES questions(id),
+                FOREIGN KEY(parent_attempt_id) REFERENCES attempts(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS review_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                knowledge_unit_id INTEGER NOT NULL,
+                user_id INTEGER,
+                previous_status TEXT NOT NULL,
+                new_status TEXT NOT NULL,
+                previous_content TEXT NOT NULL,
+                new_content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(knowledge_unit_id) REFERENCES knowledge_units(id) ON DELETE CASCADE,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            );
             """
         )
+        _migrate_subject_scope(connection)
         connection.commit()
     seed_admin_user()
     LOGGER.info("SQLite database initialized", extra={"db_path": config.DB_PATH})
+
+
+def _column_names(connection: sqlite3.Connection, table: str) -> set[str]:
+    return {row[1] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _add_subject_column(connection: sqlite3.Connection, table: str) -> None:
+    if "subject_id" not in _column_names(connection, table):
+        # SQLite cannot add a REFERENCES column with a non-null default while
+        # foreign-key enforcement is enabled. The value is still mandatory and
+        # all new domain tables use proper FK constraints.
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN subject_id INTEGER NOT NULL DEFAULT {LEGACY_SUBJECT_ID}")
+
+
+def _migrate_subject_scope(connection: sqlite3.Connection) -> None:
+    """Idempotently scopes legacy activity to a preserved MediTech subject."""
+    now = datetime.now().isoformat(timespec="seconds")
+    connection.execute(
+        """
+        INSERT OR IGNORE INTO subjects (
+            id, slug, name, description, language, exam_duration_minutes,
+            local_llm_config_json, embedding_config_json, active_index_profile,
+            created_at, updated_at
+        ) VALUES (?, 'meditech', 'MediTech', 'Imported legacy MediTech course', 'de', 15, '{}', '{}', 'legacy', ?, ?)
+        """,
+        (LEGACY_SUBJECT_ID, now, now),
+    )
+    for table in ("requests", "request_sources", "quiz_sessions", "quiz_questions", "quiz_attempts"):
+        _add_subject_column(connection, table)
+    connection.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (1, ?)",
+        (now,),
+    )
+
+
+def _subject_slug(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-")
+    if not slug:
+        raise ValueError("Subject slug must contain at least one letter or number")
+    return slug
+
+
+def _decode_subject(row: sqlite3.Row | None) -> dict | None:
+    if row is None:
+        return None
+    item = dict(row)
+    item["local_llm_config"] = json.loads(item.pop("local_llm_config_json") or "{}")
+    item["embedding_config"] = json.loads(item.pop("embedding_config_json") or "{}")
+    return item
+
+
+def list_subjects() -> list[dict]:
+    with closing(_connect()) as connection:
+        rows = connection.execute("SELECT * FROM subjects ORDER BY name COLLATE NOCASE").fetchall()
+        return [_decode_subject(row) for row in rows]
+
+
+def get_subject(subject_id: int) -> dict | None:
+    with closing(_connect()) as connection:
+        return _decode_subject(connection.execute("SELECT * FROM subjects WHERE id = ?", (subject_id,)).fetchone())
+
+
+def get_subject_by_slug(slug: str) -> dict | None:
+    with closing(_connect()) as connection:
+        return _decode_subject(
+            connection.execute("SELECT * FROM subjects WHERE slug = ?", (_subject_slug(slug),)).fetchone()
+        )
+
+
+def create_subject(
+    name: str,
+    *,
+    slug: str | None = None,
+    description: str = "",
+    language: str = "de",
+    exam_duration_minutes: int = 15,
+    local_llm_config: dict | None = None,
+    embedding_config: dict | None = None,
+    active_index_profile: str = "default",
+) -> dict:
+    now = datetime.now().isoformat(timespec="seconds")
+    normalized_slug = _subject_slug(slug or name)
+    with closing(_connect()) as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO subjects (
+                slug, name, description, language, exam_duration_minutes,
+                local_llm_config_json, embedding_config_json, active_index_profile,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                normalized_slug,
+                name.strip(),
+                description.strip(),
+                language.strip() or "de",
+                max(1, int(exam_duration_minutes)),
+                json.dumps(local_llm_config or {}, ensure_ascii=False),
+                json.dumps(embedding_config or {}, ensure_ascii=False),
+                active_index_profile.strip() or "default",
+                now,
+                now,
+            ),
+        )
+        connection.commit()
+        subject_id = int(cursor.lastrowid)
+    return get_subject(subject_id)
+
+
+def update_subject(subject_id: int, values: dict) -> dict:
+    current = get_subject(subject_id)
+    if not current:
+        raise ValueError("Subject not found")
+    payload = {
+        # The slug is the durable workspace key. Renaming it would orphan raw
+        # material and indexes, so it remains immutable after creation.
+        "slug": current["slug"],
+        "name": str(values.get("name", current["name"])).strip(),
+        "description": str(values.get("description", current["description"])).strip(),
+        "language": str(values.get("language", current["language"])).strip() or "de",
+        "exam_duration_minutes": max(1, int(values.get("exam_duration_minutes", current["exam_duration_minutes"]))),
+        "local_llm_config": values.get("local_llm_config", current["local_llm_config"]),
+        "embedding_config": values.get("embedding_config", current["embedding_config"]),
+        "active_index_profile": str(values.get("active_index_profile", current["active_index_profile"])).strip() or "default",
+    }
+    with closing(_connect()) as connection:
+        connection.execute(
+            """
+            UPDATE subjects SET slug = ?, name = ?, description = ?, language = ?,
+                exam_duration_minutes = ?, local_llm_config_json = ?, embedding_config_json = ?,
+                active_index_profile = ?, updated_at = ? WHERE id = ?
+            """,
+            (
+                payload["slug"], payload["name"], payload["description"], payload["language"],
+                payload["exam_duration_minutes"], json.dumps(payload["local_llm_config"], ensure_ascii=False),
+                json.dumps(payload["embedding_config"], ensure_ascii=False), payload["active_index_profile"],
+                datetime.now().isoformat(timespec="seconds"), subject_id,
+            ),
+        )
+        connection.commit()
+    return get_subject(subject_id)
+
+
+def delete_subject(subject_id: int) -> bool:
+    with closing(_connect()) as connection:
+        cursor = connection.execute("DELETE FROM subjects WHERE id = ?", (subject_id,))
+        connection.commit()
+        return cursor.rowcount > 0
 
 
 def seed_admin_user() -> None:
@@ -165,14 +481,14 @@ def authenticate_user(username: str, password: str) -> dict | None:
     return user
 
 
-def store_request(user_id: int, request_entry: dict) -> None:
+def store_request(user_id: int, request_entry: dict, subject_id: int = LEGACY_SUBJECT_ID) -> None:
     with closing(_connect()) as connection:
         connection.execute(
             """
             INSERT OR REPLACE INTO requests (
                 request_uuid, user_id, request_type, input_text, output_text, duration_ms,
-                llm_backend, llm_model, embed_backend, embed_model, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                llm_backend, llm_model, embed_backend, embed_model, created_at, subject_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 request_entry["request_id"],
@@ -186,6 +502,7 @@ def store_request(user_id: int, request_entry: dict) -> None:
                 request_entry.get("embed_backend"),
                 request_entry.get("embed_model"),
                 request_entry.get("timestamp"),
+                subject_id,
             ),
         )
         connection.execute("DELETE FROM request_sources WHERE request_uuid = ?", (request_entry["request_id"],))
@@ -193,8 +510,8 @@ def store_request(user_id: int, request_entry: dict) -> None:
             connection.execute(
                 """
                 INSERT INTO request_sources (
-                    request_uuid, citation_id, doc_name, page_number, chunk_type, source_type, score, preview
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    request_uuid, citation_id, doc_name, page_number, chunk_type, source_type, score, preview, subject_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     request_entry["request_id"],
@@ -205,6 +522,7 @@ def store_request(user_id: int, request_entry: dict) -> None:
                     source.get("source_type"),
                     source.get("score"),
                     source.get("preview"),
+                    subject_id,
                 ),
             )
         connection.commit()

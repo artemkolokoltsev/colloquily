@@ -3,16 +3,16 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>MediTech RAG Lernhilfe</title>
+    <title>Oral Exam Trainer</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   </head>
   <body>
     <main class="page">
       <header class="hero">
         <div>
-          <p class="eyebrow">Lokaler RAG-Assistent</p>
-          <h1>MediTech RAG Lernhilfe</h1>
-          <p>PDF-basierte Klausurvorbereitung fuer deutsche Medizintechnik-Vorlesungen.</p>
+          <p class="eyebrow">Completely local exam preparation</p>
+          <h1>Oral Exam Trainer</h1>
+          <p>Evidence-grounded oral-exam practice for multiple university subjects.</p>
         </div>
         <div class="hero-actions">
           <details class="account-menu">
@@ -23,6 +23,7 @@
                 <a class="account-menu-link" href="{{ url_for('admin') }}">Dashboard</a>
                 <a class="account-menu-link" href="{{ url_for('admin_eval') }}">Evaluation</a>
                 <a class="account-menu-link" href="{{ url_for('admin_settings') }}">Systemeinstellungen</a>
+                <a class="account-menu-link" href="{{ url_for('admin_subjects') }}">Subjects &amp; Review</a>
                 <a class="account-menu-link" href="{{ url_for('admin_users') }}">Benutzerverwaltung</a>
               {% endif %}
               <form action="{{ url_for('logout') }}" method="post">
@@ -30,7 +31,7 @@
               </form>
             </div>
           </details>
-          <p class="disclaimer">Kein medizinischer Rat, nur Lernhilfe.</p>
+          <p class="disclaimer">Local models only. External knowledge is off by default.</p>
         </div>
       </header>
 
@@ -43,6 +44,21 @@
           </section>
         {% endif %}
       {% endwith %}
+
+      <section class="card subject-switcher">
+        <form action="{{ url_for('select_subject') }}" method="post" class="inline-fields">
+          <input type="hidden" name="next_page" value="{{ url_for('index') }}">
+          <label>Active subject
+            <select name="subject_id">
+              {% for subject in subjects %}
+                <option value="{{ subject.id }}" {% if active_subject and active_subject.id == subject.id %}selected{% endif %}>{{ subject.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button type="submit">Select subject</button>
+        </form>
+        {% if active_subject %}<p class="section-copy">{{ active_subject.description or 'No description yet.' }} · {{ active_subject.exam_duration_minutes }} minute exam · {{ active_subject.language }}</p>{% endif %}
+      </section>
 
       <section class="card">
         <div class="section-head">
@@ -68,7 +84,7 @@
         <div id="tab-chat" class="tab-panel active">
           <h2>Chat / Frage stellen</h2>
           <form action="{{ url_for('ask') }}" method="post" class="stacked async-form">
-            <textarea name="question" rows="4" placeholder="Beispiel: Erklaere den Unterschied zwischen diagnostischen und therapeutischen Medizinprodukten."></textarea>
+            <textarea name="question" rows="4" placeholder="Ask an evidence-grounded question about the active subject."></textarea>
             <button type="submit">Frage beantworten</button>
           </form>
           {% if answer %}
@@ -109,7 +125,7 @@
                       data-chunk="{{ source.chunk_type }}"
                       data-source-type="{{ source.source_type }}"
                       data-preview="{{ source.preview }}"
-                      data-pdf-url="{{ url_for('serve_pdf', filename=source.doc_name) }}"
+                      data-pdf-url="{{ source.source_url or url_for('serve_pdf', filename=source.doc_name) }}"
                     >
                       <strong>{{ source.citation_id or 'Quelle' }}</strong> - {{ source.doc_name }} - Seite {{ source.page_number }} - chunk_type={{ source.chunk_type }} - source_type={{ source.source_type }}{% if source.score is defined %} - score={{ '%.3f'|format(source.score) }}{% endif %}
                     </button>

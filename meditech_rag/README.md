@@ -1,6 +1,30 @@
-# MediTech RAG Lernhilfe
+# Oral Exam Trainer
 
-Lokale RAG-Anwendung fuer die Klausurvorbereitung mit deutschen Medizintechnik-PDFs. Die App verarbeitet Vorlesungsunterlagen lokal, speichert PDFs und FAISS-Indizes auf der Festplatte und bietet Fragenbeantwortung, Zusammenfassungen, Quizgenerierung, Evaluation und Quellenangaben.
+Reusable, completely local oral-exam preparation based on reviewed university course material. The original MediTech workflows remain available during migration, while new material is isolated into subject-specific workspaces and accepted-only FAISS indexes.
+
+## Subject workflow
+
+1. Create a subject under `/admin/subjects`.
+2. Place nested Markdown or PDF material under `data/subjects/<slug>/raw/`, or use the non-overwriting upload form.
+3. Run deterministic processing and optionally structured cleanup through the configured local LLM.
+4. Review suspicious units and manually accept, quarantine, reject, or correct them.
+5. Build the subject index. Only accepted, retrieval-enabled knowledge units are embedded.
+
+The processor hashes every source, skips unchanged files, checkpoints every batch, and resumes interrupted work. Files under `raw/` are never rewritten. Manually accepted edits remain authoritative during later processing.
+
+```text
+data/subjects/<slug>/
+├── raw/
+├── preprocessing/
+├── cleaned/
+├── quarantined/
+├── accepted/
+├── reports/
+├── exam_packs/
+└── index/
+```
+
+SQLite migrations preserve existing requests, sources, quizzes, and attempts under the automatically created `MediTech` subject. No legacy runtime files are deleted.
 
 ## Dokumentation
 

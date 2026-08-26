@@ -55,10 +55,16 @@ class TopicPipelineTest(unittest.TestCase):
         self.assertIn("topic::signalverarbeitung", {node["id"] for node in structure["nodes"]})
 
     def test_pymupdf_parser_extracts_blocks(self) -> None:
-        sample_pdf = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "pdfs", "test.pdf"))
-        if not os.path.exists(sample_pdf):
-            sample_pdf = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test.pdf"))
-        parsed = parse_pdf(sample_pdf)
+        import fitz
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_pdf = os.path.join(tmpdir, "test.pdf")
+            document = fitz.open()
+            page = document.new_page()
+            page.insert_text((72, 72), "Synthetic academic source for parser verification.")
+            document.save(sample_pdf)
+            document.close()
+            parsed = parse_pdf(sample_pdf)
         self.assertEqual(parsed["parser_used"], "pymupdf")
         self.assertGreaterEqual(parsed["page_count"], 1)
         self.assertIn("pages", parsed)

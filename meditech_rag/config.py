@@ -49,6 +49,7 @@ _bootstrap_env()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
+SUBJECTS_DIR = os.path.join(DATA_DIR, "subjects")
 PDF_FOLDER = os.path.join(DATA_DIR, "pdfs")
 INDEX_DIR = os.path.join(DATA_DIR, "index")
 PREPARED_INDEXES_DIR = os.path.join(DATA_DIR, "indexes")
@@ -62,6 +63,7 @@ INDEX_PROFILES_PATH = os.path.join(CONFIG_DIR, "index_profiles.json")
 
 for path in [
     DATA_DIR,
+    SUBJECTS_DIR,
     PDF_FOLDER,
     INDEX_DIR,
     PREPARED_INDEXES_DIR,
@@ -99,6 +101,12 @@ MARKER_MAX_PAGES = 0
 
 TOP_K = 3
 STRICT_RAG = True
+MIN_RETRIEVAL_SIMILARITY = 0.28
+EXTERNAL_KNOWLEDGE_ENABLED = False
+KNOWLEDGE_AUTO_ACCEPT_CONFIDENCE = 0.9
+KNOWLEDGE_QUARANTINE_CONFIDENCE = 0.45
+CLEANING_BATCH_SIZE = 8
+CLEANING_PROMPT_VERSION = "quality-cleanup-v1"
 
 
 EMBED_BACKEND = "st"  # st | lmstudio

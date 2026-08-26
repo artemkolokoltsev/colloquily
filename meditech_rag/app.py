@@ -3,12 +3,14 @@ from __future__ import annotations
 import logging
 import os
 import re
+from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 from functools import lru_cache
 from functools import wraps
 
 from flask import Flask, flash, g, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 from markupsafe import Markup, escape
+from werkzeug.utils import secure_filename
 
 import config
 from services.langtrace_service import init_langtrace, reset_langtrace, span_identity, trace_workflow
@@ -22,15 +24,20 @@ from services.database import (
     build_admin_analytics,
     build_user_analytics,
     create_quiz_session,
+    create_subject,
     create_user,
+    delete_subject,
+    get_subject,
     get_quiz_session,
     get_user_by_id,
     init_db,
+    list_subjects,
     list_users,
     request_exists,
     save_quiz_evaluation,
     store_feedback,
     store_request,
+    update_subject,
 )
 from services.pdf_loader import save_uploaded_file
 from services.eval_metrics import (
@@ -48,6 +55,12 @@ from services.langtrace_eval import attach_eval_attributes, get_langtrace_status
 from services.persistence import get_request_log, load_request_history, update_request_langtrace_ids
 from services.preprocessing_cache import cache_stats
 from services.rag_engine import RAGEngine
+from services.factory import get_llm_client
+from services.knowledge_repository import list_documents as list_subject_documents, list_review_units, review_unit
+from services.quality_pipeline import process_subject
+from services.subject_index import SubjectIndex
+from services.subject_rag import answer_subject_question
+from services.subject_workspace import workspace_for
 from services.runtime_settings import build_settings_sections, initialize_runtime_settings, load_runtime_settings, save_runtime_settings_from_form
 
 
@@ -143,6 +156,12 @@ def admin_required(view_func):
 def load_current_user():
     user_id = session.get("user_id")
     g.user = get_user_by_id(user_id) if user_id else None
+    g.subjects = list_subjects() if g.user else []
+    selected_id = session.get("active_subject_id")
+    g.active_subject = next((item for item in g.subjects if item["id"] == selected_id), None)
+    if g.user and g.active_subject is None and g.subjects:
+        g.active_subject = g.subjects[0]
+        session["active_subject_id"] = g.active_subject["id"]
 
 
 def _render_index(**kwargs):
@@ -155,6 +174,8 @@ def _render_index(**kwargs):
         user=g.user,
         user_analytics=build_user_analytics(g.user["id"]) if g.user else {"recent_requests": [], "quizzes": []},
         debug_info=engine.get_analysis_debug(),
+        subjects=g.subjects,
+        active_subject=g.active_subject,
         **kwargs,
     )
 
@@ -192,7 +213,7 @@ def _render_answer_with_citations(answer: str | None, sources: list[dict]) -> Ma
     citation_map = {source.get("citation_id"): source for source in sources if source.get("citation_id")}
     parts: list[str] = []
     position = 0
-    for match in re.finditer(r"\[(Q\d+)\]", answer):
+    for match in re.finditer(r"\[((?:Q|E)\d+)\]", answer):
         parts.append(escape(answer[position:match.start()]))
         citation_id = match.group(1)
         source = citation_map.get(citation_id)
@@ -205,7 +226,7 @@ def _render_answer_with_citations(answer: str | None, sources: list[dict]) -> Ma
                 f'data-chunk="{escape(source.get("chunk_type", "-"))}" '
                 f'data-source-type="{escape(source.get("source_type", "-"))}" '
                 f'data-preview="{escape(source.get("preview", ""))}" '
-                f'data-pdf-url="{escape(url_for("serve_pdf", filename=source.get("doc_name", "")))}">[{escape(citation_id)}]</button>'
+                f'data-pdf-url="{escape(source.get("source_url") or url_for("serve_pdf", filename=source.get("doc_name", "")))}">[{escape(citation_id)}]</button>'
             )
         position = match.end()
     parts.append(escape(answer[position:]))
@@ -405,6 +426,173 @@ def admin_documents():
     return _render_documents()
 
 
+@app.get("/admin/subjects")
+@admin_required
+def admin_subjects():
+    selected_id = request.args.get("subject_id", type=int) or (g.active_subject or {}).get("id")
+    selected = get_subject(selected_id) if selected_id else None
+    return render_template(
+        "subjects.html",
+        user=g.user,
+        subjects=list_subjects(),
+        active_subject=g.active_subject,
+        selected_subject=selected,
+        documents=list_subject_documents(selected["id"]) if selected else [],
+    )
+
+
+@app.post("/subjects/select")
+@login_required
+def select_subject():
+    subject_id = request.form.get("subject_id", type=int)
+    if not subject_id or not get_subject(subject_id):
+        flash("Subject not found.", "error")
+    else:
+        session["active_subject_id"] = subject_id
+        flash("Active subject changed.", "success")
+    return redirect(request.form.get("next_page") or url_for("index"))
+
+
+@app.post("/admin/subjects/create")
+@admin_required
+def create_subject_route():
+    try:
+        subject = create_subject(
+            request.form.get("name", ""),
+            slug=request.form.get("slug") or None,
+            description=request.form.get("description", ""),
+            language=request.form.get("language", "de"),
+            exam_duration_minutes=request.form.get("exam_duration_minutes", 15),
+        )
+        workspace_for(subject)
+        session["active_subject_id"] = subject["id"]
+        flash(f"Subject created: {subject['name']}", "success")
+        return redirect(url_for("admin_subjects", subject_id=subject["id"]))
+    except Exception as exc:
+        LOGGER.exception("Subject creation failed")
+        flash(f"Subject could not be created: {exc}", "error")
+        return redirect(url_for("admin_subjects"))
+
+
+@app.post("/admin/subjects/<int:subject_id>/edit")
+@admin_required
+def edit_subject_route(subject_id: int):
+    try:
+        update_subject(subject_id, request.form)
+        flash("Subject updated.", "success")
+    except Exception as exc:
+        flash(f"Subject could not be updated: {exc}", "error")
+    return redirect(url_for("admin_subjects", subject_id=subject_id))
+
+
+@app.post("/admin/subjects/<int:subject_id>/delete")
+@admin_required
+def delete_subject_route(subject_id: int):
+    subject = get_subject(subject_id)
+    if not subject:
+        flash("Subject not found.", "error")
+    elif len(list_subjects()) <= 1:
+        flash("The final subject cannot be deleted.", "error")
+    else:
+        delete_subject(subject_id)
+        if session.get("active_subject_id") == subject_id:
+            session.pop("active_subject_id", None)
+        flash("Subject record deleted. Its raw workspace was preserved on disk.", "success")
+    return redirect(url_for("admin_subjects"))
+
+
+@app.post("/admin/subjects/<int:subject_id>/upload")
+@admin_required
+def upload_subject_material(subject_id: int):
+    subject = get_subject(subject_id)
+    if not subject:
+        flash("Subject not found.", "error")
+        return redirect(url_for("admin_subjects"))
+    subfolder_parts = [secure_filename(part) for part in Path(request.form.get("subfolder", "")).parts if part not in {".", ".."}]
+    target_root = workspace_for(subject).folder("raw").joinpath(*filter(None, subfolder_parts))
+    target_root.mkdir(parents=True, exist_ok=True)
+    saved = 0
+    for uploaded in request.files.getlist("material_files"):
+        filename = secure_filename(uploaded.filename or "")
+        if not filename or Path(filename).suffix.lower() not in {".md", ".markdown", ".pdf"}:
+            continue
+        target = target_root / filename
+        if target.exists():
+            flash(f"Raw file already exists and was not overwritten: {filename}", "error")
+            continue
+        uploaded.save(target)
+        saved += 1
+    flash(f"Imported {saved} raw source file(s).", "success")
+    return redirect(url_for("admin_subjects", subject_id=subject_id))
+
+
+@app.post("/admin/subjects/<int:subject_id>/process")
+@admin_required
+def process_subject_route(subject_id: int):
+    try:
+        use_local_llm = request.form.get("use_local_llm") == "on"
+        client = get_llm_client() if use_local_llm else None
+        result = process_subject(
+            subject_id,
+            force=request.form.get("force") == "on",
+            cleanup_generate=client.generate if client else None,
+            local_model=getattr(client, "model_name", None),
+        )
+        flash(
+            f"Processing completed: {result['processed']} processed, {result['skipped']} unchanged, {len(result['failed'])} failed.",
+            "success" if not result["failed"] else "error",
+        )
+    except Exception as exc:
+        LOGGER.exception("Subject processing failed")
+        flash(f"Subject processing failed: {exc}", "error")
+    return redirect(url_for("admin_subjects", subject_id=subject_id))
+
+
+@app.post("/admin/subjects/<int:subject_id>/index")
+@admin_required
+def build_subject_index_route(subject_id: int):
+    try:
+        result = SubjectIndex(subject_id).build()
+        flash(f"Subject index built with {result['indexed_units']} accepted unit(s).", "success")
+    except Exception as exc:
+        LOGGER.exception("Subject index build failed")
+        flash(f"Subject index failed: {exc}", "error")
+    return redirect(url_for("admin_subjects", subject_id=subject_id))
+
+
+@app.get("/admin/subjects/<int:subject_id>/review")
+@admin_required
+def subject_review(subject_id: int):
+    subject = get_subject(subject_id)
+    if not subject:
+        return redirect(url_for("admin_subjects"))
+    suspicious = request.args.get("suspicious", "1") != "0"
+    return render_template(
+        "review.html", user=g.user, subject=subject,
+        units=list_review_units(subject_id, suspicious_only=suspicious), suspicious_only=suspicious,
+    )
+
+
+@app.post("/admin/subjects/<int:subject_id>/review/<int:unit_id>")
+@admin_required
+def review_subject_unit(subject_id: int, unit_id: int):
+    try:
+        review_unit(unit_id, request.form.get("status", "needs_review"), content=request.form.get("content"), user_id=g.user["id"])
+        flash("Review decision saved.", "success")
+    except Exception as exc:
+        flash(f"Review decision failed: {exc}", "error")
+    return redirect(url_for("subject_review", subject_id=subject_id))
+
+
+@app.get("/subjects/<int:subject_id>/raw/<path:filename>")
+@login_required
+def serve_subject_source(subject_id: int, filename: str):
+    subject = get_subject(subject_id)
+    if not subject:
+        return ("Not found", 404)
+    return send_from_directory(workspace_for(subject).folder("raw"), filename, as_attachment=False)
+
+
 @app.get("/admin/users")
 @admin_required
 def admin_users():
@@ -551,11 +739,30 @@ def delete_document_route():
 @app.post("/ask")
 @login_required
 def ask():
-    engine = get_engine()
     question = request.form.get("question", "").strip()
     if not question:
         flash("Bitte eine Frage eingeben.", "error")
         return redirect(url_for("index"))
+    if g.active_subject:
+        try:
+            result = answer_subject_question(g.active_subject["id"], question)
+            for source in result["contexts"]:
+                source["source_url"] = url_for(
+                    "serve_subject_source", subject_id=g.active_subject["id"], filename=source["relative_path"]
+                )
+            result["request_entry"]["sources"] = result["contexts"]
+            store_request(g.user["id"], result["request_entry"], subject_id=g.active_subject["id"])
+        except Exception as exc:
+            LOGGER.exception("Subject-scoped question failed")
+            flash(f"Subject retrieval failed: {exc}", "error")
+            return redirect(url_for("index"))
+        return _render_index(
+            answer=result["answer"],
+            answer_html=_render_answer_with_citations(result["answer"], result["contexts"]),
+            sources=result["contexts"], summary=None, quiz=None,
+            answer_request_id=result.get("request_id"), summary_request_id=None, quiz_request_id=None,
+        )
+    engine = get_engine()
     with trace_workflow(
         "app.ask",
         {
@@ -585,6 +792,9 @@ def ask():
 @app.post("/summarize")
 @login_required
 def summarize():
+    if g.active_subject and g.active_subject["id"] != 1:
+        flash("Subject-scoped summaries will be enabled after accepted exam packs are available.", "error")
+        return redirect(url_for("index"))
     engine = get_engine()
     doc_name = request.form.get("doc_name", "").strip()
     start_page = request.form.get("start_page", "").strip()
@@ -630,6 +840,9 @@ def summarize():
 @app.post("/quiz")
 @login_required
 def quiz():
+    if g.active_subject and g.active_subject["id"] != 1:
+        flash("Subject-scoped quizzes require a reviewed question pool and are not enabled yet.", "error")
+        return redirect(url_for("index"))
     engine = get_engine()
     topic = request.form.get("topic", "").strip()
     n_questions = request.form.get("n_questions", "5").strip()
@@ -796,10 +1009,9 @@ def feedback():
     if (history_saved or db_saved) and langtrace_expected and langtrace_saved:
         flash("Feedback gespeichert und an Langtrace uebermittelt.", "success")
     elif history_saved or db_saved:
+        flash("Feedback gespeichert.", "success")
         if langtrace_expected:
-            flash("Feedback lokal gespeichert, aber nicht an Langtrace uebermittelt.", "error")
-        else:
-            flash("Feedback gespeichert.", "success")
+            LOGGER.warning("Optional Langtrace feedback delivery failed", extra={"request_id": request_id})
     elif langtrace_saved:
         flash("Feedback gespeichert.", "success")
     else:
