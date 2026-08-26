@@ -58,6 +58,16 @@ from services.rag_engine import RAGEngine
 from services.factory import get_llm_client
 from services.knowledge_repository import list_documents as list_subject_documents, list_review_units, review_unit
 from services.grounded_training import generate_grounded_questions
+from services.grounded_training import evaluate_grounded_answer
+from services.exam_state import (
+    begin_answering,
+    create_exam_run,
+    expire_exam_session,
+    get_exam_run,
+    get_exam_session,
+    start_exam_session,
+    submit_exam_answer,
+)
 from services.quality_pipeline import process_subject
 from services.subject_index import SubjectIndex
 from services.subject_rag import answer_subject_question
@@ -631,6 +641,115 @@ def serve_subject_source(subject_id: int, filename: str):
     if not subject:
         return ("Not found", 404)
     return send_from_directory(workspace_for(subject).folder("raw"), filename, as_attachment=False)
+
+
+@app.get("/trainer")
+@login_required
+def trainer():
+    return render_template(
+        "trainer.html", user=g.user, subjects=g.subjects, active_subject=g.active_subject,
+        question_counts={subject["id"]: len(list_questions(subject["id"], accepted_only=True)) for subject in g.subjects},
+    )
+
+
+@app.post("/trainer/start")
+@login_required
+def start_trainer_run():
+    mode = request.form.get("mode", "single_question")
+    subject_ids = [int(item) for item in request.form.getlist("subject_ids") if item.isdigit()]
+    if mode != "multi_subject":
+        selected = request.form.get("subject_id", type=int) or (g.active_subject or {}).get("id")
+        subject_ids = [selected] if selected else []
+    try:
+        run = create_exam_run(
+            g.user["id"], subject_ids, mode=mode,
+            random_order=request.form.get("random_order") == "on",
+            preparation_seconds=request.form.get("preparation_seconds", type=int) or 0,
+            answer_seconds=request.form.get("answer_seconds", type=int) or 60,
+            countdown_visible=request.form.get("countdown_visible") == "on",
+        )
+        return redirect(url_for("trainer_session", session_id=run["sessions"][0]["id"]))
+    except Exception as exc:
+        flash(f"Trainer could not start: {exc}", "error")
+        return redirect(url_for("trainer"))
+
+
+def _render_trainer_session(session_id: int, evaluation: dict | None = None):
+    exam_session = expire_exam_session(session_id)
+    run = get_exam_run(exam_session["exam_run_id"])
+    subject = get_subject(exam_session["subject_id"])
+    return render_template(
+        "trainer_session.html", user=g.user, exam_session=exam_session,
+        exam_run=run, subject=subject, evaluation=evaluation,
+    )
+
+
+@app.get("/trainer/sessions/<int:session_id>")
+@login_required
+def trainer_session(session_id: int):
+    exam_session = get_exam_session(session_id)
+    if not exam_session or exam_session["user_id"] != g.user["id"]:
+        return ("Not found", 404)
+    if exam_session["status"] in {"completed", "time_expired"}:
+        return redirect(url_for("trainer_run", run_id=exam_session["exam_run_id"]))
+    return _render_trainer_session(session_id)
+
+
+@app.post("/trainer/sessions/<int:session_id>/begin")
+@login_required
+def begin_trainer_session(session_id: int):
+    exam_session = get_exam_session(session_id)
+    if not exam_session or exam_session["user_id"] != g.user["id"]:
+        return ("Not found", 404)
+    try:
+        if exam_session["status"] == "preparing":
+            begin_answering(session_id)
+        else:
+            start_exam_session(session_id)
+    except Exception as exc:
+        flash(f"Session could not begin: {exc}", "error")
+    return redirect(url_for("trainer_session", session_id=session_id))
+
+
+@app.post("/trainer/sessions/<int:session_id>/answer")
+@login_required
+def answer_trainer_session(session_id: int):
+    exam_session = get_exam_session(session_id)
+    if not exam_session or exam_session["user_id"] != g.user["id"]:
+        return ("Not found", 404)
+    answer = request.form.get("answer", "").strip()
+    if not answer:
+        flash("Please provide an answer or transcript.", "error")
+        return redirect(url_for("trainer_session", session_id=session_id))
+    try:
+        result = submit_exam_answer(
+            session_id, answer, request.form.get("response_duration_seconds", type=int) or 0,
+            lambda subject_id, question_id, answer_text, duration: evaluate_grounded_answer(
+                subject_id, question_id, answer_text, duration
+            ),
+        )
+        if result["session"]["status"] in {"completed", "time_expired"}:
+            if result["show_evaluation"]:
+                return _render_trainer_session(session_id, result["evaluation"])
+            return redirect(url_for("trainer_run", run_id=result["session"]["exam_run_id"]))
+        return _render_trainer_session(session_id, result["evaluation"])
+    except Exception as exc:
+        LOGGER.exception("Trainer answer evaluation failed")
+        flash(f"Answer evaluation failed: {exc}", "error")
+        return redirect(url_for("trainer_session", session_id=session_id))
+
+
+@app.get("/trainer/runs/<int:run_id>")
+@login_required
+def trainer_run(run_id: int):
+    run = get_exam_run(run_id)
+    if not run or run["user_id"] != g.user["id"]:
+        return ("Not found", 404)
+    next_session = next((item for item in run["sessions"] if item["status"] == "transition"), None)
+    return render_template(
+        "trainer_run.html", user=g.user, exam_run=run, next_session=next_session,
+        subjects={subject["id"]: subject for subject in g.subjects},
+    )
 
 
 @app.get("/admin/users")

@@ -223,21 +223,52 @@ def init_db() -> None:
                 FOREIGN KEY(topic_id) REFERENCES topics(id) ON DELETE SET NULL
             );
 
+            CREATE TABLE IF NOT EXISTS exam_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                mode TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'created',
+                subject_order_json TEXT NOT NULL,
+                current_position INTEGER NOT NULL DEFAULT 0,
+                random_order INTEGER NOT NULL DEFAULT 0,
+                combined_session INTEGER NOT NULL DEFAULT 0,
+                overall_evaluation_json TEXT,
+                started_at TEXT,
+                ended_at TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            );
+
             CREATE TABLE IF NOT EXISTS exam_sessions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 subject_id INTEGER NOT NULL,
                 parent_session_id INTEGER,
+                exam_run_id INTEGER,
                 mode TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'created',
                 duration_seconds INTEGER NOT NULL,
                 started_at TEXT,
                 ended_at TEXT,
                 evaluation_json TEXT,
+                current_question_id INTEGER,
+                current_position INTEGER NOT NULL DEFAULT 0,
+                question_order_json TEXT NOT NULL DEFAULT '[]',
+                used_question_ids_json TEXT NOT NULL DEFAULT '[]',
+                topics_covered_json TEXT NOT NULL DEFAULT '[]',
+                topics_skipped_json TEXT NOT NULL DEFAULT '[]',
+                deadline_at TEXT,
+                preparation_seconds INTEGER NOT NULL DEFAULT 0,
+                answer_seconds INTEGER NOT NULL DEFAULT 60,
+                countdown_visible INTEGER NOT NULL DEFAULT 1,
+                last_attempt_id INTEGER,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY(user_id) REFERENCES users(id),
                 FOREIGN KEY(subject_id) REFERENCES subjects(id),
-                FOREIGN KEY(parent_session_id) REFERENCES exam_sessions(id)
+                FOREIGN KEY(parent_session_id) REFERENCES exam_sessions(id),
+                FOREIGN KEY(exam_run_id) REFERENCES exam_runs(id),
+                FOREIGN KEY(current_question_id) REFERENCES questions(id),
+                FOREIGN KEY(last_attempt_id) REFERENCES attempts(id)
             );
 
             CREATE TABLE IF NOT EXISTS attempts (
@@ -275,6 +306,7 @@ def init_db() -> None:
             """
         )
         _migrate_subject_scope(connection)
+        _migrate_exam_state(connection)
         connection.commit()
     seed_admin_user()
     LOGGER.info("SQLite database initialized", extra={"db_path": config.DB_PATH})
@@ -310,6 +342,34 @@ def _migrate_subject_scope(connection: sqlite3.Connection) -> None:
     connection.execute(
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (1, ?)",
         (now,),
+    )
+
+
+def _ensure_column(connection: sqlite3.Connection, table: str, name: str, definition: str) -> None:
+    if name not in _column_names(connection, table):
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
+
+
+def _migrate_exam_state(connection: sqlite3.Connection) -> None:
+    columns = {
+        "exam_run_id": "INTEGER",
+        "current_question_id": "INTEGER",
+        "current_position": "INTEGER NOT NULL DEFAULT 0",
+        "question_order_json": "TEXT NOT NULL DEFAULT '[]'",
+        "used_question_ids_json": "TEXT NOT NULL DEFAULT '[]'",
+        "topics_covered_json": "TEXT NOT NULL DEFAULT '[]'",
+        "topics_skipped_json": "TEXT NOT NULL DEFAULT '[]'",
+        "deadline_at": "TEXT",
+        "preparation_seconds": "INTEGER NOT NULL DEFAULT 0",
+        "answer_seconds": "INTEGER NOT NULL DEFAULT 60",
+        "countdown_visible": "INTEGER NOT NULL DEFAULT 1",
+        "last_attempt_id": "INTEGER",
+    }
+    for name, definition in columns.items():
+        _ensure_column(connection, "exam_sessions", name, definition)
+    connection.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (2, ?)",
+        (datetime.now().isoformat(timespec="seconds"),),
     )
 
 

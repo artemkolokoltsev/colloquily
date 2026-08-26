@@ -19,6 +19,7 @@
             <summary class="user-badge user-badge-link">{{ user.username }}</summary>
             <div class="account-menu-panel">
               <a class="account-menu-link" href="{{ url_for('profile') }}">Mein Profil</a>
+              <a class="account-menu-link" href="{{ url_for('trainer') }}">Time-Pressure Trainer</a>
               {% if user.is_admin %}
                 <a class="account-menu-link" href="{{ url_for('admin') }}">Dashboard</a>
                 <a class="account-menu-link" href="{{ url_for('admin_eval') }}">Evaluation</a>

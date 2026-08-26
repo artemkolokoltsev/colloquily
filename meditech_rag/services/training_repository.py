@@ -144,6 +144,7 @@ def create_attempt(
     evaluation: dict,
     *,
     exam_session_id: int | None = None,
+    parent_attempt_id: int | None = None,
 ) -> int:
     question = get_question(question_id)
     if not question or question["subject_id"] != subject_id:
@@ -153,12 +154,12 @@ def create_attempt(
         cursor = connection.execute(
             """
             INSERT INTO attempts (
-                user_id, subject_id, exam_session_id, question_id, answer_text,
+                user_id, subject_id, exam_session_id, question_id, parent_attempt_id, answer_text,
                 duration_seconds, evaluation_json, evidence_ids_json, scores_json, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                user_id, subject_id, exam_session_id, question_id, answer_text.strip(),
+                user_id, subject_id, exam_session_id, question_id, parent_attempt_id, answer_text.strip(),
                 max(0, int(duration_seconds)), json.dumps(evaluation, ensure_ascii=False),
                 json.dumps(question["evidence_ids"]), json.dumps(evaluation.get("scores", {})), now,
             ),

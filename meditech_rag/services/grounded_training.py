@@ -168,8 +168,8 @@ def evaluate_grounded_answer(
     question = get_question(question_id)
     if not question or question["subject_id"] != subject_id:
         raise ValueError("Question does not belong to the selected subject")
-    evidence_map = accepted_evidence_map(subject_id, question["evidence_ids"])
-    if set(evidence_map) != set(question["evidence_ids"]):
+    linked_evidence = accepted_evidence_map(subject_id, question["evidence_ids"])
+    if set(linked_evidence) != set(question["evidence_ids"]):
         return {
             "status": "insufficient_evidence",
             "score": None,
@@ -180,6 +180,17 @@ def evaluate_grounded_answer(
             "scores": {key: 0 for key in ("conceptual_correctness", "must_know_coverage", "relevance", "example_quality", "clarity", "time_management")},
             "confidence": 0.0,
         }
+    # Supply linked evidence first, then a conservative amount of additional
+    # accepted evidence from the same topic (or unassigned subject pool).
+    additional = accepted_evidence_map(subject_id)
+    evidence_map = dict(linked_evidence)
+    for evidence_id, item in additional.items():
+        if len(evidence_map) >= 12:
+            break
+        if evidence_id in evidence_map:
+            continue
+        if question.get("topic_id") is None or item.get("topic_id") == question.get("topic_id"):
+            evidence_map[evidence_id] = item
     client = llm_client or get_llm_client()
     evaluation = _validate(
         GroundedEvaluation,
