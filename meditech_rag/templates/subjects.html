@@ -3,30 +3,30 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Subjects | Oral Exam Trainer</title>
+    <title>Exams | Oral Exam Trainer</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   </head>
   <body>
     <main class="page">
       <header class="hero">
-        <div><p class="eyebrow">Administration</p><h1>Subjects &amp; material</h1><p>Every source, unit, index, question, and attempt is isolated by subject.</p></div>
+        <div><p class="eyebrow">Administration</p><h1>Exams &amp; material</h1><p>Every source, unit, index, question, and attempt is isolated by exam.</p></div>
         <div class="hero-actions"><a class="button-link secondary-link" href="{{ url_for('index') }}">Back to trainer</a></div>
       </header>
       {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<section class="card">{% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}</section>{% endif %}{% endwith %}
 
       <section class="grid">
         <article class="card">
-          <h2>Create subject</h2>
+          <h2>Create exam</h2>
           <form action="{{ url_for('create_subject_route') }}" method="post" class="stacked">
-            <input name="name" required placeholder="Subject name">
+            <input name="name" required placeholder="Exam name">
             <input name="slug" placeholder="folder-slug (optional)">
             <textarea name="description" rows="3" placeholder="Course and exam description"></textarea>
             <div class="inline-fields"><input name="language" value="de" placeholder="Language"><input name="exam_duration_minutes" type="number" min="1" value="15"></div>
-            <button type="submit">Create subject</button>
+            <button type="submit">Create exam</button>
           </form>
         </article>
         <article class="card">
-          <h2>Available subjects</h2>
+          <h2>Available exams</h2>
           <div class="subject-list">
             {% for subject in subjects %}
               <a class="subject-row {% if selected_subject and selected_subject.id == subject.id %}active{% endif %}" href="{{ url_for('admin_subjects', subject_id=subject.id) }}"><strong>{{ subject.name }}</strong><span>{{ subject.language }} · {{ subject.exam_duration_minutes }} min</span></a>
@@ -37,7 +37,7 @@
 
       {% if selected_subject %}
       <section class="card">
-        <div class="section-head"><div><p class="eyebrow">{{ selected_subject.slug }}</p><h2>{{ selected_subject.name }}</h2><p>{{ selected_subject.description or 'No description yet.' }}</p></div><div class="review-actions"><a class="button-link" href="{{ url_for('subject_review', subject_id=selected_subject.id) }}">Review content</a><a class="button-link" href="{{ url_for('subject_questions', subject_id=selected_subject.id) }}">Question pool</a><a class="button-link" href="{{ url_for('subject_exam_pack', subject_id=selected_subject.id) }}">Exam pack</a><a class="button-link" href="{{ url_for('subject_models', subject_id=selected_subject.id) }}">Local models</a></div></div>
+        <div class="section-head"><div><p class="eyebrow">{{ selected_subject.slug }}</p><h2>{{ selected_subject.name }}</h2><p>{{ selected_subject.description or 'No description yet.' }}</p></div><div class="review-actions"><a class="button-link" href="{{ url_for('five_day_dashboard', subject_id=selected_subject.id) }}">5-Day Plan</a><a class="button-link" href="{{ url_for('subject_review', subject_id=selected_subject.id) }}">Review content</a><a class="button-link" href="{{ url_for('subject_questions', subject_id=selected_subject.id) }}">Question pool</a><a class="button-link" href="{{ url_for('subject_exam_pack', subject_id=selected_subject.id) }}">Exam pack</a><a class="button-link" href="{{ url_for('subject_models', subject_id=selected_subject.id) }}">Local models</a></div></div>
         <div class="grid">
           <form action="{{ url_for('edit_subject_route', subject_id=selected_subject.id) }}" method="post" class="subcard stacked">
             <h3>Configuration</h3><input name="name" value="{{ selected_subject.name }}" required><label>Workspace slug<input value="{{ selected_subject.slug }}" disabled></label><textarea name="description">{{ selected_subject.description }}</textarea><div class="inline-fields"><input name="language" value="{{ selected_subject.language }}"><input type="number" name="exam_duration_minutes" min="1" value="{{ selected_subject.exam_duration_minutes }}"></div><button type="submit">Save</button>
@@ -48,14 +48,14 @@
           </div>
           <div class="subcard">
             <h3>Processing</h3>
-            <form action="{{ url_for('process_subject_route', subject_id=selected_subject.id) }}" method="post" class="stacked"><label class="inline-check"><input type="checkbox" name="use_local_llm"> Run structured local-LLM cleanup</label><label class="inline-check"><input type="checkbox" name="force"> Force reprocessing</label><button type="submit">Discover &amp; process</button></form>
+            <form action="{{ url_for('process_subject_route', subject_id=selected_subject.id) }}" method="post" class="stacked"><label>Cleanup mode<select name="mode"><option value="fast" selected>Fast — local model only for suspicious sections</option><option value="deep">Deep — local model checks every section</option><option value="deterministic">Deterministic — no LLM cleanup</option></select></label><label>One document (optional)<select name="relative_path"><option value="">All discovered files</option>{% for doc in documents %}<option value="{{ doc.relative_path }}">{{ doc.relative_path }}</option>{% endfor %}</select></label><div class="inline-fields"><input type="number" min="1" name="page_start" placeholder="Start page"><input type="number" min="1" name="page_end" placeholder="End page"></div><label class="inline-check"><input type="checkbox" name="retry_failed"> Retry failed batches</label><label class="inline-check"><input type="checkbox" name="force"> Force reprocessing</label><button type="submit">Discover &amp; process</button></form>
             <form action="{{ url_for('build_subject_index_route', subject_id=selected_subject.id) }}" method="post" class="stacked"><button type="submit">Build accepted-only index</button></form>
           </div>
         </div>
       </section>
       <section class="card"><h2>Documents</h2><div class="table-wrap"><table><thead><tr><th>Path</th><th>Type</th><th>Processing</th><th>Quality</th><th>Accepted</th><th>Review</th><th>Quarantined</th></tr></thead><tbody>{% for doc in documents %}<tr><td>{{ doc.relative_path }}</td><td>{{ doc.source_type }}</td><td>{{ doc.processing_status }}</td><td>{{ doc.quality_status }}</td><td>{{ doc.accepted_count or 0 }}</td><td>{{ doc.review_count or 0 }}</td><td>{{ doc.quarantined_count or 0 }}</td></tr>{% else %}<tr><td colspan="7">No discovered material.</td></tr>{% endfor %}</tbody></table></div></section>
       <section class="card"><h2>Coverage map</h2><div class="coverage-grid">{% for item in coverage %}<article class="subcard coverage-{{ item.strength }}"><strong>{{ item.topic_name }}</strong><p>{{ item.accepted_evidence }} accepted · {{ item.weak_evidence }} review · {{ item.conflicts }} conflicts</p><span class="status-chip">{{ item.strength }}</span></article>{% else %}<p>No processed knowledge yet.</p>{% endfor %}</div></section>
-      <section class="card danger-zone"><h2>Delete subject record</h2><p>Database entities are deleted; the raw workspace stays on disk for recovery.</p><form action="{{ url_for('delete_subject_route', subject_id=selected_subject.id) }}" method="post"><button class="secondary" type="submit">Delete subject</button></form></section>
+      <section class="card danger-zone"><h2>Delete exam record</h2><p>Database entities are deleted; the raw workspace stays on disk for recovery.</p><form action="{{ url_for('delete_subject_route', subject_id=selected_subject.id) }}" method="post"><button class="secondary" type="submit">Delete exam</button></form></section>
       {% endif %}
     </main>
   </body>

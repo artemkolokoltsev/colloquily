@@ -80,6 +80,7 @@ from services.subject_workspace import workspace_for
 from services.training_repository import coverage_map, list_questions, review_question
 from services.local_models import TASKS, detect_local_models, merged_model_config, subject_task_llm
 from services.progress import correct_evaluation, subject_progress
+from services.study_plan import build_study_plan
 from services.exam_packs import generate_exam_pack, list_exam_pack_sections, review_exam_pack_section
 from services.runtime_settings import build_settings_sections, initialize_runtime_settings, load_runtime_settings, save_runtime_settings_from_form
 
@@ -467,10 +468,10 @@ def admin_subjects():
 def select_subject():
     subject_id = request.form.get("subject_id", type=int)
     if not subject_id or not get_subject(subject_id):
-        flash("Subject not found.", "error")
+        flash("Exam not found.", "error")
     else:
         session["active_subject_id"] = subject_id
-        flash("Active subject changed.", "success")
+        flash("Active exam changed.", "success")
     return redirect(request.form.get("next_page") or url_for("index"))
 
 
@@ -487,11 +488,11 @@ def create_subject_route():
         )
         workspace_for(subject)
         session["active_subject_id"] = subject["id"]
-        flash(f"Subject created: {subject['name']}", "success")
+        flash(f"Exam created: {subject['name']}", "success")
         return redirect(url_for("admin_subjects", subject_id=subject["id"]))
     except Exception as exc:
         LOGGER.exception("Subject creation failed")
-        flash(f"Subject could not be created: {exc}", "error")
+        flash(f"Exam could not be created: {exc}", "error")
         return redirect(url_for("admin_subjects"))
 
 
@@ -500,9 +501,9 @@ def create_subject_route():
 def edit_subject_route(subject_id: int):
     try:
         update_subject(subject_id, request.form)
-        flash("Subject updated.", "success")
+        flash("Exam updated.", "success")
     except Exception as exc:
-        flash(f"Subject could not be updated: {exc}", "error")
+        flash(f"Exam could not be updated: {exc}", "error")
     return redirect(url_for("admin_subjects", subject_id=subject_id))
 
 
@@ -511,14 +512,14 @@ def edit_subject_route(subject_id: int):
 def delete_subject_route(subject_id: int):
     subject = get_subject(subject_id)
     if not subject:
-        flash("Subject not found.", "error")
+        flash("Exam not found.", "error")
     elif len(list_subjects()) <= 1:
-        flash("The final subject cannot be deleted.", "error")
+        flash("The final exam cannot be deleted.", "error")
     else:
         delete_subject(subject_id)
         if session.get("active_subject_id") == subject_id:
             session.pop("active_subject_id", None)
-        flash("Subject record deleted. Its raw workspace was preserved on disk.", "success")
+        flash("Exam record deleted. Its raw workspace was preserved on disk.", "success")
     return redirect(url_for("admin_subjects"))
 
 
@@ -527,7 +528,7 @@ def delete_subject_route(subject_id: int):
 def upload_subject_material(subject_id: int):
     subject = get_subject(subject_id)
     if not subject:
-        flash("Subject not found.", "error")
+        flash("Exam not found.", "error")
         return redirect(url_for("admin_subjects"))
     subfolder_parts = [secure_filename(part) for part in Path(request.form.get("subfolder", "")).parts if part not in {".", ".."}]
     target_root = workspace_for(subject).folder("raw").joinpath(*filter(None, subfolder_parts))
@@ -551,14 +552,21 @@ def upload_subject_material(subject_id: int):
 @admin_required
 def process_subject_route(subject_id: int):
     try:
-        use_local_llm = request.form.get("use_local_llm") == "on"
+        mode = request.form.get("mode", "fast")
+        if mode not in {"fast", "deep", "deterministic"}:
+            raise ValueError("Unknown processing mode")
         subject = get_subject(subject_id)
-        client = subject_task_llm(subject, "cleaning") if use_local_llm else None
+        client = subject_task_llm(subject, "cleaning") if mode != "deterministic" else None
         result = process_subject(
             subject_id,
             force=request.form.get("force") == "on",
             cleanup_generate=client.generate if client else None,
             local_model=getattr(client, "model_name", None),
+            relative_path=request.form.get("relative_path", "").strip() or None,
+            retry_failed=request.form.get("retry_failed") == "on",
+            mode=mode,
+            page_start=request.form.get("page_start", type=int),
+            page_end=request.form.get("page_end", type=int),
         )
         flash(
             f"Processing completed: {result['processed']} processed, {result['skipped']} unchanged, {len(result['failed'])} failed.",
@@ -566,7 +574,7 @@ def process_subject_route(subject_id: int):
         )
     except Exception as exc:
         LOGGER.exception("Subject processing failed")
-        flash(f"Subject processing failed: {exc}", "error")
+        flash(f"Exam processing failed: {exc}", "error")
     return redirect(url_for("admin_subjects", subject_id=subject_id))
 
 
@@ -575,10 +583,10 @@ def process_subject_route(subject_id: int):
 def build_subject_index_route(subject_id: int):
     try:
         result = SubjectIndex(subject_id).build()
-        flash(f"Subject index built with {result['indexed_units']} accepted unit(s).", "success")
+        flash(f"Exam index built with {result['indexed_units']} accepted unit(s).", "success")
     except Exception as exc:
         LOGGER.exception("Subject index build failed")
-        flash(f"Subject index failed: {exc}", "error")
+        flash(f"Exam index failed: {exc}", "error")
     return redirect(url_for("admin_subjects", subject_id=subject_id))
 
 
@@ -737,6 +745,19 @@ def progress_dashboard(subject_id: int):
     )
 
 
+@app.get("/exams/<int:subject_id>/five-day")
+@login_required
+def five_day_dashboard(subject_id: int):
+    subject = get_subject(subject_id)
+    if not subject:
+        return ("Not found", 404)
+    remaining_days = request.args.get("remaining_days", default=5, type=int)
+    return render_template(
+        "five_day.html", user=g.user, subject=subject,
+        plan=build_study_plan(g.user["id"], subject_id, remaining_days),
+    )
+
+
 @app.post("/progress/<int:subject_id>/attempts/<int:attempt_id>/correct")
 @login_required
 def correct_attempt_route(subject_id: int, attempt_id: int):
@@ -784,7 +805,7 @@ def update_subject_models(subject_id: int):
             "timeout_seconds": max(10, request.form.get("embedding_timeout_seconds", type=int) or 120),
         }
         update_subject(subject_id, {"local_llm_config": llm_config, "embedding_config": embedding_config})
-        flash("Subject-local model configuration saved.", "success")
+        flash("Exam-local model configuration saved.", "success")
     except Exception as exc:
         flash(f"Model configuration failed: {exc}", "error")
     return redirect(url_for("subject_models", subject_id=subject_id))
@@ -1043,7 +1064,10 @@ def ask():
         return redirect(url_for("index"))
     if g.active_subject:
         try:
-            result = answer_subject_question(g.active_subject["id"], question)
+            result = answer_subject_question(
+                g.active_subject["id"], question,
+                external_knowledge=request.form.get("external_knowledge") == "on",
+            )
             for source in result["contexts"]:
                 source["source_url"] = url_for(
                     "serve_subject_source", subject_id=g.active_subject["id"], filename=source["relative_path"]
@@ -1052,7 +1076,7 @@ def ask():
             store_request(g.user["id"], result["request_entry"], subject_id=g.active_subject["id"])
         except Exception as exc:
             LOGGER.exception("Subject-scoped question failed")
-            flash(f"Subject retrieval failed: {exc}", "error")
+            flash(f"Exam retrieval failed: {exc}", "error")
             return redirect(url_for("index"))
         return _render_index(
             answer=result["answer"],

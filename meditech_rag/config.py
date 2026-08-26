@@ -49,7 +49,10 @@ _bootstrap_env()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
-SUBJECTS_DIR = os.path.join(DATA_DIR, "subjects")
+EXAMS_DIR = os.path.join(DATA_DIR, "exams")
+LEGACY_SUBJECTS_DIR = os.path.join(DATA_DIR, "subjects")
+# Internal compatibility name; new workspaces are stored under data/exams.
+SUBJECTS_DIR = EXAMS_DIR
 PDF_FOLDER = os.path.join(DATA_DIR, "pdfs")
 INDEX_DIR = os.path.join(DATA_DIR, "index")
 PREPARED_INDEXES_DIR = os.path.join(DATA_DIR, "indexes")

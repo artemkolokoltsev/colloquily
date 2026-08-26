@@ -86,6 +86,18 @@ def _generate_zero_temperature(client, prompt: str) -> str:
         return client.generate(prompt)
 
 
+def _validated_generation(client, model, prompt: str):
+    raw = _generate_zero_temperature(client, prompt)
+    try:
+        return _validate(model, raw)
+    except Exception:
+        repair = (
+            prompt + "\nYour previous response was malformed or did not match the required schema. "
+            "Return one corrected JSON object only. PREVIOUS_RESPONSE=" + raw[:12000]
+        )
+        return _validate(model, _generate_zero_temperature(client, repair))
+
+
 def question_generation_prompt(subject_name: str, evidence: list[dict], count: int) -> str:
     sources = [
         {
@@ -110,9 +122,8 @@ def generate_grounded_questions(subject: dict, count: int = 5, *, llm_client=Non
     if not evidence:
         raise ValueError("No accepted evidence is available for question generation")
     client = llm_client or get_llm_client()
-    batch = _validate(
-        QuestionBatch,
-        _generate_zero_temperature(client, question_generation_prompt(subject["name"], evidence, max(1, min(10, count)))),
+    batch = _validated_generation(
+        client, QuestionBatch, question_generation_prompt(subject["name"], evidence, max(1, min(10, count)))
     )
     expected_count = max(1, min(10, count))
     if len(batch.questions) != expected_count:
@@ -191,13 +202,16 @@ def evaluate_grounded_answer(
         if question.get("topic_id") is None or item.get("topic_id") == question.get("topic_id"):
             evidence_map[evidence_id] = item
     client = llm_client or get_llm_client()
-    evaluation = _validate(
-        GroundedEvaluation,
-        _generate_zero_temperature(
-            client,
-            evaluation_prompt(question, answer, duration_seconds, list(evidence_map.values())),
-        ),
-    )
+    prompt = evaluation_prompt(question, answer, duration_seconds, list(evidence_map.values()))
+    evaluation = _validated_generation(client, GroundedEvaluation, prompt)
+    if evaluation.confidence < 0.65:
+        second = _validated_generation(
+            client, GroundedEvaluation,
+            prompt + "\nPerform a second independent evidence check because the first pass had low confidence. "
+            "Be conservative and return the same JSON schema.",
+        )
+        if second.confidence > evaluation.confidence:
+            evaluation = second
     payload = _dump(evaluation)
     allowed = set(evidence_map)
     for category in ("correct", "missing", "incorrect"):

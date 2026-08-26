@@ -10,15 +10,21 @@ from services.local_models import subject_task_llm
 from services.subject_index import INSUFFICIENT_EVIDENCE_MESSAGE, SubjectIndex
 
 
-def _prompt(subject: dict, question: str, evidence: list[dict]) -> str:
+def _prompt(subject: dict, question: str, evidence: list[dict], *, external_knowledge: bool = False) -> str:
     contexts = "\n\n".join(
         f"[{item['citation_id']}] {item['document_title']} — {item['source_location']}\n{item['content']}"
         for item in evidence
     )
+    grounding = (
+        "First write a 'Course-supported answer' whose factual claims cite exact evidence IDs. Then, only if "
+        "it materially helps, write a separate 'External knowledge (not course evidence)' section. Never present "
+        "external claims as course content. "
+        if external_knowledge else
+        "Use only the accepted evidence below. Do not use general model knowledge. Cite every factual claim with one or more exact evidence IDs. "
+    )
     return (
         f"You are a local oral-exam tutor for the subject '{subject['name']}'. "
-        f"Answer in language '{subject['language']}'. Use only the accepted evidence below. "
-        "Do not use general model knowledge. Cite every factual claim with one or more exact evidence IDs. "
+        f"Answer in language '{subject['language']}'. {grounding}"
         f"If evidence is insufficient, answer exactly: {INSUFFICIENT_EVIDENCE_MESSAGE}\n\n"
         f"QUESTION\n{question}\n\nACCEPTED EVIDENCE\n{contexts}"
     )
@@ -30,7 +36,9 @@ def _valid_citations(answer: str, evidence: list[dict]) -> bool:
     return bool(cited) and cited.issubset(allowed)
 
 
-def answer_subject_question(subject_id: int, question: str, *, embedder=None, llm_client=None) -> dict:
+def answer_subject_question(
+    subject_id: int, question: str, *, embedder=None, llm_client=None, external_knowledge: bool = False
+) -> dict:
     started = time.perf_counter()
     subject_index = SubjectIndex(subject_id, embedder=embedder)
     context = subject_index.grounded_context(question, k=config.TOP_K)
@@ -38,8 +46,10 @@ def answer_subject_question(subject_id: int, question: str, *, embedder=None, ll
     if not context["sufficient"]:
         answer = INSUFFICIENT_EVIDENCE_MESSAGE
     else:
-        client = llm_client or subject_task_llm(subject_index.subject, "examiner_follow_up")
-        answer = client.generate(_prompt(subject_index.subject, question, context["evidence"]))
+        client = llm_client or subject_task_llm(subject_index.subject, "answering")
+        answer = client.generate(_prompt(
+            subject_index.subject, question, context["evidence"], external_knowledge=external_knowledge
+        ))
         if answer != INSUFFICIENT_EVIDENCE_MESSAGE and not _valid_citations(answer, context["evidence"]):
             answer = INSUFFICIENT_EVIDENCE_MESSAGE
             context["evidence"] = []

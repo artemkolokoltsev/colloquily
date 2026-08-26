@@ -11,7 +11,7 @@ from services.llm.lmstudio_llm import LMStudioLLMClient
 from services.llm.ollama_llm import OllamaLLMClient
 
 
-TASKS = ("cleaning", "topic_extraction", "question_generation", "answer_evaluation", "examiner_follow_up")
+TASKS = ("cleaning", "topic_extraction", "question_generation", "answer_evaluation", "answering", "examiner_follow_up")
 
 
 def default_model_config() -> dict:

@@ -86,7 +86,10 @@ def subject_progress(user_id: int, subject_id: int, *, now: datetime | None = No
     return {
         "attempts_count": len(rows),
         "average_score": round(sum(scores) / len(scores), 2) if scores else None,
+        "best_score": max(scores) if scores else None,
         "last_score": scores[-1] if scores else None,
+        "average_response_seconds": round(sum(row["duration_seconds"] for row in rows) / len(rows)) if rows else None,
+        "last_practice_at": rows[-1]["created_at"] if rows else None,
         "topics": sorted(topic_rows, key=lambda item: (item["strength"] != "weak", item["name"])),
         "frequently_missing": missing_counter.most_common(10),
         "misconceptions": misconception_counter.most_common(10),

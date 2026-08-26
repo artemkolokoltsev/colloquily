@@ -12,7 +12,7 @@
         <div>
           <p class="eyebrow">Completely local exam preparation</p>
           <h1>Oral Exam Trainer</h1>
-          <p>Evidence-grounded oral-exam practice for multiple university subjects.</p>
+          <p>Evidence-grounded oral-exam practice for multiple university exams.</p>
         </div>
         <div class="hero-actions">
           <details class="account-menu">
@@ -20,12 +20,12 @@
             <div class="account-menu-panel">
               <a class="account-menu-link" href="{{ url_for('profile') }}">Mein Profil</a>
               <a class="account-menu-link" href="{{ url_for('trainer') }}">Time-Pressure Trainer</a>
-              {% if active_subject %}<a class="account-menu-link" href="{{ url_for('progress_dashboard', subject_id=active_subject.id) }}">Subject progress</a>{% endif %}
+              {% if active_subject %}<a class="account-menu-link" href="{{ url_for('five_day_dashboard', subject_id=active_subject.id) }}">What should I study now?</a><a class="account-menu-link" href="{{ url_for('progress_dashboard', subject_id=active_subject.id) }}">Exam progress</a>{% endif %}
               {% if user.is_admin %}
                 <a class="account-menu-link" href="{{ url_for('admin') }}">Dashboard</a>
                 <a class="account-menu-link" href="{{ url_for('admin_eval') }}">Evaluation</a>
                 <a class="account-menu-link" href="{{ url_for('admin_settings') }}">Systemeinstellungen</a>
-                <a class="account-menu-link" href="{{ url_for('admin_subjects') }}">Subjects &amp; Review</a>
+                <a class="account-menu-link" href="{{ url_for('admin_subjects') }}">Exams &amp; Review</a>
                 <a class="account-menu-link" href="{{ url_for('admin_users') }}">Benutzerverwaltung</a>
               {% endif %}
               <form action="{{ url_for('logout') }}" method="post">
@@ -50,14 +50,14 @@
       <section class="card subject-switcher">
         <form action="{{ url_for('select_subject') }}" method="post" class="inline-fields">
           <input type="hidden" name="next_page" value="{{ url_for('index') }}">
-          <label>Active subject
+          <label>Active exam
             <select name="subject_id">
               {% for subject in subjects %}
                 <option value="{{ subject.id }}" {% if active_subject and active_subject.id == subject.id %}selected{% endif %}>{{ subject.name }}</option>
               {% endfor %}
             </select>
           </label>
-          <button type="submit">Select subject</button>
+          <button type="submit">Select exam</button>
         </form>
         {% if active_subject %}<p class="section-copy">{{ active_subject.description or 'No description yet.' }} · {{ active_subject.exam_duration_minutes }} minute exam · {{ active_subject.language }}</p>{% endif %}
       </section>
@@ -86,7 +86,8 @@
         <div id="tab-chat" class="tab-panel active">
           <h2>Chat / Frage stellen</h2>
           <form action="{{ url_for('ask') }}" method="post" class="stacked async-form">
-            <textarea name="question" rows="4" placeholder="Ask an evidence-grounded question about the active subject."></textarea>
+            <textarea name="question" rows="4" placeholder="Ask an evidence-grounded question about the active exam."></textarea>
+            <label class="inline-check"><input type="checkbox" name="external_knowledge"> External knowledge (clearly labeled; off by default)</label>
             <button type="submit">Frage beantworten</button>
           </form>
           {% if answer %}
@@ -192,7 +193,7 @@
         <div id="tab-quiz" class="tab-panel">
           <h2>Quiz-Generator</h2>
           <form action="{{ url_for('quiz') }}" method="post" class="stacked async-form">
-            <textarea name="topic" rows="4" placeholder="Describe the topic and desired difficulty for the active subject."></textarea>
+            <textarea name="topic" rows="4" placeholder="Describe the topic and desired difficulty for the active exam."></textarea>
             <input type="number" name="n_questions" min="1" max="10" value="5">
             <button type="submit">Quiz generieren</button>
           </form>

@@ -13,6 +13,7 @@ import config
 
 WORKSPACE_FOLDERS = (
     "raw",
+    "extracted",
     "preprocessing",
     "cleaned",
     "quarantined",
@@ -46,7 +47,11 @@ class SubjectWorkspace:
 
     @property
     def root(self) -> Path:
-        return Path(config.SUBJECTS_DIR) / self.slug
+        primary = Path(config.SUBJECTS_DIR) / self.slug
+        legacy_root = Path(getattr(config, "LEGACY_SUBJECTS_DIR", config.SUBJECTS_DIR)) / self.slug
+        if not primary.exists() and legacy_root.exists():
+            return legacy_root
+        return primary
 
     def folder(self, name: str) -> Path:
         if name not in WORKSPACE_FOLDERS:

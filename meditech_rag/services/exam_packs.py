@@ -83,7 +83,18 @@ def generate_exam_pack(subject: dict, llm_client) -> list[dict]:
         raw = llm_client.generate(exam_pack_prompt(subject, evidence), temperature=0.0)
     except TypeError:
         raw = llm_client.generate(exam_pack_prompt(subject, evidence))
-    batch = _validate(raw)
+    try:
+        batch = _validate(raw)
+    except Exception:
+        repair_prompt = exam_pack_prompt(subject, evidence) + (
+            "\nThe previous response was malformed. Return one corrected JSON object only. PREVIOUS_RESPONSE="
+            + raw[:12000]
+        )
+        try:
+            repaired = llm_client.generate(repair_prompt, temperature=0.0)
+        except TypeError:
+            repaired = llm_client.generate(repair_prompt)
+        batch = _validate(repaired)
     allowed = set(item["id"] for item in evidence)
     validated: list[dict] = []
     for section in batch.sections:

@@ -17,7 +17,7 @@ from services.subject_workspace import workspace_for
 
 
 INSUFFICIENT_EVIDENCE_MESSAGE = (
-    "The accepted course material is insufficient to answer or evaluate this question reliably."
+    "The accepted exam material is insufficient to answer this reliably."
 )
 
 

@@ -1,6 +1,6 @@
 # Oral Exam Trainer
 
-Oral Exam Trainer is a reusable, completely local Flask application for preparing evidence-grounded university oral exams. It supports subject-isolated Markdown/PDF ingestion, quality review, accepted-only FAISS indexes, grounded questions and evaluation, timed single- and multi-subject exams, and progress tracking.
+Oral Exam Trainer is a reusable, completely local Flask application for preparing evidence-grounded university oral exams. It supports exam-isolated Markdown/PDF ingestion, quality review, accepted-only FAISS indexes, grounded questions and evaluation, timed single- and multi-exam practice, and a five-day study plan.
 
 The main application lives in [`meditech_rag/`](meditech_rag/).
 
@@ -54,7 +54,7 @@ make langtrace-down
 |   |-- app.py                    Flask routes and UI workflow orchestration
 |   |-- config.py                 Runtime defaults, paths, model settings
 |   |-- configs/                  Prepared index profile definitions
-|   |-- data/                     Local PDFs, indexes, cache, eval data, SQLite DB
+|   |-- data/exams/               Exam-isolated raw material, artifacts, and FAISS indexes
 |   |-- scripts/                  Index preparation and evaluation scripts
 |   |-- services/                 RAG, parsing, indexing, persistence, eval services
 |   |-- static/                   CSS

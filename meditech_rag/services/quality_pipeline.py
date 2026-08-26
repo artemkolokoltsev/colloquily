@@ -110,7 +110,7 @@ def _paragraph_units(text: str, *, location_prefix: str = "lines") -> list[dict]
     return units
 
 
-def extract_source_units(source: dict) -> list[dict]:
+def extract_source_units(source: dict, *, page_start: int | None = None, page_end: int | None = None) -> list[dict]:
     path: Path = source["path"]
     if source["source_type"] == "markdown":
         return _paragraph_units(path.read_text(encoding="utf-8", errors="replace"))
@@ -118,6 +118,10 @@ def extract_source_units(source: dict) -> list[dict]:
     units: list[dict] = []
     for page in parsed.get("pages", []):
         page_number = int(page.get("page_number") or 0)
+        if page_start and page_number < page_start:
+            continue
+        if page_end and page_number > page_end:
+            continue
         raw = page.get("raw_text") or page.get("clean_text") or ""
         for item in _paragraph_units(raw, location_prefix=f"page {page_number}, lines"):
             item["source_start"] = page_number
@@ -227,7 +231,15 @@ def cleanup_prompt(units: list[dict]) -> str:
 
 
 def apply_local_cleanup(units: list[dict], generate: Callable[[str], str]) -> list[dict]:
-    validated = _validate_batch(generate(cleanup_prompt(units)))
+    raw_response = generate(cleanup_prompt(units))
+    try:
+        validated = _validate_batch(raw_response)
+    except Exception:
+        repair_prompt = (
+            "Repair the following malformed response into valid JSON only. Preserve its meaning and use the exact "
+            "required CleanupBatch schema; do not add academic content.\nMALFORMED_RESPONSE=" + raw_response[:12000]
+        )
+        validated = _validate_batch(generate(repair_prompt))
     if len(validated.units) != len(units):
         raise ValueError("Local cleanup returned the wrong number of units")
     results: list[dict] = []
@@ -253,6 +265,9 @@ def process_subject(
     local_model: str | None = None,
     relative_path: str | None = None,
     retry_failed: bool = False,
+    mode: str = "deep",
+    page_start: int | None = None,
+    page_end: int | None = None,
 ) -> dict:
     subject = get_subject(subject_id)
     if not subject:
@@ -272,7 +287,10 @@ def process_subject(
             summary["skipped"] += 1
             continue
         try:
-            extracted = [deterministic_cleanup(item) for item in extract_source_units(source)]
+            extracted = [
+                deterministic_cleanup(item)
+                for item in extract_source_units(source, page_start=page_start, page_end=page_end)
+            ]
             batch_size = max(1, int(config.CLEANING_BATCH_SIZE))
             total_batches = math.ceil(len(extracted) / batch_size) if extracted else 0
             completed = list(existing_checkpoint["completed_batches"]) if existing_checkpoint and not force else []
@@ -287,7 +305,15 @@ def process_subject(
                 if batch_index in completed:
                     continue
                 try:
-                    output = apply_local_cleanup(batch, cleanup_generate) if cleanup_generate else batch
+                    if cleanup_generate and mode == "deep":
+                        output = apply_local_cleanup(batch, cleanup_generate)
+                    elif cleanup_generate and mode == "fast":
+                        suspicious = [item for item in batch if item["recommended_status"] != "accepted"]
+                        cleaned_suspicious = apply_local_cleanup(suspicious, cleanup_generate) if suspicious else []
+                        replacements = {item["source_location"]: item for item in cleaned_suspicious}
+                        output = [replacements.get(item["source_location"], item) for item in batch]
+                    else:
+                        output = batch
                     insert_knowledge_units(subject_id, document["id"], output)
                     all_output.extend(output)
                     completed.append(batch_index)
@@ -297,7 +323,7 @@ def process_subject(
                         failed.append(batch_index)
                     raise
                 finally:
-                    output_path = workspace.folder("preprocessing") / f"{document['id']}-{source['source_hash'][:12]}.json"
+                    output_path = workspace.folder("extracted") / f"{document['id']}-{source['source_hash'][:12]}.json"
                     save_checkpoint(
                         subject_id, document["id"], source["source_hash"], "cleaned_candidate",
                         total_batches, completed, failed, local_model=local_model,

@@ -1,20 +1,22 @@
 # Oral Exam Trainer
 
-Reusable, completely local oral-exam preparation based on reviewed university course material. The original MediTech workflows remain available during migration, while new material is isolated into subject-specific workspaces and accepted-only FAISS indexes.
+Reusable, completely local oral-exam preparation based on reviewed university course material. The original MediTech workflows remain available during migration, while new material is isolated into exam-specific workspaces and accepted-only FAISS indexes.
 
-## Subject workflow
+## Exam workflow
 
-1. Create a subject under `/admin/subjects`.
-2. Place nested Markdown or PDF material under `data/subjects/<slug>/raw/`, or use the non-overwriting upload form.
-3. Run deterministic processing and optionally structured cleanup through the configured local LLM.
+1. Create an exam under `/admin/subjects` (the legacy URL remains stable).
+2. Place nested Markdown or PDF material under `data/exams/<exam-slug>/raw/`, or use the non-overwriting upload form.
+3. Use **Fast** cleanup by default (local LLM only for suspicious sections), **Deep** for every section, or deterministic mode for troubleshooting.
 4. Review suspicious units and manually accept, quarantine, reject, or correct them.
-5. Build the subject index. Only accepted, retrieval-enabled knowledge units are embedded.
+5. Build the exam index. Only accepted, retrieval-enabled knowledge units are embedded.
+6. Open the **5-Day Plan** for a ranked answer to “What should I study now?”, then practice due/weak questions.
 
 The processor hashes every source, skips unchanged files, checkpoints every batch, and resumes interrupted work. Files under `raw/` are never rewritten. Manually accepted edits remain authoritative during later processing.
 
 ```text
-data/subjects/<slug>/
+data/exams/<exam-slug>/
 ├── raw/
+├── extracted/
 ├── preprocessing/
 ├── cleaned/
 ├── quarantined/
@@ -28,22 +30,24 @@ SQLite migrations preserve existing requests, sources, quizzes, and attempts und
 
 ## Training workflow
 
-- `/trainer` provides single-question, 30/60/90-second rapid practice, full subject simulations, and separate-session multi-subject exams.
+- `/trainer` provides single-question, weak-topic, 30/60/90-second rapid practice, full exam simulations, and separate-session multi-exam tests.
+- `/exams/<exam-id>/five-day` combines accepted learning cards, coverage, scores, omissions, timing, recency, and remaining days into a ranked study plan.
 - `/progress/<subject-id>` shows score and response-time trends, missing core points, misconceptions, weak topics, mock history, and spaced-repetition priorities.
 - Generated questions, evaluations, follow-ups, and exam packs are rejected when evidence IDs do not resolve to accepted units in the active subject.
 - Manual knowledge edits and corrected evaluations are persisted as authoritative review/audit records.
 
 ## Local model verification
 
-Model roles are configured separately per subject under **Subjects → Local models**. Ollama and LM Studio are supported for cleaning, topic extraction, question generation, evaluation, and examiner follow-ups. SentenceTransformer remains the default embedding backend.
+Model roles are configured separately per exam under **Exams → Local models**. Ollama and LM Studio are supported for cleaning, topic extraction, question generation, answering, evaluation, and examiner follow-ups. SentenceTransformer remains the default embedding backend.
 
 Run the disposable local-model smoke test with:
 
 ```bash
 python3.11 scripts/smoke_oral_exam_trainer.py
+python3.11 scripts/verify_five_day_mvp.py
 ```
 
-It creates a temporary synthetic subject, validates an actual Ollama cleanup response, verifies raw-file immutability, and removes the temporary workspace.
+The first command validates an actual Ollama cleanup response and raw-file immutability. The second creates nested PDF and Markdown exams, then verifies ingestion, isolation, grounded question/evaluation, a short mock, the five-day recommender, and index persistence across reload.
 
 ## Known limitations
 

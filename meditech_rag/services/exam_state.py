@@ -62,13 +62,17 @@ def get_exam_run(run_id: int) -> dict | None:
         return item
 
 
-def _question_order(subject_id: int) -> list[int]:
+def _question_order(subject_id: int, *, weak_question_ids: list[int] | None = None) -> list[int]:
     questions = list_questions(subject_id, accepted_only=True)
     if not questions:
         raise ValueError(f"Subject {subject_id} has no accepted question pool")
     rank = {"explanation": 0, "definition": 1, "connection": 2, "comparison": 3, "application": 4}
     questions.sort(key=lambda item: (rank.get(item["question_type"], 5), -item["quality_score"], item["id"]))
-    return [int(item["id"]) for item in questions]
+    ordered = [int(item["id"]) for item in questions]
+    if weak_question_ids:
+        weak = [item for item in weak_question_ids if item in ordered]
+        ordered = weak + [item for item in ordered if item not in weak]
+    return ordered
 
 
 def create_exam_run(
@@ -108,10 +112,17 @@ def create_exam_run(
         run_id = int(cursor.lastrowid)
         for position, subject_id in enumerate(unique_subjects):
             subject = get_subject(subject_id)
+            weak_ids = None
+            if mode == "weak_topic":
+                from services.progress import subject_progress
+                weak_ids = [item["question_id"] for item in subject_progress(user_id, subject_id)["due_questions"]]
+            question_order = _question_order(subject_id, weak_question_ids=weak_ids)
             if mode in {"subject_simulation", "multi_subject"}:
                 duration_seconds = int(subject["exam_duration_minutes"]) * 60
             elif mode == "rapid_practice":
-                duration_seconds = max(30, int(answer_seconds)) * min(10, len(_question_order(subject_id)))
+                duration_seconds = max(30, int(answer_seconds)) * min(10, len(question_order))
+            elif mode == "weak_topic":
+                duration_seconds = max(30, int(answer_seconds)) * min(10, len(question_order))
             else:
                 duration_seconds = max(15, int(answer_seconds))
             connection.execute(
@@ -124,7 +135,7 @@ def create_exam_run(
                 """,
                 (
                     user_id, subject_id, run_id, mode, "created" if position == 0 else "queued",
-                    duration_seconds, json.dumps(_question_order(subject_id)), max(0, int(preparation_seconds)),
+                    duration_seconds, json.dumps(question_order), max(0, int(preparation_seconds)),
                     max(15, int(answer_seconds)), int(countdown_visible), created_at,
                 ),
             )
