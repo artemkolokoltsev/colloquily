@@ -349,6 +349,32 @@ def init_db() -> None:
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS reported_questions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                stable_question_id TEXT NOT NULL UNIQUE,
+                subject_id INTEGER NOT NULL,
+                exam_slug TEXT NOT NULL,
+                wording_source TEXT NOT NULL,
+                normalized_wording TEXT NOT NULL,
+                provenance TEXT NOT NULL,
+                source_file TEXT,
+                source_section TEXT,
+                report_date TEXT,
+                examiner TEXT,
+                reliability TEXT NOT NULL,
+                question_type TEXT NOT NULL,
+                topic_tags_json TEXT NOT NULL DEFAULT '[]',
+                required_actions_json TEXT NOT NULL DEFAULT '[]',
+                chain_id TEXT,
+                current_evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+                answerability_status TEXT NOT NULL,
+                activation_status TEXT NOT NULL,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
+            );
             """
         )
         _migrate_subject_scope(connection)
@@ -356,6 +382,7 @@ def init_db() -> None:
         migration_time = datetime.now().isoformat(timespec="seconds")
         connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (3, ?)", (migration_time,))
         connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (4, ?)", (migration_time,))
+        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (5, ?)", (migration_time,))
         connection.commit()
     seed_admin_user()
     LOGGER.info("SQLite database initialized", extra={"db_path": config.DB_PATH})

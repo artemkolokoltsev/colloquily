@@ -53,6 +53,19 @@ make verify
 
 The first command runs the unit and integration suite. The second creates disposable PDF and Markdown exams and verifies ingestion, exam isolation, evaluation, mock-exam state, and index reload.
 
+## Install on macOS with Docker
+
+Start Docker Desktop and Ollama, then double-click `Install Colloquily.command`. It builds a local application image, starts Colloquily in a container, and opens `http://localhost:8000`. Application code runs inside the image; durable exam data stays in `meditech_rag/data` on the Mac.
+
+From Terminal, the equivalent commands are:
+
+```bash
+docker compose up -d --build
+open http://localhost:8000
+```
+
+Stop it with `docker compose down`. Ollama remains private on the Mac and is reached from the container through `host.docker.internal`.
+
 ## Useful Commands
 
 ```bash

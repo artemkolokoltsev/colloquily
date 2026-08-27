@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import os
 import re
 from pathlib import Path
@@ -78,6 +79,7 @@ from services.progress import correct_evaluation, subject_progress
 from services.study_plan import build_study_plan
 from services.exam_packs import generate_exam_pack, list_exam_pack_sections, review_exam_pack_section
 from services.runtime_settings import build_settings_sections, initialize_runtime_settings, load_runtime_settings, save_runtime_settings_from_form
+from services.reported_questions import export_question_bank, import_question_bank, list_reported_questions
 
 
 def configure_logging() -> None:
@@ -642,6 +644,55 @@ def review_subject_question(subject_id: int, question_id: int):
     except Exception as exc:
         flash(f"Question review failed: {exc}", "error")
     return redirect(url_for("subject_questions", subject_id=subject_id))
+
+
+@app.get("/admin/subjects/<int:subject_id>/reported-questions")
+@admin_required
+def subject_reported_questions(subject_id: int):
+    subject = get_subject(subject_id)
+    if not subject:
+        return redirect(url_for("admin_subjects"))
+    filters = {
+        "provenance": request.args.get("provenance", "").strip(),
+        "reliability": request.args.get("reliability", "").strip(),
+        "activation": request.args.get("activation", "").strip(),
+        "query": request.args.get("query", "").strip(),
+    }
+    questions = list_reported_questions(subject_id, **filters)
+    chains = len({item["chain_id"] for item in questions if item.get("chain_id")})
+    return render_template(
+        "reported_questions.html", user=g.user, subject=subject, questions=questions,
+        filters=filters, chains=chains,
+    )
+
+
+@app.post("/admin/subjects/<int:subject_id>/reported-questions/import")
+@admin_required
+def import_reported_questions_route(subject_id: int):
+    if not get_subject(subject_id):
+        return redirect(url_for("admin_subjects"))
+    upload = request.files.get("question_bank")
+    try:
+        if not upload or not upload.filename:
+            raise ValueError("Select a JSON question bank")
+        payload = json.load(upload.stream)
+        result = import_question_bank(payload)
+        flash(f"Question bank imported: {result['inserted']} new, {result['unchanged']} unchanged.", "success")
+    except Exception as exc:
+        LOGGER.exception("Reported question import failed")
+        flash(f"Question bank import failed: {exc}", "error")
+    return redirect(url_for("subject_reported_questions", subject_id=subject_id))
+
+
+@app.get("/admin/subjects/<int:subject_id>/reported-questions/export")
+@admin_required
+def export_reported_questions_route(subject_id: int):
+    subject = get_subject(subject_id)
+    if not subject:
+        return redirect(url_for("admin_subjects"))
+    response = jsonify(export_question_bank(subject_id))
+    response.headers["Content-Disposition"] = f'attachment; filename="{subject["slug"]}-reported-questions.json"'
+    return response
 
 
 @app.get("/admin/subjects/<int:subject_id>/exam-pack")

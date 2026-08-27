@@ -49,7 +49,7 @@ _bootstrap_env()
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "data")
+DATA_DIR = os.path.abspath(_env_value("COLLOQUILY_DATA_DIR", os.path.join(BASE_DIR, "data")))
 EXAMS_DIR = os.path.join(DATA_DIR, "exams")
 LEGACY_SUBJECTS_DIR = os.path.join(DATA_DIR, "subjects")
 # Internal compatibility name; new workspaces are stored under data/exams.
@@ -122,7 +122,7 @@ ST_ALLOW_DOWNLOAD = True
 
 
 LLM_BACKEND = "ollama"  # ollama | lmstudio
-OLLAMA_URL = "http://localhost:11434"
+OLLAMA_URL = _env_value("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_LLM_MODEL = "phi3:mini"
 OLLAMA_TIMEOUT_SECONDS = 300
 OLLAMA_NUM_PREDICT = 384
@@ -132,7 +132,7 @@ OLLAMA_EMBED_BATCH_SIZE = 32
 LLM_TEMPERATURE = 0.2
 
 
-LMSTUDIO_BASE_URL = "http://localhost:1234"
+LMSTUDIO_BASE_URL = _env_value("LMSTUDIO_BASE_URL", "http://localhost:1234")
 LMSTUDIO_EMBED_MODEL = "text-embedding-nomic-embed-text-v1.5"
 LMSTUDIO_LLM_MODEL = "qwen2-0.5b-instruct"
 LMSTUDIO_EMBEDDINGS_URL = f"{LMSTUDIO_BASE_URL}/v1/embeddings"

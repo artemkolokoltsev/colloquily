@@ -10,23 +10,23 @@
     <main class="page">
       <header class="hero">
         <div>
-          <p class="eyebrow">Completely local exam preparation</p>
-          <h1>Colloquily</h1>
-          <p>Evidence-grounded oral-exam practice for multiple university exams.</p>
+          <p class="brand-lockup"><span class="brand-mark" aria-hidden="true">C</span><span>Colloquily</span></p>
+          <h1>Prepare to explain,<br>not just remember.</h1>
+          <p class="hero-copy">Private, evidence-grounded oral-exam practice across all your courses.</p>
         </div>
         <div class="hero-actions">
           <details class="account-menu">
             <summary class="user-badge user-badge-link">{{ user.username }}</summary>
             <div class="account-menu-panel">
-              <a class="account-menu-link" href="{{ url_for('profile') }}">Mein Profil</a>
+              <a class="account-menu-link" href="{{ url_for('profile') }}">My progress</a>
               <a class="account-menu-link" href="{{ url_for('trainer') }}">Time-Pressure Trainer</a>
               {% if active_subject %}<a class="account-menu-link" href="{{ url_for('five_day_dashboard', subject_id=active_subject.id) }}">What should I study now?</a><a class="account-menu-link" href="{{ url_for('progress_dashboard', subject_id=active_subject.id) }}">Exam progress</a>{% endif %}
               {% if user.is_admin %}
                 <a class="account-menu-link" href="{{ url_for('admin') }}">Dashboard</a>
                 <a class="account-menu-link" href="{{ url_for('admin_eval') }}">Evaluation</a>
-                <a class="account-menu-link" href="{{ url_for('admin_settings') }}">Systemeinstellungen</a>
+                <a class="account-menu-link" href="{{ url_for('admin_settings') }}">Settings</a>
                 <a class="account-menu-link" href="{{ url_for('admin_subjects') }}">Exams &amp; Review</a>
-                <a class="account-menu-link" href="{{ url_for('admin_users') }}">Benutzerverwaltung</a>
+                <a class="account-menu-link" href="{{ url_for('admin_users') }}">Users</a>
               {% endif %}
               <form action="{{ url_for('logout') }}" method="post">
                 <button type="submit" class="account-menu-button">Logout</button>
@@ -65,11 +65,11 @@
       <section class="card">
         <div class="section-head">
           <div>
-            <h2>Lernbereich</h2>
-            <p class="section-copy">Fragen stellen, Inhalte zusammenfassen und Quizze zur Pruefungsvorbereitung starten.</p>
+            <h2>Study workspace</h2>
+            <p class="section-copy">Ask grounded questions, distill your materials, or test recall.</p>
           </div>
           <div class="status-chip-group">
-            <span class="status-chip">{{ stats.docs_count or 0 }} Dokumente</span>
+            <span class="status-chip">{{ stats.docs_count or 0 }} documents</span>
             <span class="status-chip">{{ stats.chunks_count or 0 }} Chunks</span>
             <span class="status-chip">{{ current_config.llm_model }}</span>
           </div>
@@ -78,17 +78,17 @@
 
       <section class="card">
         <div class="tab-bar" role="tablist" aria-label="Lernfunktionen">
-          <button type="button" class="tab-button active" data-tab-target="tab-chat">Chat / Frage</button>
-          <button type="button" class="tab-button" data-tab-target="tab-summary">Zusammenfassung</button>
+          <button type="button" class="tab-button active" data-tab-target="tab-chat">Ask</button>
+          <button type="button" class="tab-button" data-tab-target="tab-summary">Summarize</button>
           <button type="button" class="tab-button" data-tab-target="tab-quiz">Quiz</button>
         </div>
 
         <div id="tab-chat" class="tab-panel active">
-          <h2>Chat / Frage stellen</h2>
+          <h2>Ask your materials</h2>
           <form action="{{ url_for('ask') }}" method="post" class="stacked async-form">
             <textarea name="question" rows="4" placeholder="Ask an evidence-grounded question about the active exam."></textarea>
             <label class="inline-check"><input type="checkbox" name="external_knowledge"> External knowledge (clearly labeled; off by default)</label>
-            <button type="submit">Frage beantworten</button>
+            <button type="submit">Answer from evidence</button>
           </form>
           {% if answer %}
             <div class="result">
@@ -151,23 +151,23 @@
         </div>
 
         <div id="tab-summary" class="tab-panel">
-          <h2>Zusammenfassung</h2>
+          <h2>Summarize a document</h2>
           <form action="{{ url_for('summarize') }}" method="post" class="stacked async-form">
             <select name="doc_name">
-              <option value="">Dokument waehlen</option>
+              <option value="">Choose a document</option>
               {% for doc in documents %}
                 <option value="{{ doc }}">{{ doc }}</option>
               {% endfor %}
             </select>
             <div class="inline-fields">
-              <input type="number" name="start_page" min="1" placeholder="Startseite">
-              <input type="number" name="end_page" min="1" placeholder="Endseite">
+              <input type="number" name="start_page" min="1" placeholder="Start page">
+              <input type="number" name="end_page" min="1" placeholder="End page">
             </div>
             <select name="mode">
-              <option value="combined">Kombiniert</option>
-              <option value="page-by-page">Folie zu Folie</option>
+              <option value="combined">Combined</option>
+              <option value="page-by-page">Page by page</option>
             </select>
-            <button type="submit">Zusammenfassung erzeugen</button>
+            <button type="submit">Create summary</button>
           </form>
           {% if summary %}
             <div class="result">
