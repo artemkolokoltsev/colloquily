@@ -4,7 +4,6 @@ import logging
 import os
 import re
 from pathlib import Path
-from urllib.parse import urlparse, urlunparse
 from functools import lru_cache
 from functools import wraps
 
@@ -13,11 +12,6 @@ from markupsafe import Markup, escape
 from werkzeug.utils import secure_filename
 
 import config
-from services.langtrace_service import init_langtrace, reset_langtrace, span_identity, trace_workflow
-
-# Langtrace must be initialized before importing RAG/LLM services so local
-# self-hosted tracing can instrument the full request path.
-init_langtrace()
 
 from services.database import (
     authenticate_user,
@@ -46,13 +40,11 @@ from services.eval_metrics import (
     latest_eval_run_summary,
     latest_eval_run_summary_by_prefix,
     load_metric_registry,
-    request_langtrace_attributes,
     restore_default_metrics,
     update_metric_registry,
 )
 from services.index_profiles import get_active_index_name, profile_statuses, set_active_index_name
-from services.langtrace_eval import attach_eval_attributes, get_langtrace_status, record_langtrace_feedback, send_eval_setup_test_trace
-from services.persistence import get_request_log, load_request_history, update_request_langtrace_ids
+from services.persistence import get_request_log, load_request_history
 from services.preprocessing_cache import cache_stats
 from services.rag_engine import RAGEngine
 from services.knowledge_repository import (
@@ -73,7 +65,10 @@ from services.exam_state import (
     start_exam_session,
     submit_exam_answer,
 )
-from services.quality_pipeline import process_subject
+from services.processing_jobs import (
+    create_processing_job, get_processing_job, latest_processing_job,
+    retry_processing_job, start_processing_job,
+)
 from services.subject_index import SubjectIndex
 from services.subject_rag import answer_subject_question
 from services.subject_workspace import workspace_for
@@ -99,7 +94,7 @@ initialize_runtime_settings()
 init_db()
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "meditech-rag-local-secret")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "colloquily-local-secret")
 
 
 @lru_cache(maxsize=1)
@@ -275,7 +270,6 @@ def _render_admin_eval(sync_result: dict | None = None):
         "admin_eval.html",
         user=g.user,
         current_config=_current_config(),
-        langtrace_status=get_langtrace_status(),
         metric_registry=load_metric_registry(),
         enabled_human_metrics=enabled_metrics("human"),
         recent_requests=history,
@@ -286,14 +280,12 @@ def _render_admin_eval(sync_result: dict | None = None):
         index_profiles=profile_statuses(),
         preprocessing_cache=cache_stats(),
         sync_result=sync_result,
-        langtrace_annotation_auto_create_available=False,
     )
 
 
 def _render_settings():
     engine = get_engine()
     runtime_values = load_runtime_settings()
-    langtrace_ui_url = _build_langtrace_ui_url()
     return render_template(
         "settings.html",
         stats=engine.get_stats(),
@@ -301,7 +293,6 @@ def _render_settings():
         document_inventory=engine.get_document_inventory(),
         current_config=_current_config(),
         settings_sections=build_settings_sections(runtime_values),
-        langtrace_ui_url=langtrace_ui_url,
         user=g.user,
     )
 
@@ -317,19 +308,6 @@ def _render_documents():
     )
 
 
-def _build_langtrace_ui_url() -> str | None:
-    api_host = getattr(config, "LANGTRACE_API_HOST", "") or ""
-    if not api_host:
-        return "http://localhost:3000"
-    parsed = urlparse(api_host)
-    if not parsed.scheme or not parsed.netloc:
-        return "http://localhost:3000"
-    cleaned_path = parsed.path or ""
-    if cleaned_path.endswith("/api/trace"):
-        cleaned_path = cleaned_path[: -len("/api/trace")] or "/"
-    return urlunparse((parsed.scheme, parsed.netloc, cleaned_path.rstrip("/") or "/", "", "", ""))
-
-
 def _render_user_management():
     return render_template(
         "users.html",
@@ -338,20 +316,6 @@ def _render_user_management():
         current_config=_current_config(),
         user=g.user,
     )
-
-
-def _capture_langtrace_request_context(span, request_id: str | None) -> dict | None:
-    if not request_id:
-        return None
-    identity = span_identity(span, request_id)
-    update_request_langtrace_ids(request_id, identity.get("trace_id"), identity.get("span_id"))
-    request_entry = get_request_log(request_id)
-    if request_entry:
-        attrs = request_langtrace_attributes(request_entry)
-        if g.user:
-            attrs["app.user_id"] = str(g.user["id"])
-        attach_eval_attributes(attrs)
-    return request_entry
 
 
 @app.get("/")
@@ -419,14 +383,6 @@ def admin_eval_export_metrics():
     return jsonify(load_metric_registry())
 
 
-@app.post("/admin/eval/test-trace")
-@admin_required
-def admin_eval_test_trace():
-    result = send_eval_setup_test_trace(enabled_metrics())
-    flash(result.get("message", "Test trace completed."), "success" if result.get("ok") else "error")
-    return _render_admin_eval(sync_result=result)
-
-
 @app.post("/admin/eval/index-profile")
 @admin_required
 def admin_eval_switch_index_profile():
@@ -460,6 +416,7 @@ def admin_subjects():
         selected_subject=selected,
         documents=list_subject_documents(selected["id"]) if selected else [],
         coverage=coverage_map(selected["id"]) if selected else [],
+        processing_job=latest_processing_job(selected["id"]) if selected else None,
     )
 
 
@@ -555,26 +512,36 @@ def process_subject_route(subject_id: int):
         mode = request.form.get("mode", "fast")
         if mode not in {"fast", "deep", "deterministic"}:
             raise ValueError("Unknown processing mode")
-        subject = get_subject(subject_id)
-        client = subject_task_llm(subject, "cleaning") if mode != "deterministic" else None
-        result = process_subject(
-            subject_id,
-            force=request.form.get("force") == "on",
-            cleanup_generate=client.generate if client else None,
-            local_model=getattr(client, "model_name", None),
-            relative_path=request.form.get("relative_path", "").strip() or None,
-            retry_failed=request.form.get("retry_failed") == "on",
-            mode=mode,
-            page_start=request.form.get("page_start", type=int),
-            page_end=request.form.get("page_end", type=int),
-        )
-        flash(
-            f"Processing completed: {result['processed']} processed, {result['skipped']} unchanged, {len(result['failed'])} failed.",
-            "success" if not result["failed"] else "error",
-        )
+        job = create_processing_job(subject_id, {
+            "force": request.form.get("force") == "on",
+            "relative_path": request.form.get("relative_path", "").strip() or None,
+            "retry_failed": request.form.get("retry_failed") == "on",
+            "mode": mode, "page_start": request.form.get("page_start", type=int),
+            "page_end": request.form.get("page_end", type=int),
+        })
+        start_processing_job(job["id"])
+        flash("Durable processing job started. You can leave this page and resume it after a restart.", "success")
     except Exception as exc:
         LOGGER.exception("Subject processing failed")
         flash(f"Exam processing failed: {exc}", "error")
+    return redirect(url_for("admin_subjects", subject_id=subject_id))
+
+
+@app.get("/admin/subjects/<int:subject_id>/processing-jobs/latest")
+@admin_required
+def processing_job_status(subject_id: int):
+    job = latest_processing_job(subject_id)
+    return jsonify(job or {"status": "none", "progress_percent": 0})
+
+
+@app.post("/admin/subjects/<int:subject_id>/processing-jobs/<int:job_id>/retry")
+@admin_required
+def retry_processing_job_route(subject_id: int, job_id: int):
+    job = get_processing_job(job_id)
+    if not job or int(job["subject_id"]) != subject_id:
+        return ("Not found", 404)
+    retry_processing_job(job_id)
+    flash("Processing resumed from durable checkpoints.", "success")
     return redirect(url_for("admin_subjects", subject_id=subject_id))
 
 
@@ -878,7 +845,7 @@ def answer_trainer_session(session_id: int):
         return ("Not found", 404)
     answer = request.form.get("answer", "").strip()
     if not answer:
-        flash("Please provide an answer or transcript.", "error")
+        flash("Please type an answer.", "error")
         return redirect(url_for("trainer_session", session_id=session_id))
     try:
         result = submit_exam_answer(
@@ -1023,7 +990,6 @@ def reindex():
 def update_runtime_settings_route():
     try:
         save_runtime_settings_from_form(request.form)
-        reset_langtrace()
         reset_engine()
         flash("Runtime-Parameter aktualisiert. Fuer Parser-, Chunking-, Embedding- oder LLM-Wechsel den Index neu aufbauen.", "success")
     except Exception:
@@ -1085,18 +1051,8 @@ def ask():
             answer_request_id=result.get("request_id"), summary_request_id=None, quiz_request_id=None,
         )
     engine = get_engine()
-    with trace_workflow(
-        "app.ask",
-        {
-            "workflow": "ask",
-            "user_id": g.user["id"],
-            "username": g.user["username"],
-            "question_length": len(question),
-        },
-    ) as span:
-        result = engine.answer_question(question)
-        request_entry = _capture_langtrace_request_context(span, result.get("request_id"))
-    request_entry = request_entry or get_request_log(result.get("request_id"))
+    result = engine.answer_question(question)
+    request_entry = get_request_log(result.get("request_id"))
     if request_entry:
         store_request(g.user["id"], request_entry)
     return _render_index(
@@ -1125,26 +1081,13 @@ def summarize():
     if not doc_name:
         flash("Bitte ein Dokument auswaehlen.", "error")
         return redirect(url_for("index"))
-    with trace_workflow(
-        "app.summarize",
-        {
-            "workflow": "summarize",
-            "user_id": g.user["id"],
-            "username": g.user["username"],
-            "doc_name": doc_name,
-            "mode": mode,
-            "start_page": int(start_page) if start_page else None,
-            "end_page": int(end_page) if end_page else None,
-        },
-    ) as span:
-        summary = engine.summarize_pages(
-            doc_name,
-            int(start_page) if start_page else None,
-            int(end_page) if end_page else None,
-            mode=mode,
-        )
-        request_entry = _capture_langtrace_request_context(span, summary.get("request_id"))
-    request_entry = request_entry or get_request_log(summary.get("request_id"))
+    summary = engine.summarize_pages(
+        doc_name,
+        int(start_page) if start_page else None,
+        int(end_page) if end_page else None,
+        mode=mode,
+    )
+    request_entry = get_request_log(summary.get("request_id"))
     if request_entry:
         store_request(g.user["id"], request_entry)
     return _render_index(
@@ -1168,19 +1111,8 @@ def quiz():
     engine = get_engine()
     topic = request.form.get("topic", "").strip()
     n_questions = request.form.get("n_questions", "5").strip()
-    with trace_workflow(
-        "app.quiz.generate",
-        {
-            "workflow": "quiz",
-            "user_id": g.user["id"],
-            "username": g.user["username"],
-            "topic": topic or "Quiz",
-            "n_questions": int(n_questions or 5),
-        },
-    ) as span:
-        result = engine.generate_quiz(topic, n_questions=int(n_questions or 5))
-        request_entry = _capture_langtrace_request_context(span, result.get("request_id"))
-    request_entry = request_entry or get_request_log(result.get("request_id"))
+    result = engine.generate_quiz(topic, n_questions=int(n_questions or 5))
+    request_entry = get_request_log(result.get("request_id"))
     if request_entry:
         store_request(g.user["id"], request_entry)
     quiz_session_id = create_quiz_session(g.user["id"], topic or "Quiz", result.get("request_id"), result.get("questions", []))
@@ -1305,36 +1237,7 @@ def feedback():
         db_saved = True
     except Exception:
         LOGGER.exception("Feedback database persistence failed", extra={"request_id": request_id, "user_id": g.user["id"]})
-    request_entry = request_entry or get_request_log(request_id)
-    feedback_metadata = {
-        "request_id": request_id,
-        "workflow": (request_entry or {}).get("workflow") or (request_entry or {}).get("request_type"),
-        "metric_source": "user_feedback",
-        "app": "meditech-rag",
-        "chunking_strategy": (request_entry or {}).get("chunking_strategy"),
-        "embedding_model": (request_entry or {}).get("embed_model"),
-        "llm_model": (request_entry or {}).get("llm_model"),
-    }
-    langtrace_saved = record_langtrace_feedback(
-        (request_entry or {}).get("trace_id") or (request_entry or {}).get("langtrace_trace_id"),
-        (request_entry or {}).get("span_id") or (request_entry or {}).get("langtrace_span_id"),
-        feedback_score,
-        details,
-        user_id=g.user["id"],
-        metadata=feedback_metadata,
-    )
-    if history_saved:
-        get_engine().save_feedback(request_id, helpful, details, score=feedback_score, label=vote, langtrace_sent=langtrace_saved)
-    langtrace_expected = config.ENABLE_LANGTRACE and config.LANGTRACE_MODE != "disabled" and bool(config.LANGTRACE_API_KEY)
-    if not langtrace_saved:
-        LOGGER.info("Feedback saved locally without Langtrace evaluation", extra={"request_id": request_id})
-    if (history_saved or db_saved) and langtrace_expected and langtrace_saved:
-        flash("Feedback gespeichert und an Langtrace uebermittelt.", "success")
-    elif history_saved or db_saved:
-        flash("Feedback gespeichert.", "success")
-        if langtrace_expected:
-            LOGGER.warning("Optional Langtrace feedback delivery failed", extra={"request_id": request_id})
-    elif langtrace_saved:
+    if history_saved or db_saved:
         flash("Feedback gespeichert.", "success")
     else:
         flash("Feedback konnte nicht gespeichert werden.", "error")

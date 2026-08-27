@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import config
+from services.prompt_templates import render_prompt
 
 
 def _trim(text: str, max_chars: int = 1200) -> str:
@@ -18,30 +19,17 @@ def build_qa_prompt(question: str, contexts: list[dict], strict_rag: bool = True
         context_text = "\n\n".join(context_blocks)
     else:
         context_text = "Keine Quellen gefunden."
-    strict_line = (
-        "Antworte ausschliesslich auf Basis der Quellen. Wenn die Information nicht in den Quellen steht, sage das klar."
-        if strict_rag
-        else "Bevorzuge die Quellen. Wenn etwas fehlt, kennzeichne die Unsicherheit deutlich."
+    grounding_rule = (
+        "Answer only from the supplied evidence. If the answer is absent, say so clearly."
+        if strict_rag else "Prefer the supplied evidence and clearly label uncertainty when it is incomplete."
     )
-    return (
-        "Du bist ein lokaler Lernassistent fuer ein Universitaetsfach. Antworte praezise und lernorientiert.\n"
-        f"{strict_line}\n"
-        "Setze direkte Quellenhinweise unmittelbar nach den relevanten Aussagen in der Form [Q1], [Q2] oder [Q1][Q2].\n"
-        "Nutze nur die angegebenen Quellen-IDs. Wenn eine Aussage nicht belegt ist, sage das klar.\n\n"
-        f"Frage:\n{question}\n\n"
-        f"Kontext:\n{context_text}\n\n"
-        "Antwort:"
-    )
+    return render_prompt("core", "qa", grounding_rule=grounding_rule, question=question, context=context_text)
 
 
 def build_page_summary_prompt(doc_name: str, page_number: int, text: str) -> str:
-    return (
-        "Erstelle eine sehr knappe Lernzusammenfassung auf Deutsch.\n"
-        "Format: 4 bis 6 Stichpunkte, zentrale Begriffe, pruefungsrelevante Kernaussagen.\n"
-        f"Dokument: {doc_name}\n"
-        f"Seite: {page_number}\n\n"
-        f"Inhalt:\n{_trim(text, config.SUMMARY_PAGE_TEXT_CHARS)}\n\n"
-        "Zusammenfassung:"
+    return render_prompt(
+        "core", "page_summary", document=doc_name, page=page_number,
+        content=_trim(text, config.SUMMARY_PAGE_TEXT_CHARS),
     )
 
 
@@ -50,13 +38,7 @@ def build_multi_page_summary_prompt(doc_name: str, page_items: list[dict]) -> st
     for item in page_items:
         excerpts.append(f"[Seite {item['page_number']}]\n{_trim(item['text'], config.SUMMARY_MULTI_PAGE_TEXT_CHARS)}")
     joined = "\n\n".join(excerpts)
-    return (
-        "Fasse die folgenden Vorlesungsseiten fuer die Klausurvorbereitung auf Deutsch zusammen.\n"
-        "Bleibe knapp, behalte Seitenverweise bei und nenne nur die wichtigsten Begriffe und Zusammenhaenge.\n"
-        f"Dokument: {doc_name}\n\n"
-        f"Seiteninhalt:\n{joined}\n\n"
-        "Zusammenfassung:"
-    )
+    return render_prompt("core", "multi_page_summary", document=doc_name, content=joined)
 
 
 def build_summary_synthesis_prompt(doc_name: str, partial_summaries: list[dict]) -> str:
@@ -64,13 +46,7 @@ def build_summary_synthesis_prompt(doc_name: str, partial_summaries: list[dict])
     for item in partial_summaries:
         blocks.append(f"[Seiten {item['label']}]\n{_trim(item['summary'], 700)}")
     joined = "\n\n".join(blocks)
-    return (
-        "Verdichte die folgenden Teilzusammenfassungen fuer die Klausurvorbereitung.\n"
-        "Antworte auf Deutsch in kurzen Stichpunkten und behalte die Seitenbereiche bei.\n"
-        f"Dokument: {doc_name}\n\n"
-        f"Teilzusammenfassungen:\n{joined}\n\n"
-        "Endgueltige Zusammenfassung:"
-    )
+    return render_prompt("core", "summary_synthesis", document=doc_name, content=joined)
 
 
 def build_quiz_prompt(topic_or_instruction: str, contexts: list[dict], n_questions: int) -> str:
@@ -79,14 +55,7 @@ def build_quiz_prompt(topic_or_instruction: str, contexts: list[dict], n_questio
         label = f"Quelle {idx}: {item['doc_name']}, Seite {item['page_number']}, {item['source_type']}"
         context_blocks.append(f"[{label}]\n{_trim(item['text'], 900)}")
     joined = "\n\n".join(context_blocks) if context_blocks else "Keine Quellen verfuegbar."
-    return (
-        "Erstelle klausurartige Uebungsfragen fuer das durch die Quellen definierte Universitaetsfach.\n"
-        f"Erzeuge genau {n_questions} Fragen. Mische kurze Freitextfragen und Multiple-Choice, wenn passend.\n"
-        "Gib zu jeder Frage eine kurze Musterloesung oder Loesungsschluessel an und nenne passende Quellen.\n"
-        f"Thema oder Anweisung: {topic_or_instruction}\n\n"
-        f"Kontext:\n{joined}\n\n"
-        "Quiz:"
-    )
+    return render_prompt("core", "quiz", count=n_questions, topic=topic_or_instruction, context=joined)
 
 
 def build_quiz_json_prompt(topic_or_instruction: str, contexts: list[dict], n_questions: int) -> str:
@@ -96,14 +65,4 @@ def build_quiz_json_prompt(topic_or_instruction: str, contexts: list[dict], n_qu
         label = f"{citation_id}: {item['doc_name']}, Seite {item['page_number']}, {item['source_type']}"
         context_blocks.append(f"[{label}]\n{_trim(item['text'], 700)}")
     joined = "\n\n".join(context_blocks) if context_blocks else "Keine Quellen verfuegbar."
-    return (
-        "Erstelle quellenbasierte Multiple-Choice-Lernfragen und antworte ausschliesslich als JSON.\n"
-        f"Erzeuge genau {n_questions} Fragen.\n"
-        "JSON-Format: "
-        '[{"question":"...","options":["A","B","C","D"],"correct_answer":"...","explanation":"...","sources":["Q1","Q2"]}]\n'
-        "Die correct_answer muss exakt einem Eintrag aus options entsprechen.\n"
-        "Keine Markdown-Umrandung, keine Zusatzerklaerung ausserhalb des JSON.\n"
-        f"Thema: {topic_or_instruction}\n\n"
-        f"Kontext:\n{joined}\n\n"
-        "JSON:"
-    )
+    return render_prompt("core", "quiz_json", count=n_questions, topic=topic_or_instruction, context=joined)

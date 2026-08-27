@@ -74,20 +74,6 @@ SETTINGS_SCHEMA = [
             {"key": "LLM_TEMPERATURE", "label": "LLM Temperature", "type": "float", "description": "Sampling-Temperatur fuer lokale Antwortgenerierung.", "influences": "Niedrige Werte machen Antworten stabiler, hohe Werte kreativer aber potenziell ungenauer."},
         ],
     },
-    {
-        "section": "Tracing",
-        "anchor": "tracing",
-        "description": "Optionale Langtrace-Integration fuer lokale Prompt-, Retrieval- und Response-Analysen.",
-        "fields": [
-            {"key": "ENABLE_LANGTRACE", "label": "Enable Langtrace", "type": "bool", "description": "Schaltet Tracing fuer Chat-, Retrieval- und LLM-Ablauf ein. Deaktiviert die Integration komplett, wenn lokal kein Tracing gebraucht wird.", "influences": "Aktiviert die Erfassung von Ablaufspuren fuer Debugging, Evaluierung und Halluzinationsanalyse."},
-            {"key": "LANGTRACE_MODE", "label": "Langtrace Mode", "type": "select", "options": ["disabled", "console", "self_hosted", "cloud"], "description": "Waehlt, ob Traces nur im Terminal erscheinen oder an eine lokale bzw. entfernte Langtrace-Instanz gesendet werden.", "influences": "Steuert das Ziel und die Sichtbarkeit der Trace-Daten."},
-            {"key": "LANGTRACE_API_HOST", "label": "Langtrace API Host", "type": "text", "description": "Ingestion-Endpunkt der Langtrace-Instanz, zum Beispiel http://localhost:3000/api/trace fuer self-hosted lokal.", "influences": "Bestimmt, wohin exportierte Spuren geschickt werden."},
-            {"key": "LANGTRACE_API_KEY", "label": "Langtrace API Key", "type": "password", "description": "Projekt-API-Key aus der Langtrace-Oberflaeche. Nur noetig, wenn die Zielinstanz geschuetzt ist.", "influences": "Erlaubt die Authentifizierung gegen die lokale oder entfernte Langtrace-Instanz."},
-            {"key": "LANGTRACE_BATCH", "label": "Langtrace Batch Export", "type": "bool", "description": "Versendet Spuren gesammelt statt sofort einzeln.", "influences": "Verringert Export-Overhead, kann aber Traces mit kleiner Verzoegerung sichtbar machen."},
-            {"key": "LANGTRACE_WRITE_SPANS_TO_CONSOLE", "label": "Write Spans To Console", "type": "bool", "description": "Spiegelt Trace-Informationen zusaetzlich direkt ins lokale Terminal.", "influences": "Hilft beim schnellen Debugging ohne die Langtrace-Oberflaeche zu oeffnen."},
-            {"key": "LANGTRACE_CAPTURE_CONTENT", "label": "Capture Prompt/Response Content", "type": "bool", "description": "Speichert Prompt-, Antwort- und Workflow-Inhalte als Trace-Attribute, soweit die Integration sie liefert.", "influences": "Ermoeglicht tiefere Prompt- und Halluzinationsanalyse, erhoeht aber die Sensitivitaet der Trace-Daten."},
-        ],
-    },
 ]
 
 
@@ -116,7 +102,7 @@ def _coerce_value(value: Any, field_type: str) -> Any:
 
 def _apply(settings: dict[str, Any]) -> dict[str, Any]:
     merged = default_runtime_settings()
-    merged.update(settings)
+    merged.update({key: value for key, value in settings.items() if key in _schema_map()})
     for key, value in merged.items():
         setattr(config, key, value)
     config.LMSTUDIO_EMBEDDINGS_URL = f"{config.LMSTUDIO_BASE_URL.rstrip('/')}/v1/embeddings"
@@ -142,7 +128,7 @@ def save_runtime_settings_from_form(form: dict[str, Any]) -> dict[str, Any]:
     current = default_runtime_settings()
     if os.path.exists(config.RUNTIME_SETTINGS_PATH):
         with open(config.RUNTIME_SETTINGS_PATH, "r", encoding="utf-8") as handle:
-            current.update(json.load(handle))
+            current.update({key: value for key, value in json.load(handle).items() if key in schema})
     updated = dict(current)
     for key, field in schema.items():
         field_type = field["type"]

@@ -20,6 +20,9 @@ def _connect() -> sqlite3.Connection:
     connection = sqlite3.connect(config.DB_PATH, timeout=10)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute("PRAGMA journal_mode = WAL")
+    connection.execute("PRAGMA synchronous = FULL")
+    connection.execute("PRAGMA busy_timeout = 10000")
     return connection
 
 
@@ -326,6 +329,26 @@ def init_db() -> None:
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS subject_processing_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject_id INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'queued',
+                mode TEXT NOT NULL DEFAULT 'fast',
+                total_documents INTEGER NOT NULL DEFAULT 0,
+                completed_documents INTEGER NOT NULL DEFAULT 0,
+                failed_documents INTEGER NOT NULL DEFAULT 0,
+                current_document TEXT,
+                current_batch INTEGER NOT NULL DEFAULT 0,
+                total_batches INTEGER NOT NULL DEFAULT 0,
+                progress_percent REAL NOT NULL DEFAULT 0,
+                options_json TEXT NOT NULL DEFAULT '{}',
+                result_json TEXT,
+                error_text TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
+            );
             """
         )
         _migrate_subject_scope(connection)
@@ -351,7 +374,7 @@ def _add_subject_column(connection: sqlite3.Connection, table: str) -> None:
 
 
 def _migrate_subject_scope(connection: sqlite3.Connection) -> None:
-    """Idempotently scopes legacy activity to a preserved MediTech subject."""
+    """Idempotently scopes imported activity to a neutral Colloquily exam."""
     now = datetime.now().isoformat(timespec="seconds")
     connection.execute(
         """
@@ -359,9 +382,17 @@ def _migrate_subject_scope(connection: sqlite3.Connection) -> None:
             id, slug, name, description, language, exam_duration_minutes,
             local_llm_config_json, embedding_config_json, active_index_profile,
             created_at, updated_at
-        ) VALUES (?, 'meditech', 'MediTech', 'Imported legacy MediTech course', 'de', 15, '{}', '{}', 'legacy', ?, ?)
+        ) VALUES (?, 'imported-exam', 'Imported Exam', 'Imported course material', 'de', 15, '{}', '{}', 'legacy', ?, ?)
         """,
         (LEGACY_SUBJECT_ID, now, now),
+    )
+    connection.execute(
+        """
+        UPDATE subjects SET slug = 'imported-exam', name = 'Imported Exam',
+            description = 'Imported course material', updated_at = ?
+        WHERE id = ? AND (slug = 'meditech' OR name = 'MediTech')
+        """,
+        (now, LEGACY_SUBJECT_ID),
     )
     for table in ("requests", "request_sources", "quiz_sessions", "quiz_questions", "quiz_attempts"):
         _add_subject_column(connection, table)

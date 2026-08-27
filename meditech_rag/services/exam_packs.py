@@ -11,6 +11,7 @@ from services.database import _connect
 from services.subject_workspace import workspace_for
 from services.training_repository import accepted_evidence_map
 from services.structured_json import parse_json_object
+from services.prompt_templates import render_prompt
 
 
 class SupportedPoint(BaseModel):
@@ -60,14 +61,9 @@ def exam_pack_prompt(subject: dict, evidence: list[dict]) -> str:
         {"evidence_id": item["id"], "content": item["content"], "source": f"{item['relative_path']} — {item['source_location']}"}
         for item in evidence
     ]
-    return (
-        "Create reviewable oral-exam pack sections using only accepted evidence. This is a generated artifact, "
-        "never primary evidence. Do not introduce unsupported researchers, models, examples, or claims. "
-        "Return JSON with top-level sections. Every factual SupportedPoint and follow-up must cite integer "
-        "evidence_ids. oral_answer must be 30-90 seconds and cite facts as [E<number>]. Include concept, definition, "
-        "core_idea, components_or_process, main_distinctions, subject_relevance, simple_example, oral_answer, "
-        "follow_up_questions, must_know, useful_detail, and low_priority."
-        f"{extra}\nACCEPTED_EVIDENCE={json.dumps(sources, ensure_ascii=False)}"
+    return render_prompt(
+        "training", "exam_pack", specialization=extra,
+        evidence=json.dumps(sources, ensure_ascii=False),
     )
 
 
@@ -86,9 +82,8 @@ def generate_exam_pack(subject: dict, llm_client) -> list[dict]:
     try:
         batch = _validate(raw)
     except Exception:
-        repair_prompt = exam_pack_prompt(subject, evidence) + (
-            "\nThe previous response was malformed. Return one corrected JSON object only. PREVIOUS_RESPONSE="
-            + raw[:12000]
+        repair_prompt = render_prompt(
+            "training", "repair_structured_json", original=exam_pack_prompt(subject, evidence), response=raw[:12000]
         )
         try:
             repaired = llm_client.generate(repair_prompt, temperature=0.0)

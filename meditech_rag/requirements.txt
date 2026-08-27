@@ -8,5 +8,4 @@ torch
 pydantic>=2,<3
 pytest
 # Optional tracing/evaluation:
-langtrace-python-sdk
 opentelemetry-exporter-otlp-proto-common

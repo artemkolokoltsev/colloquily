@@ -6,6 +6,7 @@ import requests
 
 import config
 from services.embeddings.lmstudio_embedder import LMStudioEmbedder
+from services.embeddings.ollama_embedder import OllamaEmbedder
 from services.embeddings.st_embedder import SentenceTransformerEmbedder
 from services.llm.lmstudio_llm import LMStudioLLMClient
 from services.llm.ollama_llm import OllamaLLMClient
@@ -61,7 +62,13 @@ def subject_task_llm(subject: dict, task: str) -> ConfiguredLLM:
 
 def subject_embedder(subject: dict):
     settings = subject.get("embedding_config") or {}
-    backend = settings.get("backend", "st")
+    backend = settings.get("backend", "ollama")
+    if backend == "ollama":
+        return OllamaEmbedder(
+            base_url=config.OLLAMA_URL,
+            model_name=settings.get("model", config.OLLAMA_EMBED_MODEL),
+            timeout=int(settings.get("timeout_seconds", config.OLLAMA_EMBED_TIMEOUT_SECONDS)),
+        )
     if backend == "st":
         return SentenceTransformerEmbedder(settings.get("model", config.ST_EMBED_MODEL))
     if backend == "lmstudio":
@@ -70,7 +77,7 @@ def subject_embedder(subject: dict):
             model_name=settings.get("model", config.LMSTUDIO_EMBED_MODEL),
             timeout=int(settings.get("timeout_seconds", config.LMSTUDIO_TIMEOUT_SECONDS)),
         )
-    raise ValueError("Only local embedding backends are supported")
+    raise ValueError("Only Ollama, SentenceTransformer, and LM Studio embedding backends are supported")
 
 
 def detect_local_models() -> dict:

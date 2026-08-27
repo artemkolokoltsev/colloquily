@@ -1,6 +1,6 @@
-# Oral Exam Trainer
+# Colloquily
 
-Oral Exam Trainer is a reusable, completely local Flask application for preparing evidence-grounded university oral exams. It supports exam-isolated Markdown/PDF ingestion, quality review, accepted-only FAISS indexes, grounded questions and evaluation, timed single- and multi-exam practice, and a five-day study plan.
+Colloquily is a reusable, completely local Flask application for preparing evidence-grounded university oral exams. It supports exam-isolated Markdown/PDF ingestion, quality review, accepted-only FAISS indexes, grounded questions and evaluation, timed single- and multi-exam practice, and a five-day study plan.
 
 The main application lives in [`meditech_rag/`](meditech_rag/).
 
@@ -34,13 +34,31 @@ Default local admin account:
 
 Change the default password before using the app beyond local development.
 
+## Run and test
+
+Ollama must be running before starting Colloquily. From the repository root:
+
+```bash
+ollama list
+make dev
+```
+
+Open `http://localhost:8000` and sign in with `admin` / `admin` for local development.
+Run the automated checks in a second terminal:
+
+```bash
+make test
+make verify
+```
+
+The first command runs the unit and integration suite. The second creates disposable PDF and Markdown exams and verifies ingestion, exam isolation, evaluation, mock-exam state, and index reload.
+
 ## Useful Commands
 
 ```bash
 make dev
-make langtrace-up
-make langtrace-logs
-make langtrace-down
+make test
+make verify
 ```
 
 ## Project Layout
@@ -48,19 +66,18 @@ make langtrace-down
 ```text
 .
 |-- docs/                         Static browser documentation
-|-- docker/                       Langtrace database bootstrap files
 |-- Literature/                   Research PDFs and references
-|-- meditech_rag/                 Oral Exam Trainer application (legacy folder name retained)
+|-- meditech_rag/                 Colloquily application (package path retained for compatibility)
 |   |-- app.py                    Flask routes and UI workflow orchestration
 |   |-- config.py                 Runtime defaults, paths, model settings
 |   |-- configs/                  Prepared index profile definitions
 |   |-- data/exams/               Exam-isolated raw material, artifacts, and FAISS indexes
+|   |-- data/colloquily.db        Durable SQLite database (WAL, full synchronous writes)
 |   |-- scripts/                  Index preparation and evaluation scripts
 |   |-- services/                 RAG, parsing, indexing, persistence, eval services
 |   |-- static/                   CSS
 |   |-- templates/                Flask/Jinja pages
 |   `-- tests/                    Focused tests
-|-- docker-compose.langtrace.yml  Optional self-hosted Langtrace stack
 |-- Makefile                      Convenience commands
 `-- README.md                     Repository entry point
 ```

@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Quality review | Oral Exam Trainer</title><link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}"></head>
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Quality review | Colloquily</title><link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}"></head>
   <body><main class="page">
     <header class="hero"><div><p class="eyebrow">Quality review</p><h1>{{ subject.name }}</h1><p>Compare immutable source text with the cleaned candidate before indexing.</p></div><div class="hero-actions"><a class="button-link secondary-link" href="{{ url_for('admin_subjects', subject_id=subject.id) }}">Back to exam</a></div></header>
     {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<section class="card">{% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}</section>{% endif %}{% endwith %}

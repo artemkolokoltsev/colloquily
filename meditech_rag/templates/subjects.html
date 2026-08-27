@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Exams | Oral Exam Trainer</title>
+    <title>Exams | Colloquily</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   </head>
   <body>
@@ -49,6 +49,12 @@
           <div class="subcard">
             <h3>Processing</h3>
             <form action="{{ url_for('process_subject_route', subject_id=selected_subject.id) }}" method="post" class="stacked"><label>Cleanup mode<select name="mode"><option value="fast" selected>Fast — local model only for suspicious sections</option><option value="deep">Deep — local model checks every section</option><option value="deterministic">Deterministic — no LLM cleanup</option></select></label><label>One document (optional)<select name="relative_path"><option value="">All discovered files</option>{% for doc in documents %}<option value="{{ doc.relative_path }}">{{ doc.relative_path }}</option>{% endfor %}</select></label><div class="inline-fields"><input type="number" min="1" name="page_start" placeholder="Start page"><input type="number" min="1" name="page_end" placeholder="End page"></div><label class="inline-check"><input type="checkbox" name="retry_failed"> Retry failed batches</label><label class="inline-check"><input type="checkbox" name="force"> Force reprocessing</label><button type="submit">Discover &amp; process</button></form>
+            <div id="processing-progress" data-url="{{ url_for('processing_job_status', subject_id=selected_subject.id) }}">
+              <div class="section-head"><strong id="processing-status">{{ processing_job.status if processing_job else 'not started' }}</strong><span id="processing-percent">{{ processing_job.progress_percent if processing_job else 0 }}%</span></div>
+              <progress id="processing-bar" max="100" value="{{ processing_job.progress_percent if processing_job else 0 }}" style="width:100%"></progress>
+              <p id="processing-detail" class="section-copy">{% if processing_job %}{{ processing_job.current_document or 'Waiting to start' }} · document {{ processing_job.completed_documents + processing_job.failed_documents }}/{{ processing_job.total_documents }} · page batch {{ processing_job.current_batch }}/{{ processing_job.total_batches }}{% else %}Jobs run in the background and checkpoint each PDF page.{% endif %}</p>
+              {% if processing_job and processing_job.status not in ['completed'] %}<form action="{{ url_for('retry_processing_job_route', subject_id=selected_subject.id, job_id=processing_job.id) }}" method="post"><button class="secondary" type="submit">Resume / retry from checkpoint</button></form>{% endif %}
+            </div>
             <form action="{{ url_for('build_subject_index_route', subject_id=selected_subject.id) }}" method="post" class="stacked"><button type="submit">Build accepted-only index</button></form>
           </div>
         </div>
@@ -58,5 +64,25 @@
       <section class="card danger-zone"><h2>Delete exam record</h2><p>Database entities are deleted; the raw workspace stays on disk for recovery.</p><form action="{{ url_for('delete_subject_route', subject_id=selected_subject.id) }}" method="post"><button class="secondary" type="submit">Delete exam</button></form></section>
       {% endif %}
     </main>
+    {% if selected_subject %}<script>
+      const progressBox=document.getElementById('processing-progress');
+      let previousStatus=document.getElementById('processing-status').textContent.trim().replaceAll(' ','_');
+      async function refreshProgress(){
+        try {
+          const response=await fetch(progressBox.dataset.url,{headers:{Accept:'application/json'}});
+          if(!response.ok)return;
+          const job=await response.json(); const percent=Number(job.progress_percent||0);
+          const currentStatus=job.status||'none';
+          document.getElementById('processing-status').textContent=currentStatus.replaceAll('_',' ');
+          document.getElementById('processing-percent').textContent=`${percent.toFixed(1)}%`;
+          document.getElementById('processing-bar').value=percent;
+          document.getElementById('processing-detail').textContent=`${job.current_document||'Waiting'} · document ${(job.completed_documents||0)+(job.failed_documents||0)}/${job.total_documents||0} · page batch ${job.current_batch||0}/${job.total_batches||0}`;
+          if(['queued','running'].includes(currentStatus))setTimeout(refreshProgress,1000);
+          else if(['queued','running'].includes(previousStatus))setTimeout(()=>window.location.reload(),800);
+          previousStatus=currentStatus;
+        } catch (_error) { setTimeout(refreshProgress,3000); }
+      }
+      refreshProgress();
+    </script>{% endif %}
   </body>
 </html>

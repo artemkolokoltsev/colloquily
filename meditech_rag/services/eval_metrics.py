@@ -31,7 +31,7 @@ def _metric(
         "description": description,
         "rubric": rubric or "",
         "thresholds": thresholds or {},
-        "langtrace_attribute_name": f"eval.{key}",
+        "local_attribute_name": f"eval.{key}",
     }
     return payload
 
@@ -194,67 +194,6 @@ def metric_attribute_payload() -> dict:
         "eval.enabled_automatic_metrics": json.dumps(snapshot["enabled_automatic_metrics"], ensure_ascii=False),
         "eval.metric_names": json.dumps(snapshot["metric_names"], ensure_ascii=False),
     }
-
-
-def request_langtrace_attributes(entry: dict) -> dict:
-    sources = entry.get("sources", []) or []
-    metrics = entry.get("automatic_metrics", {}) or {}
-    citations = entry.get("citations", []) or []
-    attrs = {
-        "app.name": "meditech-rag",
-        "app.workflow": entry.get("workflow") or entry.get("request_type"),
-        "app.request_id": entry.get("request_id"),
-        "app.local_only": True,
-        "rag.chunking_strategy": entry.get("chunking_strategy"),
-        "rag.index_profile": entry.get("index_profile"),
-        "rag.chunk_overlap_enabled": entry.get("chunk_overlap_enabled"),
-        "rag.overlap_enabled": entry.get("chunk_overlap_enabled"),
-        "rag.embedding_backend": entry.get("embed_backend"),
-        "rag.embedding_model": entry.get("embed_model"),
-        "rag.llm_backend": entry.get("llm_backend"),
-        "rag.llm_model": entry.get("llm_model"),
-        "rag.metadata_rerank_enabled": entry.get("metadata_rerank_enabled"),
-        "rag.top_k": entry.get("top_k"),
-        "retrieval.query": entry.get("input_text"),
-        "retrieval.k": len(sources),
-        "retrieval.top_chunk_ids": json.dumps([item.get("chunk_id") for item in sources], ensure_ascii=False),
-        "retrieval.top_doc_names": json.dumps([item.get("doc_name") for item in sources], ensure_ascii=False),
-        "retrieval.top_pages": json.dumps([item.get("page_number") for item in sources], ensure_ascii=False),
-        "retrieval.top_scores": json.dumps([item.get("score") for item in sources], ensure_ascii=False),
-        "retrieval.top_source_types": json.dumps([item.get("source_type") for item in sources], ensure_ascii=False),
-        "retrieval.top_chunk_types": json.dumps([item.get("chunk_type") for item in sources], ensure_ascii=False),
-        "retrieval.duplicate_retrieval_ratio": metrics.get("duplicate_retrieval_ratio"),
-        "retrieval.first_relevant_rank": metrics.get("first_relevant_rank"),
-        "retrieval.hit_at_1": metrics.get("hit_at_1"),
-        "retrieval.hit_at_3": metrics.get("hit_at_3"),
-        "retrieval.hit_at_5": metrics.get("hit_at_5"),
-        "retrieval.mrr": metrics.get("mrr"),
-        "citation.count": metrics.get("citation_count"),
-        "citation.has_citations": bool(metrics.get("citation_count")),
-        "citation.page_accuracy": metrics.get("citation_page_accuracy"),
-        "citation.cited_doc_names": json.dumps([item.get("doc_name") for item in citations], ensure_ascii=False),
-        "citation.cited_pages": json.dumps([item.get("page_number") for item in citations], ensure_ascii=False),
-        "citation.cited_chunk_ids": json.dumps([item.get("chunk_id") for item in citations], ensure_ascii=False),
-        "answer.length_chars": entry.get("output_length"),
-        "answer.language": "de",
-        "answer.groundedness_warning_count": metrics.get("groundedness_warning_count"),
-        "answer.has_unsupported_claim_warning": "answer_mentions_outside_context" in (entry.get("warnings") or []),
-        "eval.hit_at_1": metrics.get("hit_at_1"),
-        "eval.hit_at_3": metrics.get("hit_at_3"),
-        "eval.hit_at_5": metrics.get("hit_at_5"),
-        "eval.first_relevant_rank": metrics.get("first_relevant_rank"),
-        "eval.mrr": metrics.get("mrr"),
-        "eval.citation_page_accuracy": metrics.get("citation_page_accuracy"),
-        "eval.duplicate_retrieval_ratio": metrics.get("duplicate_retrieval_ratio"),
-        "eval.citation_count": metrics.get("citation_count"),
-        "eval.citation_coverage": metrics.get("citation_coverage"),
-        "eval.retrieval_top_score": metrics.get("retrieval_top_score"),
-        "eval.retrieval_score_spread": metrics.get("retrieval_score_spread"),
-        "eval.groundedness_warning_count": metrics.get("groundedness_warning_count"),
-        "eval.latency_seconds": metrics.get("latency_seconds"),
-    }
-    attrs.update(metric_attribute_payload())
-    return {key: value for key, value in attrs.items() if value is not None}
 
 
 def dataset_summary() -> dict:

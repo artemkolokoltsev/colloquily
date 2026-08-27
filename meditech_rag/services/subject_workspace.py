@@ -49,8 +49,11 @@ class SubjectWorkspace:
     def root(self) -> Path:
         primary = Path(config.SUBJECTS_DIR) / self.slug
         legacy_root = Path(getattr(config, "LEGACY_SUBJECTS_DIR", config.SUBJECTS_DIR)) / self.slug
+        imported_legacy_root = Path(getattr(config, "LEGACY_SUBJECTS_DIR", config.SUBJECTS_DIR)) / "meditech"
         if not primary.exists() and legacy_root.exists():
             return legacy_root
+        if self.subject_id == 1 and not primary.exists() and imported_legacy_root.exists():
+            return imported_legacy_root
         return primary
 
     def folder(self, name: str) -> Path:

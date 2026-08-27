@@ -6,7 +6,6 @@ import time
 import requests
 
 import config
-from services.langtrace_service import trace_llm_call
 
 
 class OllamaLLMClient:
@@ -58,9 +57,4 @@ class OllamaLLMClient:
                 self.logger.exception("Ollama request failed")
                 return "Die lokale Ollama-Instanz ist nicht erreichbar. Bitte pruefen Sie, ob Ollama laeuft."
 
-        return trace_llm_call(
-            "ollama.generate",
-            {"backend": "ollama", "model": self.model_name, "timeout_seconds": self.timeout, "temperature": config.LLM_TEMPERATURE if temperature is None else temperature},
-            _call,
-            prompt=prompt,
-        )
+        return _call()

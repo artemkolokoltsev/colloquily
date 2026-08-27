@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Oral Exam Trainer Documentation</title>
+  <title>Colloquily Documentation</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism.min.css">
   <style>
@@ -259,7 +259,7 @@
   <div class="layout">
     <aside>
       <div class="brand">
-        <h1>Oral Exam Trainer</h1>
+        <h1>Colloquily</h1>
         <p>Static project documentation</p>
       </div>
       <nav aria-label="Documentation sections">
@@ -272,7 +272,6 @@
         <a href="#configuration">Configuration</a>
         <a href="#indexing">Indexing</a>
         <a href="#evaluation">Evaluation</a>
-        <a href="#langtrace">Langtrace</a>
         <a href="#operations">Operations</a>
       </nav>
     </aside>
@@ -280,13 +279,13 @@
     <main>
       <div class="hero">
         <span class="status">Open as docs/index.html</span>
-        <h2>Oral Exam Trainer Documentation</h2>
+        <h2>Colloquily Documentation</h2>
         <p>Documentation for the local Flask RAG learning assistant: application structure, runtime data, indexing, retrieval, evaluation, and operation notes.</p>
       </div>
 
       <section id="overview">
         <h2>Overview</h2>
-        <p>Oral Exam Trainer is a completely local, multi-subject study assistant for reviewed Markdown and PDF course material. It builds separate accepted-only indexes, generates evidence-bound questions, evaluates typed oral answers, and runs timed subject simulations with exact citations.</p>
+        <p>Colloquily is a completely local, multi-subject study assistant for reviewed Markdown and PDF course material. It builds separate accepted-only indexes, generates evidence-bound questions, evaluates typed oral answers, and runs timed subject simulations with exact citations.</p>
         <div class="grid">
           <div class="card">
             <h3>Local First</h3>
@@ -298,7 +297,7 @@
           </div>
           <div class="card">
             <h3>Experiment Friendly</h3>
-            <p>Prepared index profiles, evaluation scripts, metrics, feedback, and optional Langtrace traces support retrieval quality comparisons.</p>
+            <p>Prepared index profiles, evaluation scripts, metrics, and local feedback support retrieval quality comparisons.</p>
           </div>
         </div>
         <div class="card">
@@ -336,7 +335,7 @@ flowchart TD
   Prep --> Parser["pdf_parsers: PyMuPDF or Marker"]
   Prep --> Source["SourceUnit pages blocks topics"]
   Engine --> Chunking["chunking strategies"]
-  Chunking --> Embed["embeddings: SentenceTransformer or LM Studio"]
+  Chunking --> Embed["embeddings: Ollama EmbeddingGemma, SentenceTransformer, or LM Studio"]
   Embed --> FAISS["vector_store.py FAISS"]
   Engine --> Prompt["prompt_builder.py"]
   Prompt --> LLM["llm: Ollama or LM Studio"]
@@ -349,7 +348,7 @@ flowchart TD
           <thead><tr><th>Path</th><th>Responsibility</th></tr></thead>
           <tbody>
             <tr><td><code>app.py</code></td><td>Flask routes, auth guards, admin pages, chat, summaries, quiz, feedback, structure endpoint.</td></tr>
-            <tr><td><code>config.py</code></td><td>Paths, model defaults, chunking settings, Langtrace flags, evaluation paths, topic vocabulary.</td></tr>
+            <tr><td><code>config.py</code></td><td>Paths, model defaults, chunking settings, evaluation paths, and topic configuration.</td></tr>
             <tr><td><code>services/rag_engine.py</code></td><td>Loads indexes, runs retrieval, reranks metadata, builds prompts, calls LLMs, saves logs and analytics.</td></tr>
             <tr><td><code>services/index_builder.py</code></td><td>Builds prepared index profiles from cached pages and profile config.</td></tr>
             <tr><td><code>services/database.py</code></td><td>SQLite tables and helpers for users, requests, sources, feedback, quiz sessions, and attempts.</td></tr>
@@ -367,7 +366,7 @@ flowchart TD
             <tr><td>LLM clients</td><td><code>ollama_llm.py</code>, <code>lmstudio_llm.py</code>.</td></tr>
             <tr><td>PDF parsers</td><td><code>pymupdf_parser.py</code>, <code>marker_parser.py</code>.</td></tr>
             <tr><td>Images</td><td><code>image_extractor.py</code>, <code>image_descriptor.py</code>, <code>ocr_stub.py</code>, <code>page_renderer.py</code>.</td></tr>
-            <tr><td>Langtrace and eval</td><td><code>langtrace_service.py</code>, <code>langtrace_eval.py</code>, <code>eval_metrics.py</code>.</td></tr>
+            <tr><td>Local evaluation</td><td><code>eval_metrics.py</code> and scripts under <code>scripts/eval_*</code>.</td></tr>
           </tbody>
         </table>
       </section>
@@ -377,9 +376,6 @@ flowchart TD
         <pre class="tree"><code>.
 |-- README.md
 |-- Makefile
-|-- docker-compose.langtrace.yml
-|-- docker/
-|   `-- langtrace/clickhouse/init/01-create-langtrace-db.sql
 |-- docs/
 |   `-- index.html
 |-- Literature/
@@ -393,7 +389,7 @@ flowchart TD
 |   |-- configs/
 |   |   `-- index_profiles.json
 |   |-- data/
-|   |   |-- app.db
+|   |   |-- colloquily.db
 |   |   |-- pdfs/
 |   |   |-- index/
 |   |   |-- indexes/
@@ -446,7 +442,7 @@ flowchart TD
         <table>
           <thead><tr><th>Location</th><th>Contents</th></tr></thead>
           <tbody>
-            <tr><td><code>data/app.db</code></td><td>SQLite users, request summaries, feedback, quiz sessions, and quiz attempts.</td></tr>
+            <tr><td><code>data/colloquily.db</code></td><td>Durable SQLite users, processing jobs, checkpoints, feedback, quiz sessions, and attempts.</td></tr>
             <tr><td><code>data/pdfs/</code></td><td>Uploaded lecture PDFs.</td></tr>
             <tr><td><code>data/index/</code></td><td>Legacy/runtime FAISS index, chunks, pages, documents, structure, topics, analytics, settings, request history.</td></tr>
             <tr><td><code>data/indexes/</code></td><td>Prepared index profiles such as <code>baseline_page_minilm</code>.</td></tr>
@@ -466,7 +462,7 @@ flowchart TD
             <tr><td>Ask</td><td><code>POST /ask</code></td><td>Retrieves context, builds QA prompt, calls LLM, renders cited answer.</td></tr>
             <tr><td>Summarize</td><td><code>POST /summarize</code></td><td>Summarizes one page, a range, or a combined section.</td></tr>
             <tr><td>Quiz</td><td><code>POST /quiz</code>, <code>POST /quiz/submit</code></td><td>Generates questions, stores session, evaluates answers.</td></tr>
-            <tr><td>Feedback</td><td><code>POST /feedback</code></td><td>Saves like/dislike feedback locally and optionally sends Langtrace feedback.</td></tr>
+            <tr><td>Feedback</td><td><code>POST /feedback</code></td><td>Saves like/dislike feedback locally.</td></tr>
             <tr><td>Documents</td><td><code>/admin/documents</code></td><td>Upload PDFs, rebuild index, delete documents.</td></tr>
             <tr><td>Settings</td><td><code>/admin/settings</code></td><td>Runtime settings. Rebuild index after parser, chunking, embedding, or LLM changes.</td></tr>
             <tr><td>Structure</td><td><code>GET /structure</code></td><td>Exports document, page, chunk, concept, and edge graph as JSON.</td></tr>
@@ -477,18 +473,17 @@ flowchart TD
 
       <section id="configuration">
         <h2>Configuration</h2>
-        <p><code>config.py</code> creates required directories at import time and reads environment files from the project root and app directory. Supported env files include <code>.env</code>, <code>.env.local</code>, <code>.env.langtrace</code>, and <code>.env.langtrace.local</code>.</p>
+        <p><code>config.py</code> creates required directories at import time and reads <code>.env</code> and <code>.env.local</code> from the project root and app directory.</p>
         <table>
           <thead><tr><th>Setting</th><th>Default</th><th>Purpose</th></tr></thead>
           <tbody>
             <tr><td><code>CHUNKING_STRATEGY</code></td><td><code>page</code></td><td>Default chunker.</td></tr>
             <tr><td><code>ACTIVE_INDEX_NAME</code></td><td><code>final_paragraph_overlap_mpnet_rerank</code></td><td>Prepared profile selected at startup.</td></tr>
-            <tr><td><code>EMBED_BACKEND</code></td><td><code>st</code></td><td>SentenceTransformer or LM Studio embeddings.</td></tr>
+            <tr><td>Exam embedding backend</td><td><code>ollama</code></td><td>Uses local <code>embeddinggemma:latest</code>; SentenceTransformer and LM Studio are optional.</td></tr>
             <tr><td><code>ST_EMBED_MODEL</code></td><td><code>sentence-transformers/all-MiniLM-L6-v2</code></td><td>Local embedding model.</td></tr>
             <tr><td><code>LLM_BACKEND</code></td><td><code>ollama</code></td><td>Ollama or LM Studio chat backend.</td></tr>
             <tr><td><code>OLLAMA_LLM_MODEL</code></td><td><code>phi3:mini</code></td><td>Default Ollama model.</td></tr>
             <tr><td><code>ENABLE_METADATA_RERANK</code></td><td><code>True</code></td><td>Uses metadata features to adjust vector ranking.</td></tr>
-            <tr><td><code>ENABLE_LANGTRACE</code></td><td><code>False</code></td><td>Enables optional tracing and feedback export.</td></tr>
           </tbody>
         </table>
       </section>
@@ -530,21 +525,6 @@ python scripts/eval_retrieval_profiles.py
 python scripts/eval_answer_subset.py
 python scripts/eval_report.py</code></pre>
         <p>Common signals include <code>hit_at_k</code>, <code>first_relevant_rank</code>, <code>citation_page_accuracy</code>, <code>duplicate_retrieval_ratio</code>, answer text checks, and groundedness warnings.</p>
-      </section>
-
-      <section id="langtrace">
-        <h2>Langtrace</h2>
-        <p>Langtrace is optional. The Flask app initializes tracing before importing RAG and LLM services so instrumentation can cover the request path.</p>
-        <pre><code class="language-bash">make langtrace-up
-make langtrace-logs
-make langtrace-down</code></pre>
-        <p>Relevant files:</p>
-        <ul>
-          <li><code>docker-compose.langtrace.yml</code></li>
-          <li><code>.env.langtrace</code> and <code>.env.langtrace.example</code></li>
-          <li><code>services/langtrace_service.py</code></li>
-          <li><code>services/langtrace_eval.py</code></li>
-        </ul>
       </section>
 
       <section id="operations">

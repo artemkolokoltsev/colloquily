@@ -1,15 +1,10 @@
-LANGTRACE_COMPOSE = docker compose --env-file .env.langtrace -f docker-compose.langtrace.yml
-
-.PHONY: langtrace-up langtrace-down langtrace-logs dev
-
-langtrace-up:
-	$(LANGTRACE_COMPOSE) up -d
-
-langtrace-down:
-	$(LANGTRACE_COMPOSE) down
-
-langtrace-logs:
-	$(LANGTRACE_COMPOSE) logs -f langtrace
+.PHONY: dev test verify
 
 dev:
 	cd meditech_rag && python app.py
+
+test:
+	cd meditech_rag && python -m unittest discover -s tests -v
+
+verify:
+	cd meditech_rag && python scripts/verify_five_day_mvp.py

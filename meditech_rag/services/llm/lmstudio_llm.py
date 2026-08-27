@@ -6,7 +6,7 @@ import time
 import requests
 
 import config
-from services.langtrace_service import trace_llm_call
+from services.prompt_templates import render_prompt
 
 
 class LMStudioLLMClient:
@@ -28,7 +28,7 @@ class LMStudioLLMClient:
             payload = {
                 "model": self.model_name,
                 "messages": [
-                    {"role": "system", "content": "Du bist ein lokaler, quellengebundener Lernassistent fuer Universitaetsfaecher."},
+                    {"role": "system", "content": render_prompt("core", "local_system")},
                     {"role": "user", "content": prompt},
                 ],
                 "temperature": config.LLM_TEMPERATURE if temperature is None else temperature,
@@ -52,9 +52,4 @@ class LMStudioLLMClient:
                 self.logger.exception("LM Studio request failed")
                 return "Die lokale LM-Studio-Instanz ist nicht erreichbar."
 
-        return trace_llm_call(
-            "lmstudio.generate",
-            {"backend": "lmstudio", "model": self.model_name, "timeout_seconds": self.timeout, "temperature": config.LLM_TEMPERATURE if temperature is None else temperature},
-            _call,
-            prompt=prompt,
-        )
+        return _call()

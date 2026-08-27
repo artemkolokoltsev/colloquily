@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+import fitz
 
 import config
 from services.database import create_subject, get_subject, init_db
@@ -117,6 +118,35 @@ class SubjectQualityPipelineTest(unittest.TestCase):
         self.assertEqual(first["processed"], 1)
         self.assertEqual(second["skipped"], 1)
 
+    def test_pdf_page_checkpoints_continue_after_fast_llm_failure(self) -> None:
+        subject = self.subject("Durable PDF")
+        path = workspace_for(subject).folder("raw") / "nested/two-pages.pdf"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        document = fitz.open()
+        for text in (
+            "Behaviorism reinforcement fragment",
+            "Cognitive memory fragment",
+        ):
+            page = document.new_page()
+            page.insert_text((72, 72), text)
+        document.save(path)
+        document.close()
+        calls = {"count": 0}
+
+        def malformed(_prompt: str) -> str:
+            calls["count"] += 1
+            return "not valid structured JSON"
+
+        result = process_subject(subject["id"], cleanup_generate=malformed, mode="fast")
+        self.assertEqual(result["processed"], 1)
+        self.assertEqual(result["failed"], [])
+        self.assertEqual(calls["count"], 1)
+        source = workspace_for(subject).discover_sources()[0]
+        document_id = list_review_units(subject["id"])[0]["document_id"]
+        saved = checkpoint(document_id, source["source_hash"], "cleaned_candidate")
+        self.assertEqual(saved["total_batches"], 2)
+        self.assertEqual(saved["completed_batches"], [0, 1])
+
     def test_noise_is_quarantined_and_valid_academic_text_is_accepted(self) -> None:
         noise = deterministic_cleanup(
             {"raw_content": "@@@ 7 / ?", "source_location": "lines 1-1", "source_start": 1, "source_end": 1}
@@ -211,7 +241,7 @@ class SubjectQualityPipelineTest(unittest.TestCase):
             "SELECT subject_id FROM requests WHERE request_uuid = 'legacy'"
         ).fetchone()
         self.assertEqual(migrated[0], 1)
-        self.assertEqual(get_subject(1)["slug"], "meditech")
+        self.assertEqual(get_subject(1)["slug"], "imported-exam")
 
     def _accepted_subject(self) -> tuple[dict, int]:
         subject = self.subject("Grounded Training")

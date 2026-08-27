@@ -1,4 +1,5 @@
 import os
+import shutil
 from typing import Tuple
 
 
@@ -20,7 +21,7 @@ def _bootstrap_env() -> None:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.dirname(current_dir)
     for root in (parent_dir, current_dir):
-        for filename in (".env", ".env.local", ".env.langtrace", ".env.langtrace.local"):
+        for filename in (".env", ".env.local"):
             _load_env_file(os.path.join(root, filename))
 
 
@@ -125,6 +126,9 @@ OLLAMA_URL = "http://localhost:11434"
 OLLAMA_LLM_MODEL = "phi3:mini"
 OLLAMA_TIMEOUT_SECONDS = 300
 OLLAMA_NUM_PREDICT = 384
+OLLAMA_EMBED_MODEL = "embeddinggemma:latest"
+OLLAMA_EMBED_TIMEOUT_SECONDS = 120
+OLLAMA_EMBED_BATCH_SIZE = 32
 LLM_TEMPERATURE = 0.2
 
 
@@ -155,7 +159,10 @@ REQUEST_LOG_PATH = os.path.join(INDEX_DIR, "request_history.json")
 REQUEST_HISTORY_LIMIT = 200
 
 
-DB_PATH = os.path.join(DATA_DIR, "app.db")
+LEGACY_DB_PATH = os.path.join(DATA_DIR, "app.db")
+DB_PATH = os.path.join(DATA_DIR, "colloquily.db")
+if not os.path.exists(DB_PATH) and os.path.exists(LEGACY_DB_PATH):
+    shutil.copy2(LEGACY_DB_PATH, DB_PATH)
 DEFAULT_ADMIN_USERNAME = "admin"
 DEFAULT_ADMIN_PASSWORD = "admin"
 
@@ -175,7 +182,9 @@ EVAL_RUNS_DIR = os.path.join(EVAL_DIR, "runs")
 EVAL_DATASETS_DIR = os.path.join(EVAL_DIR, "datasets")
 EVAL_METRICS_DIR = os.path.join(EVAL_DIR, "metrics")
 EVAL_METRICS_PATH = os.path.join(EVAL_METRICS_DIR, "eval_metrics.json")
-GOLD_EVAL_DATASET_PATH = os.path.join(EVAL_DATASETS_DIR, "meditech_gold_eval.json")
+GOLD_EVAL_DATASET_PATH = os.path.join(EVAL_DATASETS_DIR, "colloquily_gold_eval.json")
+if not os.path.exists(GOLD_EVAL_DATASET_PATH):
+    GOLD_EVAL_DATASET_PATH = os.path.join(EVAL_DATASETS_DIR, "meditech_gold_eval.json")
 
 for path in [EVAL_DIR, EVAL_RUNS_DIR, EVAL_DATASETS_DIR, EVAL_METRICS_DIR]:
     os.makedirs(path, exist_ok=True)
@@ -185,51 +194,7 @@ ENABLE_METADATA_ENRICHMENT = True
 ENABLE_METADATA_RERANK = True
 ENABLE_STRUCTURE_EXPORT = True
 ENABLE_EVAL_LOGGING = True
-ENABLE_LANGTRACE = _env_flag("ENABLE_LANGTRACE", False, aliases=("LANGTRACE_ENABLED",))
-LANGTRACE_MODE = _env_value("LANGTRACE_MODE", "disabled")  # disabled | console | self_hosted | cloud
-LANGTRACE_API_HOST = _env_value("LANGTRACE_API_HOST", "http://localhost:3000/api/trace")
-LANGTRACE_API_KEY = _env_value("LANGTRACE_API_KEY", "")
-LANGTRACE_BATCH = _env_flag("LANGTRACE_BATCH", True)
-LANGTRACE_WRITE_SPANS_TO_CONSOLE = _env_flag("LANGTRACE_WRITE_SPANS_TO_CONSOLE", False)
-LANGTRACE_CAPTURE_CONTENT = _env_flag("LANGTRACE_CAPTURE_CONTENT", True)
-
-# Optional compatibility vocabulary for importing the original course. It is
-# disabled by default so newly created subjects never inherit medical topics.
-LEGACY_MEDITECH_TOPIC_VOCAB = {
-    "medizinprodukt": {
-        "aliases": ["medizinprodukt", "medizinprodukte", "medical device"],
-        "description": "Grundlagen und Definitionen zu Medizinprodukten",
-        "parent_topic": None,
-    },
-    "risikoklasse": {
-        "aliases": ["risikoklasse", "klassifizierung", "klasse i", "klasse ii", "klasse iii"],
-        "description": "Klassifizierung von Medizinprodukten nach Risiko",
-        "parent_topic": "medizinprodukt",
-    },
-    "bildgebung": {
-        "aliases": ["bildgebung", "ultraschall", "mrt", "ct", "röntgen"],
-        "description": "Medizinische Bildgebung und zugehörige Verfahren",
-        "parent_topic": None,
-    },
-    "sensorik": {
-        "aliases": ["sensor", "sensorik", "detektor", "messfühler", "messfuehler"],
-        "description": "Sensoren und Messprinzipien in medizintechnischen Systemen",
-        "parent_topic": None,
-    },
-    "signalverarbeitung": {
-        "aliases": ["signalverarbeitung", "filter", "abtastung", "rauschen"],
-        "description": "Verarbeitung und Analyse medizinischer Signale",
-        "parent_topic": None,
-    },
-    "regulatorik": {
-        "aliases": ["mdr", "ce", "zulassung", "norm", "regulatorik"],
-        "description": "Regulatorische Anforderungen und Zulassung",
-        "parent_topic": None,
-    },
-}
-
-ENABLE_LEGACY_MEDITECH_COMPAT = _env_flag("ENABLE_LEGACY_MEDITECH_COMPAT", False)
-TOPIC_VOCAB = LEGACY_MEDITECH_TOPIC_VOCAB if ENABLE_LEGACY_MEDITECH_COMPAT else {}
+TOPIC_VOCAB = {}
 
 DOMAIN_CONCEPTS = {
     topic: list(values.get("aliases", []))

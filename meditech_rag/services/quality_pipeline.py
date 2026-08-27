@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import math
 import re
 import unicodedata
 from collections import Counter
@@ -24,6 +23,7 @@ from services.knowledge_repository import (
 from services.pdf_loader import parse_pdf
 from services.subject_workspace import content_sha256, workspace_for
 from services.structured_json import parse_json_object
+from services.prompt_templates import render_prompt
 
 
 ReviewStatus = Literal["accepted", "needs_review", "quarantined", "rejected"]
@@ -220,24 +220,18 @@ def cleanup_prompt(units: list[dict]) -> str:
         {"unit": index, "content": unit["cleaned_content"], "source_support": unit["source_support"]}
         for index, unit in enumerate(units)
     ]
-    return (
-        "Repair formatting only. Do not summarize, add knowledge, complete claims, or invent titles. "
-        "Return JSON with a top-level 'units' array and exactly one result per input. "
-        "Each result requires cleaned_content, content_type, detected_topic, is_complete, is_meaningful, "
-        "contains_academic_information, extraction_confidence (0..1), quality_problems, source_support, "
-        "recommended_status (accepted|needs_review|quarantined|rejected), and explanation.\n"
-        f"INPUT={json.dumps(source, ensure_ascii=False)}"
-    )
+    return render_prompt("ingestion", "cleanup", input=json.dumps(source, ensure_ascii=False))
 
 
-def apply_local_cleanup(units: list[dict], generate: Callable[[str], str]) -> list[dict]:
+def apply_local_cleanup(units: list[dict], generate: Callable[[str], str], *, repair: bool = True) -> list[dict]:
     raw_response = generate(cleanup_prompt(units))
     try:
         validated = _validate_batch(raw_response)
     except Exception:
-        repair_prompt = (
-            "Repair the following malformed response into valid JSON only. Preserve its meaning and use the exact "
-            "required CleanupBatch schema; do not add academic content.\nMALFORMED_RESPONSE=" + raw_response[:12000]
+        if not repair:
+            raise
+        repair_prompt = render_prompt(
+            "ingestion", "repair_json", schema="CleanupBatch", response=raw_response[:12000]
         )
         validated = _validate_batch(generate(repair_prompt))
     if len(validated.units) != len(units):
@@ -257,6 +251,16 @@ def apply_local_cleanup(units: list[dict], generate: Callable[[str], str]) -> li
     return results
 
 
+def _processing_batches(units: list[dict], source_type: str) -> list[list[dict]]:
+    if source_type == "pdf":
+        pages: dict[int, list[dict]] = {}
+        for unit in units:
+            pages.setdefault(int(unit.get("source_start") or 0), []).append(unit)
+        return [pages[page] for page in sorted(pages)]
+    batch_size = max(1, int(config.CLEANING_BATCH_SIZE))
+    return [units[index:index + batch_size] for index in range(0, len(units), batch_size)]
+
+
 def process_subject(
     subject_id: int,
     *,
@@ -268,16 +272,22 @@ def process_subject(
     mode: str = "deep",
     page_start: int | None = None,
     page_end: int | None = None,
+    progress_callback: Callable[[dict], None] | None = None,
 ) -> dict:
     subject = get_subject(subject_id)
     if not subject:
         raise ValueError("Subject not found")
     workspace = workspace_for(subject)
-    summary = {"subject_id": subject_id, "discovered": 0, "processed": 0, "skipped": 0, "failed": []}
-    for source in workspace.discover_sources():
-        if relative_path and source["relative_path"] != relative_path:
-            continue
-        summary["discovered"] += 1
+    summary = {"subject_id": subject_id, "discovered": 0, "processed": 0, "skipped": 0, "failed": [], "warnings": []}
+    sources = [
+        source for source in workspace.discover_sources()
+        if not relative_path or source["relative_path"] == relative_path
+    ]
+    summary["discovered"] = len(sources)
+    if progress_callback:
+        progress_callback({"event": "discovered", "total_documents": len(sources)})
+    cleanup_available = cleanup_generate is not None
+    for document_index, source in enumerate(sources):
         document, changed = upsert_document(subject_id, source)
         existing_checkpoint = checkpoint(document["id"], source["source_hash"], "cleaned_candidate")
         if retry_failed and existing_checkpoint and not existing_checkpoint["failed_batches"]:
@@ -291,25 +301,43 @@ def process_subject(
                 deterministic_cleanup(item)
                 for item in extract_source_units(source, page_start=page_start, page_end=page_end)
             ]
-            batch_size = max(1, int(config.CLEANING_BATCH_SIZE))
-            total_batches = math.ceil(len(extracted) / batch_size) if extracted else 0
+            batches = _processing_batches(extracted, source["source_type"])
+            total_batches = len(batches)
+            if progress_callback:
+                progress_callback({
+                    "event": "document_started", "document": source["relative_path"],
+                    "document_index": document_index, "total_documents": len(sources),
+                    "total_batches": total_batches,
+                })
             completed = list(existing_checkpoint["completed_batches"]) if existing_checkpoint and not force else []
             failed = list(existing_checkpoint["failed_batches"]) if existing_checkpoint and not force else []
+            completed = [item for item in completed if item < total_batches]
+            failed = [item for item in failed if item < total_batches]
             if not completed or force or changed:
                 prepare_document_units(document["id"], force=force or changed)
                 completed = []
                 failed = []
             all_output: list[dict] = []
-            for batch_index in range(total_batches):
-                batch = extracted[batch_index * batch_size : (batch_index + 1) * batch_size]
+            for batch_index, batch in enumerate(batches):
                 if batch_index in completed:
+                    if progress_callback:
+                        progress_callback({"event": "batch_completed", "batch": batch_index + 1, "total_batches": total_batches})
                     continue
                 try:
-                    if cleanup_generate and mode == "deep":
+                    if cleanup_available and cleanup_generate and mode == "deep":
                         output = apply_local_cleanup(batch, cleanup_generate)
-                    elif cleanup_generate and mode == "fast":
+                    elif cleanup_available and cleanup_generate and mode == "fast":
                         suspicious = [item for item in batch if item["recommended_status"] != "accepted"]
-                        cleaned_suspicious = apply_local_cleanup(suspicious, cleanup_generate) if suspicious else []
+                        try:
+                            candidates = suspicious[:max(1, int(config.CLEANING_BATCH_SIZE))]
+                            cleaned_suspicious = apply_local_cleanup(candidates, cleanup_generate, repair=False) if candidates else []
+                        except Exception as exc:
+                            cleaned_suspicious = []
+                            cleanup_available = False
+                            summary["warnings"].append({
+                                "document": source["relative_path"], "batch": batch_index + 1,
+                                "warning": f"Local cleanup disabled for the rest of this job; deterministic review candidates preserved: {exc}",
+                            })
                         replacements = {item["source_location"]: item for item in cleaned_suspicious}
                         output = [replacements.get(item["source_location"], item) for item in batch]
                     else:
@@ -318,6 +346,8 @@ def process_subject(
                     all_output.extend(output)
                     completed.append(batch_index)
                     failed = [item for item in failed if item != batch_index]
+                    if progress_callback:
+                        progress_callback({"event": "batch_completed", "batch": batch_index + 1, "total_batches": total_batches})
                 except Exception:
                     if batch_index not in failed:
                         failed.append(batch_index)
@@ -334,6 +364,19 @@ def process_subject(
             report = document_quality_report(document["id"])
             workspace.atomic_json(workspace.folder("reports") / f"document-{document['id']}.json", report)
             summary["processed"] += 1
+            if progress_callback:
+                progress_callback({
+                    "event": "document_completed", "document": source["relative_path"],
+                    "completed_documents": summary["processed"] + summary["skipped"],
+                    "failed_documents": len(summary["failed"]), "total_documents": len(sources),
+                })
         except Exception as exc:
             summary["failed"].append({"document": source["relative_path"], "error": str(exc)})
+            if progress_callback:
+                progress_callback({
+                    "event": "document_failed", "document": source["relative_path"],
+                    "completed_documents": summary["processed"] + summary["skipped"],
+                    "failed_documents": len(summary["failed"]), "total_documents": len(sources),
+                    "error": str(exc),
+                })
     return summary

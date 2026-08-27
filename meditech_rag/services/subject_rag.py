@@ -8,6 +8,7 @@ from uuid import uuid4
 import config
 from services.local_models import subject_task_llm
 from services.subject_index import INSUFFICIENT_EVIDENCE_MESSAGE, SubjectIndex
+from services.prompt_templates import render_prompt
 
 
 def _prompt(subject: dict, question: str, evidence: list[dict], *, external_knowledge: bool = False) -> str:
@@ -15,18 +16,10 @@ def _prompt(subject: dict, question: str, evidence: list[dict], *, external_know
         f"[{item['citation_id']}] {item['document_title']} — {item['source_location']}\n{item['content']}"
         for item in evidence
     )
-    grounding = (
-        "First write a 'Course-supported answer' whose factual claims cite exact evidence IDs. Then, only if "
-        "it materially helps, write a separate 'External knowledge (not course evidence)' section. Never present "
-        "external claims as course content. "
-        if external_knowledge else
-        "Use only the accepted evidence below. Do not use general model knowledge. Cite every factual claim with one or more exact evidence IDs. "
-    )
-    return (
-        f"You are a local oral-exam tutor for the subject '{subject['name']}'. "
-        f"Answer in language '{subject['language']}'. {grounding}"
-        f"If evidence is insufficient, answer exactly: {INSUFFICIENT_EVIDENCE_MESSAGE}\n\n"
-        f"QUESTION\n{question}\n\nACCEPTED EVIDENCE\n{contexts}"
+    return render_prompt(
+        "training", "subject_answer_external" if external_knowledge else "subject_answer_strict",
+        exam=subject["name"], language=subject["language"], insufficient=INSUFFICIENT_EVIDENCE_MESSAGE,
+        question=question, evidence=contexts,
     )
 
 
@@ -63,6 +56,12 @@ def answer_subject_question(
         }
         for item in context["evidence"]
     ]
+    embedding_settings = subject_index.subject.get("embedding_config") or {}
+    embed_backend = embedding_settings.get("backend", "ollama")
+    embed_model = embedding_settings.get("model") or (
+        config.OLLAMA_EMBED_MODEL if embed_backend == "ollama" else
+        config.ST_EMBED_MODEL if embed_backend == "st" else config.LMSTUDIO_EMBED_MODEL
+    )
     entry = {
         "request_id": request_id,
         "request_type": "ask",
@@ -71,8 +70,8 @@ def answer_subject_question(
         "duration_ms": int((time.perf_counter() - started) * 1000),
         "llm_backend": config.LLM_BACKEND,
         "llm_model": config.OLLAMA_LLM_MODEL if config.LLM_BACKEND == "ollama" else config.LMSTUDIO_LLM_MODEL,
-        "embed_backend": config.EMBED_BACKEND,
-        "embed_model": config.ST_EMBED_MODEL if config.EMBED_BACKEND == "st" else config.LMSTUDIO_EMBED_MODEL,
+        "embed_backend": embed_backend,
+        "embed_model": embed_model,
         "timestamp": datetime.now().isoformat(timespec="seconds"),
         "sources": sources,
     }

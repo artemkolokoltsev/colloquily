@@ -173,7 +173,6 @@ def update_request_feedback(
     *,
     score: int | None = None,
     label: str | None = None,
-    langtrace_sent: bool | None = None,
 ) -> bool:
     history = load_request_history()
     for item in history:
@@ -194,25 +193,6 @@ def update_request_feedback(
                 "text": details.strip(),
                 "timestamp": item["feedback"]["timestamp"],
             }
-            if langtrace_sent is not None:
-                item["langtrace_feedback_sent"] = bool(langtrace_sent)
-            save_request_history(history)
-            return True
-    return False
-
-
-def update_request_langtrace_ids(request_id: str, trace_id: str | None, span_id: str | None) -> bool:
-    if not trace_id and not span_id:
-        return False
-    history = load_request_history()
-    for item in history:
-        if item.get("request_id") == request_id:
-            if trace_id:
-                item["langtrace_trace_id"] = trace_id
-                item["trace_id"] = trace_id
-            if span_id:
-                item["langtrace_span_id"] = span_id
-                item["span_id"] = span_id
             save_request_history(history)
             return True
     return False

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>System settings | Oral Exam Trainer</title>
+    <title>System settings | Colloquily</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   </head>
   <body>
@@ -74,11 +74,6 @@
                 {{ section.section }}
               </a>
             {% endfor %}
-            {% if langtrace_ui_url %}
-              <a href="{{ langtrace_ui_url }}" target="_blank" rel="noopener noreferrer" class="settings-anchor-link settings-anchor-link-external">
-                Langtrace UI
-              </a>
-            {% endif %}
           </nav>
 
           <div class="settings-panel settings-callout-panel">
@@ -109,23 +104,6 @@
                     <h3>{{ section.section }}</h3>
                     <p class="section-copy">{{ section.description }}</p>
                   </div>
-
-                  {% if section.anchor == 'tracing' %}
-                    <div class="settings-inline-summary">
-                      <div class="settings-inline-summary-item">
-                        <span class="settings-field-detail-label">Empfohlener lokaler Modus</span>
-                        <span>self_hosted mit `http://localhost:3000/api/trace`</span>
-                      </div>
-                      <div class="settings-inline-summary-item">
-                        <span class="settings-field-detail-label">API-Key</span>
-                        <span>Wird in der Langtrace-Oberflaeche erzeugt und hier hinterlegt.</span>
-                      </div>
-                      <div class="settings-inline-summary-item">
-                        <span class="settings-field-detail-label">UI</span>
-                        <span>{% if langtrace_ui_url %}<a class="text-link" href="{{ langtrace_ui_url }}" target="_blank" rel="noopener noreferrer">{{ langtrace_ui_url }}</a>{% else %}Nicht konfiguriert{% endif %}</span>
-                      </div>
-                    </div>
-                  {% endif %}
 
                   <div class="settings-form-grid">
                     {% for field in section.fields %}

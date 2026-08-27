@@ -125,14 +125,14 @@ class TopicPipelineTest(unittest.TestCase):
                     "CHUNKING_STRATEGY": "structure",
                     "ENABLE_BLOCK_EXTRACTION": "on",
                     "TOP_K": "5",
-                    "LANGTRACE_MODE": "console",
+                    "OLLAMA_TIMEOUT_SECONDS": "180",
                 }
             )
             sections = build_settings_sections(saved)
             self.assertEqual(saved["CHUNKING_STRATEGY"], "structure")
             self.assertTrue(saved["ENABLE_BLOCK_EXTRACTION"])
             self.assertEqual(saved["TOP_K"], 5)
-            self.assertEqual(saved["LANGTRACE_MODE"], "console")
+            self.assertEqual(saved["OLLAMA_TIMEOUT_SECONDS"], 180)
             self.assertTrue(any(section["description"] for section in sections))
         config.RUNTIME_SETTINGS_PATH = original_path
 

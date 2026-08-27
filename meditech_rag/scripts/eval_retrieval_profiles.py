@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import time
+from contextlib import nullcontext
 from datetime import datetime
 
 
@@ -12,7 +13,6 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 import config
-from services.langtrace_eval import attach_eval_attributes, trace_workflow
 from services.query_analyzer import analyze_query
 from services.embeddings.st_embedder import SentenceTransformerEmbedder
 from services.evaluator import (
@@ -24,6 +24,10 @@ from services.evaluator import (
     retrieval_top_score,
 )
 from services.index_profiles import load_index_profiles, load_profile_index
+
+
+def local_evaluation_run():
+    return nullcontext()
 
 
 def expected_sources(item: dict) -> list[dict]:
@@ -57,7 +61,7 @@ def main() -> None:
     with open(dataset_path, "r", encoding="utf-8") as handle:
         dataset = json.load(handle)
     rows = []
-    with trace_workflow("eval_retrieval_profiles", {"app.workflow": "eval_retrieval_profiles"}) as _span:
+    with local_evaluation_run():
         for profile in load_index_profiles():
             store, _, _, profile_config = load_profile_index(profile["name"])
             if store is None:
@@ -103,15 +107,6 @@ def main() -> None:
         with open(output_path, "w", encoding="utf-8") as handle:
             for row in rows:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-        attach_eval_attributes(
-            {
-                "app.workflow": "eval_retrieval_profiles",
-                "eval.dataset_count": len(dataset),
-                "eval.rows_count": len(rows),
-                "eval.output_path": output_path,
-                "eval.latency_seconds": sum(row.get("retrieval_latency_seconds", 0) for row in rows if not row.get("error")),
-            }
-        )
     print(output_path)
 
 

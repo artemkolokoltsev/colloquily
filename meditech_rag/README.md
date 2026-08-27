@@ -1,6 +1,6 @@
-# Oral Exam Trainer
+# Colloquily
 
-Reusable, completely local oral-exam preparation based on reviewed university course material. The original MediTech workflows remain available during migration, while new material is isolated into exam-specific workspaces and accepted-only FAISS indexes.
+Reusable, completely local oral-exam preparation based on reviewed university course material. Each exam is isolated in its own workspace and accepted-only FAISS index.
 
 ## Exam workflow
 
@@ -12,6 +12,8 @@ Reusable, completely local oral-exam preparation based on reviewed university co
 6. Open the **5-Day Plan** for a ranked answer to “What should I study now?”, then practice due/weak questions.
 
 The processor hashes every source, skips unchanged files, checkpoints every batch, and resumes interrupted work. Files under `raw/` are never rewritten. Manually accepted edits remain authoritative during later processing.
+
+PDF processing runs as a durable background job with one checkpoint per page. The Exams page polls the persisted job state and displays document/page progress. **Resume / retry from checkpoint** continues an interrupted job after a server restart. Fast cleanup is opportunistic: if the local model times out or returns malformed structured output, Colloquily keeps deterministic review candidates and finishes the corpus instead of discarding the job.
 
 ```text
 data/exams/<exam-slug>/
@@ -26,7 +28,7 @@ data/exams/<exam-slug>/
 └── index/
 ```
 
-SQLite migrations preserve existing requests, sources, quizzes, and attempts under the automatically created `MediTech` subject. No legacy runtime files are deleted.
+SQLite migrations preserve existing requests, sources, quizzes, and attempts under a neutral imported-exam record. No existing learning data is deleted.
 
 ## Training workflow
 
@@ -38,7 +40,7 @@ SQLite migrations preserve existing requests, sources, quizzes, and attempts und
 
 ## Local model verification
 
-Model roles are configured separately per exam under **Exams → Local models**. Ollama and LM Studio are supported for cleaning, topic extraction, question generation, answering, evaluation, and examiner follow-ups. SentenceTransformer remains the default embedding backend.
+Model roles are configured separately per exam under **Exams → Local models**. Ollama and LM Studio are supported for cleaning, topic extraction, question generation, answering, evaluation, and examiner follow-ups. Local Ollama `embeddinggemma:latest` is the default exam embedding backend; SentenceTransformer and LM Studio remain optional.
 
 Run the disposable local-model smoke test with:
 
@@ -51,10 +53,10 @@ The first command validates an actual Ollama cleanup response and raw-file immut
 
 ## Known limitations
 
-- Browser audio recording is optional and remains only in the active tab; automatic speech-to-text is intentionally not enabled because browser implementations may use non-local services.
+- Training uses typed text input only; microphone recording and speech-to-text are not part of Colloquily.
 - Adaptive simulation follow-ups are selected from the reviewed subject question pool. The system does not risk an unvalidated dynamic question when no grounded follow-up is available.
-- The Python package directory keeps its historical `meditech_rag` name for migration compatibility; all user-facing active workflows are branded Oral Exam Trainer.
-- Legacy PDF summary and multiple-choice routes remain available for the migrated MediTech subject, while new subjects use the stricter accepted-evidence workflows.
+- The Python package directory keeps its historical path only for import and migration compatibility; all product surfaces and prompts are branded Colloquily.
+- Imported PDF summary and multiple-choice routes remain available for older data, while new exams use the stricter accepted-evidence workflows.
 
 ## Dokumentation
 
@@ -72,7 +74,7 @@ Die Datei kann direkt im Browser geoeffnet werden. Sie enthaelt Architektur, Wor
 - PDF-Parsing mit PyMuPDF und optionalem Marker-Backend
 - Strukturierte Dokument-, Seiten-, Block-, Topic- und Chunk-Metadaten
 - Austauschbare Chunking-Strategien: `page`, `word`, `paragraph`, `semantic`, `structure`
-- FAISS-Vektorsuche mit lokalen SentenceTransformer-Embeddings oder LM Studio
+- FAISS-Vektorsuche mit Ollama EmbeddingGemma, SentenceTransformer oder LM Studio
 - Optionales Metadata-Reranking nach Topic-, Intent-, Rollen- und Qualitaetssignalen
 - LLM-Antworten ueber Ollama oder LM Studio
 - Inline-Zitate wie `[Q1]` mit klickbarer Quellenvorschau
@@ -81,7 +83,7 @@ Die Datei kann direkt im Browser geoeffnet werden. Sie enthaelt Architektur, Wor
 - Login, Benutzerverwaltung und Admin-Bereich
 - Request-Historie, Feedback, Analytics und Evaluation
 - Vorbereitete Indexprofile fuer vergleichbare Retrieval-Experimente
-- Optionales Langtrace-Tracing und Feedback-Sync
+- Lokale Evaluation ohne externe Telemetrie
 
 ## Quick Start
 
@@ -109,7 +111,7 @@ Bitte das Passwort aendern, wenn die App laenger oder in einem geteilten Umfeld 
 
 ## Konfiguration
 
-Zentrale Defaults stehen in [`config.py`](config.py). Die App laedt zusaetzlich Umgebungswerte aus `.env`, `.env.local`, `.env.langtrace` und `.env.langtrace.local` im Projekt- oder App-Verzeichnis.
+Zentrale Defaults stehen in [`config.py`](config.py). Die App laedt zusaetzlich Umgebungswerte aus `.env` und `.env.local` im Projekt- oder App-Verzeichnis.
 
 Wichtige Einstellungen:
 
@@ -124,7 +126,6 @@ Wichtige Einstellungen:
 | `LLM_BACKEND` | `ollama` oder `lmstudio` |
 | `OLLAMA_LLM_MODEL` | Ollama-Modell, z. B. `phi3:mini` |
 | `ENABLE_METADATA_RERANK` | Aktiviert heuristisches Reranking |
-| `ENABLE_LANGTRACE`, `LANGTRACE_MODE` | Optionales Tracing |
 
 Viele Runtime-Parameter koennen im Admin-Bereich unter `/admin/settings` angepasst werden. Fuer Parser-, Chunking-, Embedding- oder LLM-Wechsel sollte danach der Index neu aufgebaut werden.
 
@@ -156,19 +157,18 @@ Zentrale Module:
 | Pfad | Aufgabe |
 | --- | --- |
 | [`app.py`](app.py) | Flask-App, Auth, Admin, Chat, Summary, Quiz, Feedback, Struktur-Endpunkte |
-| [`config.py`](config.py) | Pfade, Modelle, Chunking, Langtrace, Evaluation und Topic-Vokabular |
+| [`config.py`](config.py) | Pfade, Modelle, Chunking und lokale Evaluation |
 | [`services/rag_engine.py`](services/rag_engine.py) | Index laden/aufbauen, Retrieval, Reranking, Prompts, Antworten, Summaries, Quiz |
 | [`services/index_builder.py`](services/index_builder.py) | Aufbau vorbereiteter Indexprofile |
 | [`services/document_preprocessor.py`](services/document_preprocessor.py) | Dokument-, Seiten-, Block- und SourceUnit-Erzeugung |
 | [`services/pdf_parsers/`](services/pdf_parsers/) | PyMuPDF- und Marker-Parser |
 | [`services/chunking/`](services/chunking/) | Chunking-Strategien |
-| [`services/embeddings/`](services/embeddings/) | SentenceTransformer- und LM-Studio-Embeddings |
+| [`services/embeddings/`](services/embeddings/) | Ollama-, SentenceTransformer- und LM-Studio-Embeddings |
 | [`services/llm/`](services/llm/) | Ollama- und LM-Studio-LLM-Clients |
 | [`services/vector_store.py`](services/vector_store.py) | FAISS-Suche |
 | [`services/persistence.py`](services/persistence.py) | JSON/FAISS-Persistenz |
 | [`services/database.py`](services/database.py) | SQLite-Persistenz fuer Benutzer, Requests, Feedback und Quiz |
 | [`services/evaluator.py`](services/evaluator.py) | Automatische Retrieval- und Groundedness-Heuristiken |
-| [`services/langtrace_service.py`](services/langtrace_service.py) | Optionales Tracing |
 
 ## Daten Und Persistenz
 
@@ -176,7 +176,7 @@ Die App arbeitet lokal und legt Laufzeitdaten unter `data/` ab:
 
 ```text
 data/
-|-- app.db                         SQLite-Datenbank
+|-- colloquily.db                  Durable SQLite-Datenbank (WAL + FULL synchronous)
 |-- pdfs/                          Hochgeladene PDFs
 |-- index/                         Aktiver Legacy-/Runtime-Index
 |   |-- vectors.faiss
@@ -219,7 +219,7 @@ Profile stehen in [`configs/index_profiles.json`](configs/index_profiles.json), 
 | Feedback | `/feedback` | Like/Dislike und Freitext speichern |
 | Documents | `/admin/documents` | PDFs verwalten und Index neu bauen |
 | Settings | `/admin/settings` | Runtime-Parameter setzen |
-| Evaluation | `/admin/eval` | Metriken, Indexprofile, Langtrace-Test |
+| Evaluation | `/admin/eval` | Lokale Metriken, Datensaetze und Indexprofile |
 | Structure API | `/structure` | Wissensstruktur als JSON exportieren |
 | Topics Debug | `/topics` | Topic- und Tagging-Debugansicht |
 
@@ -246,18 +246,6 @@ Erfasste Signale umfassen unter anderem:
 - `duplicate_retrieval_ratio`
 - Warnsignale fuer moegliche Ungroundedness
 - Feedback-Scores
-
-## Langtrace Optional
-
-Self-hosted Langtrace kann ueber Docker Compose gestartet werden:
-
-```bash
-make langtrace-up
-make langtrace-logs
-make langtrace-down
-```
-
-Die Compose-Datei liegt im Projektroot als `docker-compose.langtrace.yml`. Die App liest `.env.langtrace` und `.env.langtrace.local`, wenn vorhanden.
 
 ## Entwicklung
 

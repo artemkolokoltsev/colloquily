@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from services.factory import get_llm_client
 from services.training_repository import accepted_evidence_map, create_question, get_question
 from services.structured_json import parse_json_object
+from services.prompt_templates import render_prompt
 
 
 class CorePoint(BaseModel):
@@ -91,10 +92,7 @@ def _validated_generation(client, model, prompt: str):
     try:
         return _validate(model, raw)
     except Exception:
-        repair = (
-            prompt + "\nYour previous response was malformed or did not match the required schema. "
-            "Return one corrected JSON object only. PREVIOUS_RESPONSE=" + raw[:12000]
-        )
+        repair = render_prompt("training", "repair_structured_json", original=prompt, response=raw[:12000])
         return _validate(model, _generate_zero_temperature(client, repair))
 
 
@@ -106,14 +104,9 @@ def question_generation_prompt(subject_name: str, evidence: list[dict], count: i
         }
         for item in evidence
     ]
-    return (
-        f"Generate exactly {count} oral-exam questions for '{subject_name}' using only accepted evidence. "
-        "Do not use outside knowledge. Each core point and detail must cite valid integer evidence_ids. "
-        "Avoid ambiguity, duplicates, and irrelevant details. Return JSON with top-level 'questions'. "
-        "Each question needs question_text, question_type, difficulty, expected_duration_seconds, "
-        "expected_core_points, optional_details, evidence_ids, quality_score. Core points need text, "
-        "evidence_ids, and priority (must_know|useful_detail|low_priority).\n"
-        f"ACCEPTED_EVIDENCE={json.dumps(sources, ensure_ascii=False)}"
+    return render_prompt(
+        "training", "question_generation", exam=subject_name, count=count,
+        evidence=json.dumps(sources, ensure_ascii=False),
     )
 
 
@@ -151,19 +144,10 @@ def evaluation_prompt(question: dict, answer: str, duration_seconds: int, eviden
         {"evidence_id": item["id"], "content": item["content"], "source": item["source_location"]}
         for item in evidence
     ]
-    return (
-        "Evaluate an oral answer using only the supplied accepted evidence and rubric. Return JSON only. "
-        "Do not mark different wording wrong. 'missing' means an evidence-backed must-know point was omitted. "
-        "Use 'incorrect' only when accepted evidence directly contradicts the learner; every incorrect item "
-        "must set contradicted_by_evidence=true and cite evidence_ids. Claims absent from course material are "
-        "'unsupported', not incorrect. Every correct, missing, and incorrect item requires valid evidence IDs. "
-        "The better answer must cite evidence as [E<number>]. Low-priority omissions must not reduce a short answer. "
-        "Score rubric: 5 exam-ready; 4 one meaningful omission; 3 basic with important gaps; 2 major confusion; "
-        "1 minimal relevant knowledge; 0 incorrect/unrelated/empty. Include status, score, correct, missing, incorrect, "
-        "unsupported, clarity, time_use, better_oral_answer, likely_follow_up, follow_up_evidence_ids, evidence_ids, "
-        "scores (six named 0-5 fields), and confidence.\n"
-        f"QUESTION={json.dumps(question, ensure_ascii=False)}\nANSWER={json.dumps(answer)}\n"
-        f"DURATION_SECONDS={duration_seconds}\nACCEPTED_EVIDENCE={json.dumps(evidence_payload, ensure_ascii=False)}"
+    return render_prompt(
+        "training", "answer_evaluation", question=json.dumps(question, ensure_ascii=False),
+        answer=json.dumps(answer), duration=duration_seconds,
+        evidence=json.dumps(evidence_payload, ensure_ascii=False),
     )
 
 
@@ -207,8 +191,7 @@ def evaluate_grounded_answer(
     if evaluation.confidence < 0.65:
         second = _validated_generation(
             client, GroundedEvaluation,
-            prompt + "\nPerform a second independent evidence check because the first pass had low confidence. "
-            "Be conservative and return the same JSON schema.",
+            render_prompt("training", "low_confidence_check", original=prompt),
         )
         if second.confidence > evaluation.confidence:
             evaluation = second
