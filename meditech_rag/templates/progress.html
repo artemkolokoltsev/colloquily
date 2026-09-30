@@ -1,0 +1,29 @@
+{% extends "base.html" %}{% from "components.html" import empty_state, table_pagination %}
+{% block title %}Progress | Colloquily{% endblock %}
+{% block content %}
+<header class="page-header"><div><p class="eyebrow">Learning progress</p><h1>{{ subject.name }}</h1><p>Use your attempt trends to spot weak areas, then turn them into focused practice.</p></div><a class="button-link" href="{{ url_for('five_day_dashboard', subject_id=subject.id) }}">Plan my review</a></header>
+
+<section class="status-strip progress-summary"><div><span>Practice attempts</span><strong>{{ progress.attempts_count }}</strong></div><div><span>Average score</span><strong>{{ progress.average_score if progress.average_score is not none else '—' }}/5</strong></div><div><span>Average answer time</span><strong>{{ progress.average_response_seconds if progress.average_response_seconds is not none else '—' }} s</strong></div><div><span>Ready to review</span><strong>{{ progress.due_questions|length }}</strong></div></section>
+
+<section class="panel failure-trend-panel" aria-labelledby="failed-attempts-title">
+  <div class="panel-heading failure-trend-heading"><div><p class="eyebrow">Attempt trend</p><h2 id="failed-attempts-title">Failed attempts by run type</h2><p class="section-copy">Scores below 3/5 are grouped by practice and exam-run type. Keep all lines visible to compare patterns, or focus on one run type or topic.</p></div>
+    <div class="failure-filters">{% if progress.failure_modes %}<label class="failure-topic-filter" for="failure-mode-filter"><span>Run type</span><select id="failure-mode-filter" data-failure-mode-filter><option value="">All run types</option>{% for mode in progress.failure_modes %}<option value="{{ mode }}">{{ mode }}</option>{% endfor %}</select></label>{% endif %}{% if progress.failure_topics %}<label class="failure-topic-filter" for="failure-topic-filter"><span>Topic</span><select id="failure-topic-filter" data-failure-topic-filter><option value="">All topics</option>{% for topic in progress.failure_topics %}<option value="{{ topic }}">{{ topic }}</option>{% endfor %}</select></label>{% endif %}</div>
+  </div>
+  {% if progress.failure_trend %}<div class="failure-chart" data-failure-chart data-points='{{ progress.failure_trend|tojson }}' aria-describedby="failed-attempts-description"><div class="failure-chart-legend" data-failure-legend aria-label="Displayed run types"></div><canvas class="chart-canvas" aria-label="Multi-line chart of failed question attempts by date and run type" role="img"></canvas><div class="chart-tooltip" data-failure-tooltip hidden></div></div><p id="failed-attempts-description" class="chart-hint">Hover over a date to compare failed attempts across the displayed run types.</p>{% else %}{{ empty_state('No assessed attempts yet', 'Complete and assess a practice question to see your trends here.', 'Start practising', url_for('trainer'), 'brain') }}{% endif %}
+</section>
+
+
+
+
+<section class="panel">
+<nav class="toolbar" aria-label="Progress views">{% for key,label in [('topics','Topic mastery'),('questions','Questions to revisit'),('gaps','Learning gaps')] %}<a class="button-link {{ '' if view == key else 'secondary-link' }}" href="{{ url_for('progress_dashboard', subject_id=subject.id, view=key) }}" {% if view == key %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}</nav>
+{% if view != 'gaps' %}
+<form method="get" class="table-filters"><input type="hidden" name="view" value="{{ view }}"><label>Search {{ 'questions' if view == 'questions' else 'topics' }}<input name="q" value="{{ query }}" placeholder="Filter this view…"></label><button>Filter</button><a href="{{ url_for('progress_dashboard', subject_id=subject.id, view=view) }}">Clear</a></form>
+<div class="table-wrap compact-data-table"><table><thead>{% if view == 'questions' %}<tr><th>Question</th><th>Priority</th></tr>{% else %}<tr><th>Topic</th><th>Attempts</th><th>Average score</th><th>Mastery</th></tr>{% endif %}</thead><tbody>
+{% for item in pagination.rows %}<tr>{% if view == 'questions' %}<td><details><summary><span class="row-preview">{{ item.question_text }}</span></summary><p>{{ item.question_text }}</p><a href="{{ url_for('trainer') }}">Start practice</a></details></td><td>{{ item.priority }}</td>{% else %}<td><strong>{{ item.name }}</strong><details><summary>Why this result?</summary><p>{{ item.mastery_reason }}</p></details></td><td>{{ item.attempts }}</td><td>{{ item.average_score if item.average_score is not none else '—' }} / 5</td><td><span class="coverage-state mastery-{{ item.mastery_state }}">{{ item.mastery_state|replace('_',' ')|title }}</span></td>{% endif %}</tr>{% endfor %}
+</tbody></table></div>{% if not pagination.total %}<p class="section-copy">{{ 'No results match your search.' if query else 'No practice evidence in this view yet. Complete a practice session to build your progress.' }}</p>{% endif %}{{ table_pagination(pagination) }}
+{% else %}
+{% for title,page in [('Repeated omissions',missing_page),('Misconceptions',misconceptions_page)] %}<h2>{{ title }}</h2><div class="table-wrap"><table><thead><tr><th>Point to revisit</th><th>Occurrences</th></tr></thead><tbody>{% for item,count in page.rows %}<tr><td>{{ item }}</td><td>{{ count }}</td></tr>{% else %}<tr><td colspan="2">No recurring patterns yet.</td></tr>{% endfor %}</tbody></table></div>{{ table_pagination(page) }}{% endfor %}
+{% endif %}
+</section>
+{% endblock %}

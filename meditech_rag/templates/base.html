@@ -1,0 +1,79 @@
+{% from "components.html" import icon, nav_item, flashes %}
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <title>{% block title %}Colloquily{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='tailwind.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <script defer src="{{ url_for('static', filename='app.bundle.js') }}"></script>
+  {% block head %}{% endblock %}
+</head>
+
+<body x-data="{ navOpen: false, userOpen: false }" @keydown.escape.window="navOpen = false; userOpen = false">
+  {% if g.user and not bare|default(false) %}
+  <div class="app-shell">
+    <header class="shell-topbar">
+      <button class="shell-icon-button mobile-menu-button" type="button" @click="navOpen = true"
+        aria-label="Open navigation" aria-controls="primary-navigation">{{ icon('menu', 20) }}</button>
+      <a class="shell-brand" href="{{ url_for('index') }}" aria-label="Colloquily overview"><span
+          class="brand-mark">C</span><span>Colloquily</span></a>
+      {% if g.active_subject %}
+      <form action="{{ url_for('select_subject') }}" method="post" class="topbar-exam-switcher">
+        <input type="hidden" name="next_page" value="{{ request.path }}">
+        <label class="sr-only" for="topbar-subject">Active exam</label>
+        <select id="topbar-subject" name="subject_id" onchange="this.form.submit()" aria-label="Active exam">
+          {% for subject in g.subjects %}<option value="{{ subject.id }}" {% if subject.id==g.active_subject.id
+            %}selected{% endif %}>{{ subject.name }}</option>{% endfor %}
+        </select>
+      </form>
+      {% endif %}
+      <a class="user-menu-trigger" href="{{ url_for('profile') }}">{{ icon('chart-no-axes-combined') }} My activity</a>
+    </header>
+
+    <div class="mobile-scrim" x-cloak x-show="navOpen" x-transition.opacity @click="navOpen = false" aria-hidden="true">
+    </div>
+    <aside id="primary-navigation" class="shell-sidebar" :class="navOpen && 'open'">
+      <div class="mobile-sidebar-head"><strong>Navigation</strong><button class="shell-icon-button" type="button"
+          @click="navOpen = false" aria-label="Close navigation">{{ icon('x', 20) }}</button></div>
+      <nav aria-label="Primary navigation">
+        <p class="shell-nav-label">Study</p>
+        {{ nav_item('index', 'Overview', 'gauge') }}
+        {{ nav_item('study', 'Ask', 'message-square-text',
+        active_endpoints=['ask','summarize','quiz','quiz_submit']) }}
+        <!-- {{ nav_item('conversation_history', 'Question history', 'clock-3') }} -->
+        {{ nav_item('trainer', 'Time-Pressure
+        Trainer', 'clock-3', active_endpoints=['trainer_session','trainer_run'])
+        }}
+        {% if g.active_subject %}
+        {{ nav_item('question_library', 'Questions', 'circle-help', href=url_for('question_library')) }}
+        {{ nav_item('progress_dashboard', 'Progress', 'chart-no-axes-combined', href=url_for('progress_dashboard',
+        subject_id=g.active_subject.id), active_endpoints=['five_day_dashboard']) }}
+        {{ nav_item('materials', 'Materials', 'library', href=url_for('materials')) }}
+        {% endif %}
+        <p class="shell-nav-label">Tools</p>
+        {{ nav_item('admin_subjects', 'Exams & Review', 'clipboard-check',
+        active_endpoints=['subject_review','subject_questions','subject_reported_questions','subject_exam_pack','subject_models'])
+        }}
+        {{ nav_item('admin_eval', 'Evaluation', 'chart-no-axes-combined') }}
+        {{ nav_item('admin_settings', 'Advanced settings', 'settings') }}
+      </nav>
+      <div class="sidebar-privacy">{{ icon('shield-check', 16) }}<span>Local models and private data</span></div>
+    </aside>
+
+    <main class="shell-main" id="main-content">
+      {{ flashes() }}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% else %}
+  <main class="bare-main">{{ flashes() }}{% block bare_content %}{% endblock %}</main>
+  {% endif %}
+  {% block scripts %}{% endblock %}
+</body>
+
+</html>

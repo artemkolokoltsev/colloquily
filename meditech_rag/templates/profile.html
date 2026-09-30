@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}My activity | Colloquily{% endblock %}
+{% block content %}
+<header class="page-header"><div><p class="eyebrow">Local workspace</p><h1>My activity</h1><p>Your local activity summary. Course mastery is available under Progress.</p></div></header>
+<section class="status-strip"><div><span>Requests</span><strong>{{ user_analytics.summary.requests_total or 0 }}</strong></div><div><span>Average response</span><strong>{{ user_analytics.summary.avg_duration_ms|duration_human }}</strong></div><div><span>Average score</span><strong>{{ '%.0f'|format(user_analytics.summary.avg_score_percent or 0) }}%</strong></div><div><span>Helpful ratings</span><strong>{{ user_analytics.summary.likes or 0 }}</strong></div></section>
+<section class="content-grid"><article class="panel"><div class="panel-heading"><h2>Recent study requests</h2><a href="{{ url_for('conversation_history') }}">View history</a></div>{% for item in user_analytics.recent_requests %}<div class="subject-row"><div><strong>{{ item.input_text }}</strong><small>{{ item.created_at }} · {{ item.request_type }}</small></div></div>{% else %}<p class="section-copy">No requests yet.</p>{% endfor %}</article><article class="panel"><h2>Recent quizzes</h2>{% for item in user_analytics.quizzes %}<div class="subject-row"><strong>{{ item.topic }}</strong><span>{{ item.score }}/{{ item.total }}</span></div>{% else %}<p class="section-copy">No quiz results yet.</p>{% endfor %}</article></section>
+{% endblock %}

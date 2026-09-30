@@ -1,0 +1,12 @@
+flask
+gunicorn
+pymupdf
+sentence-transformers
+faiss-cpu
+numpy
+requests
+torch
+pydantic>=2,<3
+pytest
+# Optional tracing/evaluation:
+opentelemetry-exporter-otlp-proto-common

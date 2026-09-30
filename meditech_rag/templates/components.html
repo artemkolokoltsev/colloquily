@@ -1,0 +1,37 @@
+{% macro icon(name, size=18) -%}<i data-lucide="{{ name }}" style="width:{{ size }}px;height:{{ size }}px" aria-hidden="true"></i>{%- endmacro %}
+
+{% macro nav_item(endpoint, label, icon_name, href=None, active_endpoints=[]) -%}
+  {% set is_active = request.endpoint == endpoint or request.endpoint in active_endpoints %}
+  <a class="shell-nav-item {% if is_active %}active{% endif %}" href="{{ href or url_for(endpoint) }}" {% if is_active %}aria-current="page"{% endif %}>
+    {{ icon(icon_name) }}<span>{{ label }}</span>
+  </a>
+{%- endmacro %}
+
+{% macro page_header(title, eyebrow='', description='', actions='') -%}
+  <header class="page-header">
+    <div>{% if eyebrow %}<p class="eyebrow">{{ eyebrow }}</p>{% endif %}<h1>{{ title }}</h1>{% if description %}<p>{{ description }}</p>{% endif %}</div>
+    {% if actions %}<div class="page-header-actions">{{ actions|safe }}</div>{% endif %}
+  </header>
+{%- endmacro %}
+
+{% macro empty_state(title, description, action_label='', action_href='', icon_name='library') -%}
+  <div class="empty-state">
+    <span class="empty-state-icon">{{ icon(icon_name, 22) }}</span>
+    <h2>{{ title }}</h2><p>{{ description }}</p>
+    {% if action_label and action_href %}<a class="button-link" href="{{ action_href }}">{{ action_label }}</a>{% endif %}
+  </div>
+{%- endmacro %}
+
+{% macro flashes() -%}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}<div class="alert-stack" aria-live="polite">{% for category,message in messages %}<div class="flash flash-{{ category }}" role="status">{{ message }}</div>{% endfor %}</div>{% endif %}
+  {% endwith %}
+{%- endmacro %}
+
+{% macro source_modal() -%}
+  <div id="source-modal" class="modal source-modal hidden" aria-hidden="true"><div class="modal-panel source-modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-doc-title"><div class="modal-header"><div><h3 id="modal-doc-title">Source</h3><p id="modal-chunk-meta" class="section-copy"></p></div><div class="modal-header-actions"><a id="modal-pdf-open" class="button-link secondary-link" href="#" target="_blank" rel="noopener">Open cited page</a><button type="button" class="icon-close" onclick="closeSourceModal()" aria-label="Close">×</button></div></div><div class="modal-body"><div id="modal-chunk-preview" class="chunk-preview-card"></div><div id="modal-pdf-unavailable" class="pdf-unavailable hidden">A PDF preview is not available for this source.</div><iframe id="modal-pdf-frame" class="pdf-frame" title="Source document"></iframe></div></div></div>
+{%- endmacro %}
+
+{% macro table_pagination(page) %}
+<nav class="pagination" aria-label="Table pagination"><span role="status">{{ page.start }}–{{ page.end }} of {{ page.total }}</span><div>{% if page.page > 1 %}<a href="{{ page.previous }}">Previous</a>{% else %}<span aria-disabled="true">Previous</span>{% endif %}<span>Page {{ page.page }} of {{ page.pages }}</span>{% if page.page < page.pages %}<a href="{{ page.next }}">Next</a>{% else %}<span aria-disabled="true">Next</span>{% endif %}</div></nav>
+{% endmacro %}

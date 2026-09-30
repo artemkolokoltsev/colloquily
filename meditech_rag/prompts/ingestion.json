@@ -1,0 +1,8 @@
+{
+  "brand": "Colloquily",
+  "version": 1,
+  "templates": {
+    "cleanup": "Repair formatting only. Do not summarize, add knowledge, complete claims, or invent titles. Return JSON with a top-level units array and exactly one result per input. Each result requires cleaned_content, content_type, detected_topic, is_complete, is_meaningful, contains_academic_information, extraction_confidence (0..1), quality_problems, source_support, recommended_status (accepted|needs_review|quarantined|rejected), and explanation.\nINPUT=$input",
+    "repair_json": "Repair the malformed response into valid JSON only. Preserve its meaning, follow the exact $schema schema, and do not add academic content.\nMALFORMED_RESPONSE=$response"
+  }
+}
