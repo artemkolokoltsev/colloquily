@@ -1,0 +1,20 @@
+services:
+  colloquily:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: colloquily:local
+    container_name: colloquily
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${COLLOQUILY_PORT:-8000}:8000"
+    environment:
+      COLLOQUILY_DATA_DIR: /data
+      OLLAMA_URL: http://host.docker.internal:11434
+      HOST: 0.0.0.0
+      PORT: 8000
+      DEBUG: "false"
+    volumes:
+      - ./meditech_rag/data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Colloquily Documentation</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism.min.css">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --ink: #182026;
+      --muted: #5c6875;
+      --line: #d9dee5;
+      --accent: #176b87;
+      --accent-strong: #0f4c5c;
+      --code: #f1f4f7;
+      --ok: #2f7d4f;
+      --warn: #9a6116;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.55;
+    }
+
+    a { color: var(--accent-strong); }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    aside {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: auto;
+      border-right: 1px solid var(--line);
+      background: #eef2f5;
+      padding: 24px 20px;
+    }
+
+    .brand {
+      margin-bottom: 28px;
+    }
+
+    .brand h1 {
+      margin: 0 0 8px;
+      font-size: 22px;
+      line-height: 1.2;
+    }
+
+    .brand p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    nav a {
+      display: block;
+      padding: 8px 10px;
+      border-radius: 6px;
+      color: var(--ink);
+      text-decoration: none;
+      font-size: 14px;
+    }
+
+    nav a:hover {
+      background: #dfe7ec;
+    }
+
+    main {
+      max-width: 1120px;
+      width: 100%;
+      padding: 36px 40px 80px;
+    }
+
+    .hero {
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 28px;
+      margin-bottom: 32px;
+    }
+
+    .hero h2 {
+      margin: 0 0 12px;
+      font-size: 40px;
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      max-width: 800px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    section {
+      margin: 36px 0;
+      scroll-margin-top: 24px;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 28px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 24px 0 10px;
+      font-size: 19px;
+      letter-spacing: 0;
+    }
+
+    p { margin: 0 0 14px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 16px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .card h3 {
+      margin-top: 0;
+      font-size: 16px;
+    }
+
+    .card p, li {
+      color: var(--muted);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      display: block;
+    }
+
+    thead, tbody, tr {
+      display: table;
+      width: 100%;
+      table-layout: fixed;
+    }
+
+    th, td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+    }
+
+    th {
+      background: #eef2f5;
+      color: #303a43;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    code {
+      background: var(--code);
+      border: 1px solid #e0e5ea;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-size: 0.94em;
+    }
+
+    pre {
+      background: #f4f6f8;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      overflow: auto;
+    }
+
+    pre code {
+      background: transparent;
+      border: 0;
+      padding: 0;
+    }
+
+    .note {
+      border-left: 4px solid var(--accent);
+      background: #eaf4f7;
+      padding: 12px 14px;
+      border-radius: 6px;
+      color: #24424b;
+    }
+
+    .warn {
+      border-left-color: var(--warn);
+      background: #fff5e7;
+      color: #5f3b0d;
+    }
+
+    .mermaid {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      margin-top: 14px;
+      overflow: auto;
+    }
+
+    .tree {
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .status {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: #e4f3ea;
+      color: var(--ok);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    @media (max-width: 880px) {
+      .layout { grid-template-columns: 1fr; }
+      aside {
+        position: relative;
+        height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      main { padding: 28px 18px 60px; }
+      .hero h2 { font-size: 32px; }
+      .grid { grid-template-columns: 1fr; }
+      table, thead, tbody, tr { display: block; }
+      th { display: none; }
+      td { display: block; width: 100%; }
+      td:first-child { font-weight: 700; color: var(--ink); padding-bottom: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <div class="brand">
+        <h1>Colloquily</h1>
+        <p>Static project documentation</p>
+      </div>
+      <nav aria-label="Documentation sections">
+        <a href="#overview">Overview</a>
+        <a href="#quick-start">Quick Start</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#structure">Project Structure</a>
+        <a href="#data">Data And Persistence</a>
+        <a href="#workflows">Workflows</a>
+        <a href="#configuration">Configuration</a>
+        <a href="#indexing">Indexing</a>
+        <a href="#evaluation">Evaluation</a>
+        <a href="#operations">Operations</a>
+      </nav>
+    </aside>
+
+    <main>
+      <div class="hero">
+        <span class="status">Open as docs/index.html</span>
+        <h2>Colloquily Documentation</h2>
+        <p>Documentation for the local Flask RAG learning assistant: application structure, runtime data, indexing, retrieval, evaluation, and operation notes.</p>
+      </div>
+
+      <section id="overview">
+        <h2>Overview</h2>
+        <p>Colloquily is a completely local, multi-subject study assistant for reviewed Markdown and PDF course material. It builds separate accepted-only indexes, generates evidence-bound questions, evaluates typed oral answers, and runs timed subject simulations with exact citations.</p>
+        <div class="grid">
+          <div class="card">
+            <h3>Local First</h3>
+            <p>PDFs, indexes, request history, cache files, and the SQLite app database live under <code>meditech_rag/data/</code>.</p>
+          </div>
+          <div class="card">
+            <h3>Source Backed</h3>
+            <p>Answers include citation IDs such as <code>[Q1]</code>. The UI renders them as clickable source previews with document, page, chunk type, and score.</p>
+          </div>
+          <div class="card">
+            <h3>Experiment Friendly</h3>
+            <p>Prepared index profiles, evaluation scripts, metrics, and local feedback support retrieval quality comparisons.</p>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Multi-subject quality workflow</h3>
+          <p>Each subject owns a workspace under <code>data/subjects/&lt;slug&gt;/</code> with immutable raw input, preprocessing checkpoints, review reports, generated exam packs, and a physically separate FAISS index. Only accepted knowledge units can be embedded or cited.</p>
+          <p>The admin subject workspace supports recursive Markdown/PDF discovery, hash-based incremental processing, structured local-model cleanup, suspicious-content review, question and exam-pack approval, and task-specific Ollama or LM Studio configuration.</p>
+        </div>
+        <div class="card">
+          <h3>Timed oral exams</h3>
+          <p>Single-question, rapid-practice, subject-simulation, and multi-subject modes use server-side session deadlines. A multi-subject test creates one full-duration session per selected subject and a transition between them; retrieval and scoring never cross subject boundaries.</p>
+        </div>
+      </section>
+
+      <section id="quick-start">
+        <h2>Quick Start</h2>
+        <pre><code class="language-bash">cd meditech_rag
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+ollama pull phi3:mini
+python app.py</code></pre>
+        <p>Open <code>http://localhost:8000</code>. The local development admin account is <code>admin</code> / <code>admin</code>.</p>
+        <p class="note warn">Change the default admin password before using the app in any shared environment.</p>
+      </section>
+
+      <section id="architecture">
+        <h2>Architecture</h2>
+        <p>The Flask app coordinates authenticated pages and calls into service modules. The RAG engine owns retrieval, prompt creation, LLM calls, request logging, and analytics refreshes.</p>
+        <div class="mermaid">
+flowchart TD
+  Browser["Browser UI"] --> Flask["app.py Flask routes"]
+  Flask --> DB["database.py SQLite users requests feedback quizzes"]
+  Flask --> Engine["rag_engine.py"]
+  Engine --> Prep["document_preprocessor.py"]
+  Prep --> Parser["pdf_parsers: PyMuPDF or Marker"]
+  Prep --> Source["SourceUnit pages blocks topics"]
+  Engine --> Chunking["chunking strategies"]
+  Chunking --> Embed["embeddings: Ollama EmbeddingGemma, SentenceTransformer, or LM Studio"]
+  Embed --> FAISS["vector_store.py FAISS"]
+  Engine --> Prompt["prompt_builder.py"]
+  Prompt --> LLM["llm: Ollama or LM Studio"]
+  Engine --> Persist["persistence.py JSON and FAISS"]
+  Engine --> Eval["evaluator.py metrics and warnings"]
+  Engine --> Analytics["analytics.py snapshots"]
+        </div>
+        <h3>Core Modules</h3>
+        <table>
+          <thead><tr><th>Path</th><th>Responsibility</th></tr></thead>
+          <tbody>
+            <tr><td><code>app.py</code></td><td>Flask routes, auth guards, admin pages, chat, summaries, quiz, feedback, structure endpoint.</td></tr>
+            <tr><td><code>config.py</code></td><td>Paths, model defaults, chunking settings, evaluation paths, and topic configuration.</td></tr>
+            <tr><td><code>services/rag_engine.py</code></td><td>Loads indexes, runs retrieval, reranks metadata, builds prompts, calls LLMs, saves logs and analytics.</td></tr>
+            <tr><td><code>services/index_builder.py</code></td><td>Builds prepared index profiles from cached pages and profile config.</td></tr>
+            <tr><td><code>services/database.py</code></td><td>SQLite tables and helpers for users, requests, sources, feedback, quiz sessions, and attempts.</td></tr>
+            <tr><td><code>services/persistence.py</code></td><td>JSON and FAISS persistence for chunks, pages, topics, edges, structure, analytics, and request history.</td></tr>
+            <tr><td><code>services/evaluator.py</code></td><td>Automatic retrieval and groundedness heuristics.</td></tr>
+          </tbody>
+        </table>
+        <h3>Source Module Inventory</h3>
+        <table>
+          <thead><tr><th>Area</th><th>Files</th></tr></thead>
+          <tbody>
+            <tr><td>Core services</td><td><code>analytics.py</code>, <code>database.py</code>, <code>document_preprocessor.py</code>, <code>evaluator.py</code>, <code>factory.py</code>, <code>index_builder.py</code>, <code>index_profiles.py</code>, <code>interfaces.py</code>, <code>metadata_extractor.py</code>, <code>parser_factory.py</code>, <code>pdf_loader.py</code>, <code>persistence.py</code>, <code>preprocessing_cache.py</code>, <code>prompt_builder.py</code>, <code>query_analyzer.py</code>, <code>rag_engine.py</code>, <code>runtime_settings.py</code>, <code>source_models.py</code>, <code>structure_builder.py</code>, <code>tagger.py</code>, <code>topic_tagger.py</code>, <code>vector_store.py</code>.</td></tr>
+            <tr><td>Chunking</td><td><code>page_chunker.py</code>, <code>paragraph_chunker.py</code>, <code>semantic_chunker.py</code>, <code>structure_chunker.py</code>, <code>word_chunker.py</code>.</td></tr>
+            <tr><td>Embeddings</td><td><code>st_embedder.py</code>, <code>lmstudio_embedder.py</code>.</td></tr>
+            <tr><td>LLM clients</td><td><code>ollama_llm.py</code>, <code>lmstudio_llm.py</code>.</td></tr>
+            <tr><td>PDF parsers</td><td><code>pymupdf_parser.py</code>, <code>marker_parser.py</code>.</td></tr>
+            <tr><td>Images</td><td><code>image_extractor.py</code>, <code>image_descriptor.py</code>, <code>ocr_stub.py</code>, <code>page_renderer.py</code>.</td></tr>
+            <tr><td>Local evaluation</td><td><code>eval_metrics.py</code> and scripts under <code>scripts/eval_*</code>.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="structure">
+        <h2>Project Structure</h2>
+        <pre class="tree"><code>.
+|-- README.md
+|-- Makefile
+|-- docs/
+|   `-- index.html
+|-- Literature/
+|   `-- research PDFs
+|-- meditech_rag/
+|   |-- README.md
+|   |-- app.py
+|   |-- config.py
+|   |-- requirements.txt
+|   |-- Fragenkatalog.pdf
+|   |-- configs/
+|   |   `-- index_profiles.json
+|   |-- data/
+|   |   |-- colloquily.db
+|   |   |-- pdfs/
+|   |   |-- index/
+|   |   |-- indexes/
+|   |   |-- cache/
+|   |   `-- eval/
+|   |-- scripts/
+|   |   |-- prepare_indexes.py
+|   |   |-- eval_smoke.py
+|   |   |-- eval_chunking.py
+|   |   |-- eval_retrieval_profiles.py
+|   |   |-- eval_answer_subset.py
+|   |   |-- eval_report.py
+|   |   `-- extract_questions_from_pdf.py
+|   |-- services/
+|   |   |-- rag_engine.py
+|   |   |-- index_builder.py
+|   |   |-- database.py
+|   |   |-- persistence.py
+|   |   |-- document_preprocessor.py
+|   |   |-- pdf_loader.py
+|   |   |-- vector_store.py
+|   |   |-- prompt_builder.py
+|   |   |-- evaluator.py
+|   |   |-- analytics.py
+|   |   |-- chunking/
+|   |   |-- embeddings/
+|   |   |-- llm/
+|   |   |-- pdf_parsers/
+|   |   `-- images/
+|   |-- static/
+|   |   `-- app.css
+|   |-- templates/
+|   |   |-- index.html
+|   |   |-- admin.html
+|   |   |-- admin_eval.html
+|   |   |-- documents.html
+|   |   |-- settings.html
+|   |   |-- users.html
+|   |   |-- profile.html
+|   |   |-- topics.html
+|   |   `-- login.html
+|   `-- tests/
+|       `-- test_topic_pipeline.py
+`-- presentation and project assets</code></pre>
+      </section>
+
+      <section id="data">
+        <h2>Data And Persistence</h2>
+        <p>The project keeps runtime data local. The most important location is <code>meditech_rag/data/</code>.</p>
+        <table>
+          <thead><tr><th>Location</th><th>Contents</th></tr></thead>
+          <tbody>
+            <tr><td><code>data/colloquily.db</code></td><td>Durable SQLite users, processing jobs, checkpoints, feedback, quiz sessions, and attempts.</td></tr>
+            <tr><td><code>data/pdfs/</code></td><td>Uploaded lecture PDFs.</td></tr>
+            <tr><td><code>data/index/</code></td><td>Legacy/runtime FAISS index, chunks, pages, documents, structure, topics, analytics, settings, request history.</td></tr>
+            <tr><td><code>data/indexes/</code></td><td>Prepared index profiles such as <code>baseline_page_minilm</code>.</td></tr>
+            <tr><td><code>data/cache/</code></td><td>SentenceTransformer cache, extracted pages cache, image and page-render caches.</td></tr>
+            <tr><td><code>data/eval/</code></td><td>Evaluation datasets, metric registry, and generated runs.</td></tr>
+          </tbody>
+        </table>
+        <p class="note">Treat <code>data/</code> as private project state. It can contain course material, user inputs, feedback, and generated model outputs.</p>
+      </section>
+
+      <section id="workflows">
+        <h2>Workflows</h2>
+        <table>
+          <thead><tr><th>Workflow</th><th>Route Or Command</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>Login</td><td><code>/login</code></td><td>Session-based auth. Most routes require a logged-in user.</td></tr>
+            <tr><td>Ask</td><td><code>POST /ask</code></td><td>Retrieves context, builds QA prompt, calls LLM, renders cited answer.</td></tr>
+            <tr><td>Summarize</td><td><code>POST /summarize</code></td><td>Summarizes one page, a range, or a combined section.</td></tr>
+            <tr><td>Quiz</td><td><code>POST /quiz</code>, <code>POST /quiz/submit</code></td><td>Generates questions, stores session, evaluates answers.</td></tr>
+            <tr><td>Feedback</td><td><code>POST /feedback</code></td><td>Saves like/dislike feedback locally.</td></tr>
+            <tr><td>Documents</td><td><code>/admin/documents</code></td><td>Upload PDFs, rebuild index, delete documents.</td></tr>
+            <tr><td>Settings</td><td><code>/admin/settings</code></td><td>Runtime settings. Rebuild index after parser, chunking, embedding, or LLM changes.</td></tr>
+            <tr><td>Structure</td><td><code>GET /structure</code></td><td>Exports document, page, chunk, concept, and edge graph as JSON.</td></tr>
+            <tr><td>Topics Debug</td><td><code>/topics</code></td><td>Topic tagging and region debugging.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="configuration">
+        <h2>Configuration</h2>
+        <p><code>config.py</code> creates required directories at import time and reads <code>.env</code> and <code>.env.local</code> from the project root and app directory.</p>
+        <table>
+          <thead><tr><th>Setting</th><th>Default</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>CHUNKING_STRATEGY</code></td><td><code>page</code></td><td>Default chunker.</td></tr>
+            <tr><td><code>ACTIVE_INDEX_NAME</code></td><td><code>final_paragraph_overlap_mpnet_rerank</code></td><td>Prepared profile selected at startup.</td></tr>
+            <tr><td>Exam embedding backend</td><td><code>ollama</code></td><td>Uses local <code>embeddinggemma:latest</code>; SentenceTransformer and LM Studio are optional.</td></tr>
+            <tr><td><code>ST_EMBED_MODEL</code></td><td><code>sentence-transformers/all-MiniLM-L6-v2</code></td><td>Local embedding model.</td></tr>
+            <tr><td><code>LLM_BACKEND</code></td><td><code>ollama</code></td><td>Ollama or LM Studio chat backend.</td></tr>
+            <tr><td><code>OLLAMA_LLM_MODEL</code></td><td><code>phi3:mini</code></td><td>Default Ollama model.</td></tr>
+            <tr><td><code>ENABLE_METADATA_RERANK</code></td><td><code>True</code></td><td>Uses metadata features to adjust vector ranking.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="indexing">
+        <h2>Indexing</h2>
+        <p>The app supports two index paths: the active prepared profile under <code>data/indexes/</code>, and the legacy/runtime index under <code>data/index/</code>. On startup, <code>RAGEngine</code> tries the active prepared profile first, then falls back to the legacy index.</p>
+        <h3>Build Prepared Profiles</h3>
+        <pre><code class="language-bash">cd meditech_rag
+python scripts/prepare_indexes.py</code></pre>
+        <h3>Profile Definitions</h3>
+        <pre><code class="language-json">{
+  "profiles": [
+    {
+      "name": "baseline_page_minilm",
+      "chunking_strategy": "page",
+      "overlap_enabled": false,
+      "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+      "metadata_rerank_enabled": false
+    },
+    {
+      "name": "final_paragraph_overlap_mpnet_rerank",
+      "chunking_strategy": "paragraph",
+      "overlap_enabled": true,
+      "embedding_model": "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
+      "metadata_rerank_enabled": true
+    }
+  ]
+}</code></pre>
+      </section>
+
+      <section id="evaluation">
+        <h2>Evaluation</h2>
+        <p>Evaluation scripts live in <code>meditech_rag/scripts/</code> and store results under <code>data/eval/runs/</code>.</p>
+        <pre><code class="language-bash">cd meditech_rag
+python scripts/eval_smoke.py
+python scripts/eval_chunking.py
+python scripts/eval_retrieval_profiles.py
+python scripts/eval_answer_subset.py
+python scripts/eval_report.py</code></pre>
+        <p>Common signals include <code>hit_at_k</code>, <code>first_relevant_rank</code>, <code>citation_page_accuracy</code>, <code>duplicate_retrieval_ratio</code>, answer text checks, and groundedness warnings.</p>
+      </section>
+
+      <section id="operations">
+        <h2>Operations</h2>
+        <h3>Development Server</h3>
+        <pre><code class="language-bash">make dev</code></pre>
+        <h3>Run Tests</h3>
+        <pre><code class="language-bash">cd meditech_rag
+python -m pytest</code></pre>
+        <h3>Operational Notes</h3>
+        <ul>
+          <li>Use the Admin Documents page to upload PDFs and rebuild indexes.</li>
+          <li>Rebuild the index after changing parser, chunking, embedding, or relevant runtime settings.</li>
+          <li>Keep <code>data/</code> private unless it has been reviewed.</li>
+          <li>Disable external model downloads with <code>ST_ALLOW_DOWNLOAD = False</code> after the desired model is cached.</li>
+          <li>The static documentation page uses Prism and Mermaid from CDNs when available; the written documentation remains visible without them.</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-core.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default" });
+  </script>
+</body>
+</html>
