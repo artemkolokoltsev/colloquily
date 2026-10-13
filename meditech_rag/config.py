@@ -49,7 +49,8 @@ _bootstrap_env()
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.abspath(_env_value("COLLOQUILY_DATA_DIR", os.path.join(BASE_DIR, "data")))
+from app_paths import data_directory
+DATA_DIR = str(data_directory())
 EXAMS_DIR = os.path.join(DATA_DIR, "exams")
 LEGACY_SUBJECTS_DIR = os.path.join(DATA_DIR, "subjects")
 # Internal compatibility name; new workspaces are stored under data/exams.
@@ -75,7 +76,6 @@ for path in [
     EXTRACTED_PAGES_CACHE_DIR,
     IMAGE_CACHE_DIR,
     PAGE_RENDER_DIR,
-    CONFIG_DIR,
 ]:
     os.makedirs(path, exist_ok=True)
 
@@ -117,13 +117,15 @@ EMBED_BACKEND = "st"  # st | lmstudio
 ST_EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 ST_CACHE_DIR = os.path.join(DATA_DIR, "cache", "models")
 ST_ALLOW_DOWNLOAD = True
-# Alternative for stronger multilingual/German support:
+# Alternative for stronger multilingual support:
 # ST_EMBED_MODEL = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
 
 
 LLM_BACKEND = "ollama"  # ollama | lmstudio
 OLLAMA_URL = _env_value("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_LLM_MODEL = "phi3:mini"
+OLLAMA_FAST_MODEL = _env_value("OLLAMA_FAST_MODEL", "qwen2.5:1.5b")
+OLLAMA_QUALITY_MODEL = _env_value("OLLAMA_QUALITY_MODEL", "phi3:mini")
 OLLAMA_TIMEOUT_SECONDS = 300
 OLLAMA_NUM_PREDICT = 384
 OLLAMA_EMBED_MODEL = "embeddinggemma:latest"
@@ -163,8 +165,6 @@ LEGACY_DB_PATH = os.path.join(DATA_DIR, "app.db")
 DB_PATH = os.path.join(DATA_DIR, "colloquily.db")
 if not os.path.exists(DB_PATH) and os.path.exists(LEGACY_DB_PATH):
     shutil.copy2(LEGACY_DB_PATH, DB_PATH)
-DEFAULT_ADMIN_USERNAME = "admin"
-DEFAULT_ADMIN_PASSWORD = "admin"
 
 
 STRUCTURE_PATH = os.path.join(INDEX_DIR, "structure.json")
@@ -183,8 +183,6 @@ EVAL_DATASETS_DIR = os.path.join(EVAL_DIR, "datasets")
 EVAL_METRICS_DIR = os.path.join(EVAL_DIR, "metrics")
 EVAL_METRICS_PATH = os.path.join(EVAL_METRICS_DIR, "eval_metrics.json")
 GOLD_EVAL_DATASET_PATH = os.path.join(EVAL_DATASETS_DIR, "colloquily_gold_eval.json")
-if not os.path.exists(GOLD_EVAL_DATASET_PATH):
-    GOLD_EVAL_DATASET_PATH = os.path.join(EVAL_DATASETS_DIR, "meditech_gold_eval.json")
 
 for path in [EVAL_DIR, EVAL_RUNS_DIR, EVAL_DATASETS_DIR, EVAL_METRICS_DIR]:
     os.makedirs(path, exist_ok=True)

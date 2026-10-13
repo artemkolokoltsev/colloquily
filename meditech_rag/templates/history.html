@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% from "components.html" import icon, empty_state %}
+{% block title %}Question history | Colloquily{% endblock %}
+{% block content %}
+
+{% if conversations %}
+
+<section class="history-browser">
+    <aside class="panel history-question-list">
+        <div class="history-list-header">
+            <div>
+                <p class="eyebrow">Question sessions</p>
+            </div>
+        </div>
+        <div class="history-list-scroll">
+            {% for item in conversations %}
+            <button type="button" class="history-question{% if loop.first %} is-selected{% endif %}"
+                data-history-target="{{ item.request_uuid }}">
+                <strong>{{ item.input_text }}</strong>
+                <small>{{ item.created_at }}</small>
+            </button>
+            {% endfor %}
+        </div>
+    </aside>
+
+    <div class="history-preview">
+        {% for item in conversations %}
+        <article class="panel history-preview-item{% if not loop.first %} is-hidden{% endif %}"
+            id="conversation-{{ item.request_uuid }}" data-history-preview="{{ item.request_uuid }}">
+            <div class="history-answer-header">
+                <p class="eyebrow">{{ item.created_at }}</p>
+                <h2>{{ item.input_text }}</h2>
+            </div>
+
+            <div class="conversation-answer">
+                <p class="conversation-label">Answer</p>
+                <div class="answer-text">
+                    {{ item.answer_html if item.answer_html else 'No answer was stored.' }}
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% else %}
+<section class="panel">
+    {{ empty_state(
+    'No question sessions found',
+    'Ask your course materials a question to create your first saved session.',
+    'Ask a question',
+    url_for('study'),
+    'message-square-text'
+    ) }}
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+
+<script>
+    document.querySelectorAll('[data-history-target]').forEach(button => {
+        button.addEventListener('click', () => {
+            document.querySelectorAll('[data-history-target]')
+                .forEach(item => item.classList.toggle('is-selected', item === button));
+
+            document.querySelectorAll('[data-history-preview]')
+                .forEach(item => {
+                    item.classList.toggle(
+                        'is-hidden',
+                        item.dataset.historyPreview !== button.dataset.historyTarget
+                    );
+                });
+
+            history.replaceState(
+                null,
+                '',
+                `#conversation-${button.dataset.historyTarget}`
+            );
+        });
+    });
+
+    const selected = location.hash.replace('#conversation-', '');
+
+    if (selected) {
+        document
+            .querySelector(`[data-history-target="${CSS.escape(selected)}"]`)
+            ?.click();
+    }
+</script>
+
+{% endblock %}

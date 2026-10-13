@@ -36,6 +36,14 @@ def create_question(subject_id: int, payload: dict) -> dict:
     normalized = re.sub(r"\W+", " ", question_text.lower()).strip()
     now = datetime.now().isoformat(timespec="seconds")
     with closing(_connect()) as connection:
+        origin_reported_id = payload.get("origin_reported_question_id")
+        if origin_reported_id:
+            existing_origin = connection.execute(
+                "SELECT id FROM questions WHERE origin_reported_question_id = ?",
+                (int(origin_reported_id),),
+            ).fetchone()
+            if existing_origin:
+                return get_question(int(existing_origin["id"]))
         existing = connection.execute(
             "SELECT id, question_text FROM questions WHERE subject_id = ?",
             (subject_id,),
@@ -47,8 +55,9 @@ def create_question(subject_id: int, payload: dict) -> dict:
             INSERT INTO questions (
                 subject_id, topic_id, question_type, question_text, difficulty,
                 expected_duration_seconds, expected_core_points_json, optional_details_json,
-                evidence_ids_json, quality_score, review_status, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                evidence_ids_json, quality_score, review_status, origin_reported_question_id,
+                reported_chain_id, source_provenance, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 subject_id, payload.get("topic_id"), payload.get("question_type", "explanation"),
@@ -57,7 +66,8 @@ def create_question(subject_id: int, payload: dict) -> dict:
                 json.dumps(payload.get("expected_core_points", []), ensure_ascii=False),
                 json.dumps(payload.get("optional_details", []), ensure_ascii=False),
                 json.dumps(evidence_ids), float(payload.get("quality_score", 0)),
-                payload.get("review_status", "needs_review"), now, now,
+                payload.get("review_status", "needs_review"), origin_reported_id,
+                payload.get("reported_chain_id"), payload.get("source_provenance"), now, now,
             ),
         )
         connection.commit()
@@ -69,8 +79,16 @@ def _decode_question(row) -> dict | None:
     if not row:
         return None
     item = dict(row)
-    for key in ("expected_core_points_json", "optional_details_json", "evidence_ids_json"):
-        item[key.removesuffix("_json")] = json.loads(item.pop(key) or "[]")
+    for key in (
+        "expected_core_points_json", "optional_details_json", "evidence_ids_json",
+        "possible_followups_json", "tags_json", "source_slides_json",
+        "supporting_sources_json", "import_provenance_json",
+    ):
+        if key in item:
+            item[key.removesuffix("_json")] = json.loads(item.pop(key) or ("{}" if key == "import_provenance_json" else "[]"))
+    if "resolved_topic_name" in item:
+        item["topic_name"] = item.pop("resolved_topic_name")
+    item["enabled"] = bool(item.get("enabled", 1))
     return item
 
 
@@ -80,10 +98,10 @@ def get_question(question_id: int) -> dict | None:
 
 
 def list_questions(subject_id: int, *, accepted_only: bool = False) -> list[dict]:
-    query = "SELECT * FROM questions WHERE subject_id = ?"
+    query = "SELECT q.*, COALESCE(NULLIF(q.topic_name, ''), t.name, 'Unassigned') AS resolved_topic_name FROM questions q LEFT JOIN topics t ON t.id=q.topic_id WHERE q.subject_id = ?"
     if accepted_only:
-        query += " AND review_status = 'accepted'"
-    query += " ORDER BY created_at DESC, id DESC"
+        query += " AND q.review_status = 'accepted' AND q.enabled = 1"
+    query += " ORDER BY q.created_at DESC, q.id DESC"
     with closing(_connect()) as connection:
         return [_decode_question(row) for row in connection.execute(query, (subject_id,)).fetchall()]
 
@@ -97,44 +115,33 @@ def review_question(question_id: int, status: str, *, subject_id: int | None = N
     if subject_id is not None and question["subject_id"] != subject_id:
         raise ValueError("Question does not belong to subject")
     evidence_ids = question["evidence_ids"]
-    if status == "accepted" and set(accepted_evidence_map(question["subject_id"], evidence_ids)) != set(evidence_ids):
-        raise ValueError("Question evidence is no longer accepted")
+    if status == "accepted" and (
+        not evidence_ids or not question["expected_core_points"]
+        or set(accepted_evidence_map(question["subject_id"], evidence_ids)) != set(evidence_ids)
+    ):
+        raise ValueError("Question must have accepted evidence and a draft answer rubric before it can be accepted")
     with closing(_connect()) as connection:
         connection.execute(
             "UPDATE questions SET review_status = ?, updated_at = ? WHERE id = ?",
             (status, datetime.now().isoformat(timespec="seconds"), question_id),
         )
+        if question.get("origin_reported_question_id"):
+            activation = "active" if status == "accepted" else (
+                "outdated_or_unmatched" if status == "rejected" else "needs_manual_review"
+            )
+            connection.execute(
+                "UPDATE reported_questions SET activation_status = ?, updated_at = ? WHERE id = ?",
+                (activation, datetime.now().isoformat(timespec="seconds"), question["origin_reported_question_id"]),
+            )
         connection.commit()
     return get_question(question_id)
 
 
 def coverage_map(subject_id: int) -> list[dict]:
-    with closing(_connect()) as connection:
-        rows = connection.execute(
-            """
-            SELECT COALESCE(t.id, 0) AS topic_id, COALESCE(t.name, 'Unassigned') AS topic_name,
-                SUM(CASE WHEN ku.review_status = 'accepted' THEN 1 ELSE 0 END) AS accepted_evidence,
-                SUM(CASE WHEN ku.review_status = 'needs_review' THEN 1 ELSE 0 END) AS weak_evidence,
-                SUM(CASE WHEN ku.quality_problems_json LIKE '%conflict%' THEN 1 ELSE 0 END) AS conflicts
-            FROM knowledge_units ku LEFT JOIN topics t ON t.id = ku.topic_id
-            WHERE ku.subject_id = ? GROUP BY COALESCE(t.id, 0), COALESCE(t.name, 'Unassigned')
-            ORDER BY accepted_evidence DESC, topic_name
-            """,
-            (subject_id,),
-        ).fetchall()
-        result = []
-        for row in rows:
-            item = dict(row)
-            if item["conflicts"]:
-                item["strength"] = "conflicting"
-            elif item["accepted_evidence"] >= 3:
-                item["strength"] = "strong"
-            elif item["accepted_evidence"]:
-                item["strength"] = "weak"
-            else:
-                item["strength"] = "none"
-            result.append(item)
-        return result
+    """Return normalized material coverage without learner-specific evidence."""
+    from services.coverage import build_topic_coverage
+
+    return build_topic_coverage(subject_id)
 
 
 def create_attempt(

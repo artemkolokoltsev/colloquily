@@ -157,6 +157,8 @@ def build_settings_sections(values: dict[str, Any] | None = None) -> list[dict]:
         fields = []
         for field in section["fields"]:
             item = dict(field)
+            item["description"] = f"Configure {field['label'].lower()} for local processing."
+            item["influences"] = "Changes local parsing, retrieval, or model behaviour; rebuild the relevant exam index when required."
             if field["type"] == "password":
                 item["value"] = ""
                 item["has_saved_value"] = bool(values.get(field["key"]))
@@ -165,9 +167,14 @@ def build_settings_sections(values: dict[str, Any] | None = None) -> list[dict]:
             fields.append(item)
         sections.append(
             {
-                "section": section["section"],
+                "section": "Models & Inference" if section["section"] == "Modelle & Inferenz" else section["section"],
                 "anchor": section.get("anchor", section["section"].lower().replace(" ", "-").replace("&", "and")),
-                "description": section["description"],
+                "description": {
+                    "chunking": "Configure how source text becomes retrieval evidence.",
+                    "pdf-parsing": "Configure local PDF extraction and structure detection.",
+                    "retrieval": "Configure local retrieval, reranking, and summaries.",
+                    "models": "Configure local embedding and answer-generation services.",
+                }.get(section.get("anchor"), "Configure local application behaviour."),
                 "fields": fields,
             }
         )

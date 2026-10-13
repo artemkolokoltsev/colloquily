@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% from "components.html" import icon, empty_state, source_modal %}
+
+{% block title %}AI Assistant | Colloquily{% endblock %}
+
+{% block content %}
+
+{% if not material_status.ready %}
+
+<section class="panel">
+  {{ empty_state(
+  'No accepted evidence indexed',
+  'Process and review course materials before asking grounded questions.',
+  'Open materials',
+  url_for('materials'),
+  'library'
+  ) }}
+</section>
+
+{% else %}
+
+<div class="study-chat{% if not answer %} study-chat-empty{% endif %}">
+
+  {% if answer %}
+  <section class="study-response">
+    <div class="study-message">
+
+      <div class="study-message-label">
+        <span class="study-avatar">
+          {{ icon('sparkles', 16) }}
+        </span>
+        <strong>AI Assistant</strong>
+      </div>
+
+      <div class="answer-text">
+        {{ answer_html if answer_html else answer }}
+      </div>
+
+    </div>
+  </section>
+  {% endif %}
+
+
+  {% if sources %}
+  <section class="study-sources">
+
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">Evidence</p>
+        <h2>Sources</h2>
+      </div>
+
+      <span class="status-chip">
+        {{ sources|length }} citations
+      </span>
+    </div>
+
+    <ol class="source-list evidence-list">
+      {% for source in sources %}
+      <li>
+        <button type="button" class="source-link" data-doc="{{ source.document_title or source.doc_name }}"
+          data-page="{{ source.source_location or source.page_number }}"
+          data-page-number="{{ source.source_page_number or source.source_start or source.page_number or '' }}"
+          data-source-type="{{ source.source_type or '' }}" data-preview="{{ source.content or source.preview }}"
+          data-pdf-url="{{ source.source_url }}" onclick="openSourceModal(this)">
+          <strong>{{ source.citation_id or 'Evidence' }}</strong>
+          <span>
+            {{ source.document_title or source.doc_name }}
+            ·
+            {{ source.source_location or ('Page ' ~ source.page_number) }}
+          </span>
+        </button>
+      </li>
+      {% endfor %}
+    </ol>
+
+  </section>
+  {% endif %}
+
+
+  <section class="study-composer">
+
+    <form action="{{ url_for('ask') }}" method="post" class="study-input-form async-form">
+
+      <div class="study-input-wrapper">
+
+        <textarea id="study-question" name="question" rows="1" required
+          placeholder="Ask anything about {{ active_subject.name if active_subject else 'your exam' }}…"
+          autofocus></textarea>
+
+        <div class="study-input-footer">
+
+          <label class="study-toggle">
+            <input type="checkbox" name="external_knowledge" checked>
+
+            <span class="switch-control"></span>
+
+            <span class="study-toggle-label">
+              External knowledge
+            </span>
+          </label>
+
+          <button type="submit" class="study-submit" disabled aria-label="Send question">
+            {{ icon('arrow-up', 17) }}
+          </button>
+
+        </div>
+
+      </div>
+
+    </form>
+
+  </section>
+
+</div>
+
+{% endif %}
+
+{{ source_modal() }}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (() => {
+    const textarea = document.getElementById('study-question');
+
+    if (!textarea) return;
+
+    const form = textarea.form;
+    const submitButton = form.querySelector('.study-submit');
+
+    const updateInput = () => {
+      const hasText = textarea.value.trim().length > 0;
+
+      submitButton.disabled = !hasText;
+
+      textarea.style.height = 'auto';
+      textarea.style.height =
+        Math.min(textarea.scrollHeight, 220) + 'px';
+    };
+
+    textarea.addEventListener('input', updateInput);
+
+    textarea.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+
+        if (textarea.value.trim()) {
+          form.requestSubmit();
+        }
+      }
+    });
+
+    updateInput();
+  })();
+</script>
+{% endblock %}

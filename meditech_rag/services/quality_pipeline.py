@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import unicodedata
 from collections import Counter
@@ -16,6 +17,7 @@ from services.knowledge_repository import (
     document_quality_report,
     finalize_document,
     insert_knowledge_units,
+    normalize_subject_topics,
     prepare_document_units,
     save_checkpoint,
     upsert_document,
@@ -24,6 +26,7 @@ from services.pdf_loader import parse_pdf
 from services.subject_workspace import content_sha256, workspace_for
 from services.structured_json import parse_json_object
 from services.prompt_templates import render_prompt
+from services.topic_normalization import single_topic_title
 
 
 ReviewStatus = Literal["accepted", "needs_review", "quarantined", "rejected"]
@@ -64,6 +67,10 @@ def _validate_batch(payload: str | dict) -> CleanupBatch:
 
 def normalize_text(text: str) -> str:
     text = unicodedata.normalize("NFKC", text.replace("\r\n", "\n").replace("\r", "\n"))
+    # PDF icon fonts frequently encode bullets with Unicode private-use
+    # characters. Render them as ordinary bullets instead of boxed question
+    # marks, without changing the immutable raw source text.
+    text = re.sub(r"[\ue000-\uf8ff]", "• ", text)
     # Repair only conservative lowercase PDF line-break hyphenation.
     text = re.sub(r"(?<=[a-zäöüß])-\n(?=[a-zäöüß])", "", text)
     text = re.sub(r"[\t\u00a0]+", " ", text)
@@ -78,9 +85,34 @@ def _repeated_edge_lines(text: str) -> set[str]:
     return {line for line, count in Counter(candidates).items() if count >= 3}
 
 
-def _paragraph_units(text: str, *, location_prefix: str = "lines") -> list[dict]:
+def _line_key(line: str) -> str:
+    return re.sub(r"\s+", " ", normalize_text(line)).casefold()
+
+
+def _repeated_pdf_edge_lines(pages: list[dict]) -> set[str]:
+    """Find page furniture repeated at the top or bottom of PDF pages."""
+    appearances: dict[str, set[int]] = {}
+    for page in pages:
+        page_number = int(page.get("page_number") or 0)
+        raw = page.get("raw_text") or page.get("clean_text") or ""
+        lines = [line.strip() for line in raw.splitlines() if line.strip()]
+        for line in lines[:3] + lines[-3:]:
+            key = _line_key(line)
+            if key and len(key) <= 120:
+                appearances.setdefault(key, set()).add(page_number)
+    minimum = max(3, math.ceil(len(pages) * 0.35))
+    return {line for line, page_numbers in appearances.items() if len(page_numbers) >= minimum}
+
+
+def _paragraph_units(
+    text: str,
+    *,
+    location_prefix: str = "lines",
+    repeated_line_keys: set[str] | None = None,
+) -> list[dict]:
     lines = text.splitlines()
-    repeated = _repeated_edge_lines(text)
+    repeated = {_line_key(line) for line in _repeated_edge_lines(text)}
+    repeated.update(repeated_line_keys or set())
     units: list[dict] = []
     current: list[tuple[int, str]] = []
 
@@ -96,7 +128,7 @@ def _paragraph_units(text: str, *, location_prefix: str = "lines") -> list[dict]
                     "source_location": f"{location_prefix} {start}-{end}",
                     "source_start": start,
                     "source_end": end,
-                    "repeated_lines": sorted({line for _, line in current if line.strip() in repeated}),
+                    "repeated_lines": sorted({line for _, line in current if _line_key(line) in repeated}),
                 }
             )
         current.clear()
@@ -116,14 +148,23 @@ def extract_source_units(source: dict, *, page_start: int | None = None, page_en
         return _paragraph_units(path.read_text(encoding="utf-8", errors="replace"))
     parsed = parse_pdf(str(path))
     units: list[dict] = []
+    selected_pages = []
     for page in parsed.get("pages", []):
         page_number = int(page.get("page_number") or 0)
         if page_start and page_number < page_start:
             continue
         if page_end and page_number > page_end:
             continue
+        selected_pages.append(page)
+    repeated_edges = _repeated_pdf_edge_lines(selected_pages)
+    for page in selected_pages:
+        page_number = int(page.get("page_number") or 0)
         raw = page.get("raw_text") or page.get("clean_text") or ""
-        for item in _paragraph_units(raw, location_prefix=f"page {page_number}, lines"):
+        for item in _paragraph_units(
+            raw,
+            location_prefix=f"page {page_number}, lines",
+            repeated_line_keys=repeated_edges,
+        ):
             item["source_start"] = page_number
             item["source_end"] = page_number
             units.append(item)
@@ -151,7 +192,8 @@ def deterministic_cleanup(unit: dict) -> dict:
     repeated = unit.get("repeated_lines", [])
     if repeated:
         problems.append("repeated_header_or_footer")
-        kept = [line for line in text.splitlines() if line.strip() not in set(repeated)]
+        repeated_keys = {_line_key(line) for line in repeated}
+        kept = [line for line in text.splitlines() if _line_key(line) not in repeated_keys]
         text = normalize_text("\n".join(kept))
     if NAVIGATION_PATTERN.match(text):
         problems.append("navigation_boilerplate")
@@ -165,13 +207,18 @@ def deterministic_cleanup(unit: dict) -> dict:
         problems.append("broken_formula")
 
     words = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ]{2,}", text)
-    meaningful = len(words) >= 4 and not SYMBOL_NOISE_PATTERN.match(text)
-    academic = meaningful and len(set(word.lower() for word in words)) >= 4
-    heading = bool(re.match(r"^#{1,6}\s+", text)) or (len(words) <= 10 and text == text.title())
+    normalized_heading = single_topic_title(re.sub(r"^#{1,6}\s+", "", text).strip())
+    heading = bool(re.match(r"^#{1,6}\s+", text)) or (
+        bool(normalized_heading) and len(words) <= 10 and text == text.title()
+    )
+    meaningful = (len(words) >= 4 or bool(heading and normalized_heading)) and not SYMBOL_NOISE_PATTERN.match(text)
+    academic = meaningful and (len(set(word.lower() for word in words)) >= 4 or bool(heading and normalized_heading))
     content_type = "heading" if heading else "table" if "|" in text else "bullet_list" if re.search(r"(?m)^\s*[-*•]\s", text) else "paragraph"
     complete = heading or bool(re.search(r"[.!?:;)]\s*$", text)) or len(words) >= 12
     confidence = 0.98
-    confidence -= 0.18 * len(problems)
+    # A successfully removed repeated header/footer is an audit fact, not a
+    # reason to lower confidence in otherwise valid body content.
+    confidence -= 0.18 * len([problem for problem in problems if problem != "repeated_header_or_footer"])
     if not complete:
         problems.append("incomplete_fragment")
         confidence -= 0.2
@@ -186,13 +233,15 @@ def deterministic_cleanup(unit: dict) -> dict:
     quarantine_reasons = {
         "meaningless_fragment", "corrupted_table", "broken_formula", "navigation_boilerplate",
     }
-    if quarantine_reasons.intersection(problems) or confidence < config.KNOWLEDGE_QUARANTINE_CONFIDENCE:
+    if repeated and (not text or not meaningful or not academic):
+        status: ReviewStatus = "rejected"
+    elif quarantine_reasons.intersection(problems) or confidence < config.KNOWLEDGE_QUARANTINE_CONFIDENCE:
         status: ReviewStatus = "quarantined"
-    elif problems or not complete or confidence < config.KNOWLEDGE_AUTO_ACCEPT_CONFIDENCE:
+    elif set(problems) - {"repeated_header_or_footer"} or not complete or confidence < config.KNOWLEDGE_AUTO_ACCEPT_CONFIDENCE:
         status = "needs_review"
     else:
         status = "accepted"
-    detected_topic = re.sub(r"^#{1,6}\s+", "", text).strip() if heading else None
+    detected_topic = normalized_heading if heading else None
     result = {
         "cleaned_content": text,
         "content_type": content_type,
@@ -205,7 +254,11 @@ def deterministic_cleanup(unit: dict) -> dict:
         "quality_problems": sorted(set(problems)),
         "source_support": unit["source_location"],
         "recommended_status": status,
-        "explanation": "Deterministic quality gate; uncertain academic content is retained for review.",
+        "explanation": (
+            "Repeated page furniture was removed automatically; no usable content remained."
+            if status == "rejected" and repeated
+            else "Deterministic quality gate; valid content is accepted and uncertain academic content is retained for review."
+        ),
         "raw_content": raw,
         "source_location": unit["source_location"],
         "source_start": unit.get("source_start"),
@@ -239,6 +292,14 @@ def apply_local_cleanup(units: list[dict], generate: Callable[[str], str], *, re
     results: list[dict] = []
     for original, cleaned in zip(units, validated.units):
         item = original | (cleaned.model_dump() if hasattr(cleaned, "model_dump") else cleaned.dict())
+        if "repeated_header_or_footer" in original.get("quality_problems", []):
+            # Never allow an LLM to restore removed page furniture. Pure page
+            # furniture stays rejected; valid sanitized content keeps the
+            # deterministic automatic decision.
+            item["cleaned_content"] = original["cleaned_content"]
+            item["recommended_status"] = original["recommended_status"]
+            item["quality_problems"] = sorted(set(item.get("quality_problems", [])) | {"repeated_header_or_footer"})
+            item["detected_topic"] = original.get("detected_topic")
         # Source provenance is immutable even if a model attempts to change it.
         item["source_support"] = original["source_support"]
         item["quality_score"] = item["extraction_confidence"]
@@ -379,4 +440,5 @@ def process_subject(
                     "failed_documents": len(summary["failed"]), "total_documents": len(sources),
                     "error": str(exc),
                 })
+    summary["topic_cleanup"] = normalize_subject_topics(subject_id)
     return summary

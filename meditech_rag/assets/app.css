@@ -1,0 +1,16 @@
+@import "tailwindcss";
+@source "../templates/**/*.html";
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", Inter, sans-serif;
+  --color-brand-50: #eef4ff;
+  --color-brand-100: #dce8ff;
+  --color-brand-500: #4776df;
+  --color-brand-600: #3564cc;
+  --color-brand-700: #2850a8;
+}
+
+@layer base {
+  [x-cloak] { display: none !important; }
+  html { font-family: var(--font-sans); }
+}

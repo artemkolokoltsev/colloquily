@@ -1,0 +1,1 @@
+Generated sidecar executables go here, named `colloquily-backend-<rust-host-triple>` (`.exe` on Windows). Run `npm run build:sidecar` using native Python on the target OS. Never commit model weights or mutable user data.

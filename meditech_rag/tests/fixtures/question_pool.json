@@ -1,0 +1,18 @@
+[
+  {
+    "id": "TEST001",
+    "topic": "Learning Theories",
+    "question": "What is behaviorism?",
+    "question_type": "explain",
+    "difficulty": "easy",
+    "priority": "A",
+    "expected_answer_points": [
+      "Behaviorism focuses on observable behavior.",
+      "Learning can be described through stimulus-response relationships."
+    ],
+    "possible_followups": ["What role does reinforcement play?"],
+    "tags": ["behaviorism", "stimulus-response"],
+    "source_file": "2_Learning_Theories.md",
+    "source_slides": [17, 18, 19]
+  }
+]

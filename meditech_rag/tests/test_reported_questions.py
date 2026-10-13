@@ -3,10 +3,15 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from datetime import datetime
+from unittest.mock import patch
 
 import config
-from services.database import create_subject, init_db
-from services.reported_questions import export_question_bank, import_question_bank, list_reported_questions
+from services.database import _connect, create_subject, init_db
+from services.reported_questions import (
+    create_training_cards_from_reported, export_question_bank, import_question_bank, list_reported_questions,
+)
+from services.training_repository import list_questions, review_question
 
 
 class ReportedQuestionsTest(unittest.TestCase):
@@ -57,6 +62,52 @@ class ReportedQuestionsTest(unittest.TestCase):
         import_question_bank(self.bank())
         with self.assertRaisesRegex(ValueError, "Immutable reported wording"):
             import_question_bank(self.bank("Geaenderte Formulierung?"))
+
+    def accepted_evidence(self) -> dict:
+        now = datetime.now().isoformat(timespec="seconds")
+        with _connect() as connection:
+            document = connection.execute(
+                """
+                INSERT INTO documents (
+                    subject_id,title,relative_path,source_type,source_hash,processing_status,
+                    quality_status,enabled_for_training,created_at,updated_at
+                ) VALUES (?, 'Theory.pdf', 'Theory.pdf', 'pdf', 'doc', 'processed', 'accepted', 1, ?, ?)
+                """,
+                (self.learntech["id"], now, now),
+            )
+            unit = connection.execute(
+                """
+                INSERT INTO knowledge_units (
+                    subject_id,document_id,raw_content,content,source_location,source_hash,
+                    quality_score,confidence,review_status,enabled_for_retrieval,created_at,updated_at
+                ) VALUES (?, ?, 'Learning theories differ.', 'Learning theories differ in observable behaviour, internal processing, and social knowledge construction.',
+                          'page 5', 'unit', .95, .95, 'accepted', 1, ?, ?)
+                """,
+                (self.learntech["id"], document.lastrowid, now, now),
+            )
+            connection.commit()
+            return {
+                "knowledge_unit_id": int(unit.lastrowid), "content": "Learning theories differ in observable behaviour, internal processing, and social knowledge construction.",
+                "source_location": "page 5", "document_title": "Theory.pdf", "relative_path": "Theory.pdf",
+                "source_type": "pdf", "score": .9,
+            }
+
+    def test_reported_bank_creates_extendable_review_card_with_exact_wording(self) -> None:
+        import_question_bank(self.bank())
+        evidence = self.accepted_evidence()
+        fake_index = type("Index", (), {"load": lambda self: True, "search": lambda self, *_args, **_kwargs: [evidence]})()
+        with patch("services.reported_questions.SubjectIndex", return_value=fake_index):
+            first = create_training_cards_from_reported(self.learntech["id"])
+            second = create_training_cards_from_reported(self.learntech["id"])
+
+        self.assertEqual(first["created"], 1)
+        self.assertEqual(second["existing"], 1)
+        card = list_questions(self.learntech["id"])[0]
+        self.assertEqual(card["question_text"], "Welche Lerntheorien kennst du?")
+        self.assertEqual(card["evidence_ids"], [evidence["knowledge_unit_id"]])
+        self.assertEqual(card["review_status"], "needs_review")
+        review_question(card["id"], "accepted")
+        self.assertEqual(list_reported_questions(self.learntech["id"])[0]["activation_status"], "active")
 
 
 if __name__ == "__main__":

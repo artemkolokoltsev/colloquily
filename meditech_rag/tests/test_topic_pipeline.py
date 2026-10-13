@@ -159,7 +159,7 @@ class TopicPipelineTest(unittest.TestCase):
                 )
                 self.assertEqual(response.status_code, 302)
                 with client.session_transaction() as sess:
-                    self.assertIn(("success", "Feedback gespeichert."), sess.get("_flashes", []))
+                    self.assertIn(("success", "Feedback saved."), sess.get("_flashes", []))
 
 
 if __name__ == "__main__":

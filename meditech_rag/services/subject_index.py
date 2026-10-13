@@ -46,6 +46,7 @@ class SubjectIndex:
         if not units:
             self.index = None
             self.metadata = []
+            self.index_path.unlink(missing_ok=True)
             self.workspace.atomic_json(self.metadata_path, [])
             return {"subject_id": self.subject_id, "indexed_units": 0, "index_path": str(self.index_path)}
         texts = [unit["content"] for unit in units]
@@ -64,6 +65,8 @@ class SubjectIndex:
                 "relative_path": unit["relative_path"],
                 "source_type": unit["source_type"],
                 "source_location": unit["source_location"],
+                "source_start": unit.get("source_start"),
+                "source_end": unit.get("source_end"),
                 "content": unit["content"],
                 "topic_id": unit.get("topic_id"),
                 "confidence": float(unit["confidence"]),
@@ -101,16 +104,26 @@ class SubjectIndex:
             return []
         if self.index is None or self.index.ntotal == 0:
             return []
+        # Reviews can change after a persisted index was built. Never retrieve
+        # rejected or edited evidence from an older vector/metadata snapshot.
+        current = {int(unit["id"]): unit["content"] for unit in accepted_units(self.subject_id)}
+        if not current:
+            return []
+        def still_accepted(item):
+            return current.get(int(item["knowledge_unit_id"])) == item["content"]
         vector = np.asarray(self.embedder.embed([query]), dtype=np.float32)
         faiss.normalize_L2(vector)
         semantic_scores, indices = self.index.search(vector, min(max(k * 4, 12), self.index.ntotal))
         query_tokens = _tokens(query)
         candidates: list[dict] = []
+        candidate_ids: set[int] = set()
         seen_content: set[str] = set()
         for semantic, index_id in zip(semantic_scores[0], indices[0]):
             if index_id < 0:
                 continue
             item = dict(self.metadata[index_id])
+            if not still_accepted(item):
+                continue
             if topic_id is not None and item.get("topic_id") != topic_id:
                 continue
             signature = re.sub(r"\s+", " ", item["content"].lower()).strip()
@@ -124,6 +137,36 @@ class SubjectIndex:
             item["score"] = 0.82 * float(semantic) + 0.18 * lexical
             if item["score"] >= config.MIN_RETRIEVAL_SIMILARITY:
                 candidates.append(item)
+                candidate_ids.add(int(item["knowledge_unit_id"]))
+        # Rescue acronym-heavy and short-title queries from the accepted metadata.
+        # The fallback remains strictly subject-scoped and accepted-only.
+        meaningful_query = {
+            token for token in query_tokens
+            if token not in {"what", "which", "where", "when", "why", "how", "are", "and", "the", "they", "give", "example", "explain"}
+        }
+        for metadata in self.metadata:
+            if not still_accepted(metadata):
+                continue
+            evidence_id = int(metadata["knowledge_unit_id"])
+            if evidence_id in candidate_ids or (topic_id is not None and metadata.get("topic_id") != topic_id):
+                continue
+            lexical_tokens = _tokens(metadata["content"])
+            overlap = meaningful_query & lexical_tokens
+            if not overlap:
+                continue
+            lexical = len(overlap) / max(1, len(meaningful_query))
+            has_acronym = any(
+                token.upper() in query and token.upper() in metadata["content"]
+                for token in overlap
+            )
+            if len(overlap) < 2 and not has_acronym:
+                continue
+            item = dict(metadata)
+            item["semantic_score"] = 0.0
+            item["lexical_score"] = lexical
+            item["score"] = max(config.MIN_RETRIEVAL_SIMILARITY, 0.35 + 0.35 * lexical)
+            candidates.append(item)
+            candidate_ids.add(evidence_id)
         candidates.sort(key=lambda item: item["score"], reverse=True)
         # Prefer evidence from multiple source locations once relevance is established.
         results: list[dict] = []

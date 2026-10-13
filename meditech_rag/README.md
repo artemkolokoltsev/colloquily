@@ -1,281 +1,163 @@
+> **Compatibility application:** This guide describes the retained Flask application. For the React/FastAPI/Tauri architecture, current development and desktop builds, see the [root README](../README.md). Docker and the old installer below are legacy developer options.
+
 # Colloquily
 
-Reusable, completely local oral-exam preparation based on reviewed university course material. Each exam is isolated in its own workspace and accepted-only FAISS index.
+Colloquily is a completely local, English-language study workspace for evidence-grounded university oral-exam preparation. It uses typed text only. Course data, prompts, models, indexes, attempts, and evaluations remain on the local machine.
 
-## Exam workflow
+## Run locally
 
-1. Create an exam under `/admin/subjects` (the legacy URL remains stable).
-2. Place nested Markdown or PDF material under `data/exams/<exam-slug>/raw/`, or use the non-overwriting upload form.
-3. Use **Fast** cleanup by default (local LLM only for suspicious sections), **Deep** for every section, or deterministic mode for troubleshooting.
-4. Review suspicious units and manually accept, quarantine, reject, or correct them.
-5. Build the exam index. Only accepted, retrieval-enabled knowledge units are embedded.
-6. Open the **5-Day Plan** for a ranked answer to “What should I study now?”, then practice due/weak questions.
-
-The processor hashes every source, skips unchanged files, checkpoints every batch, and resumes interrupted work. Files under `raw/` are never rewritten. Manually accepted edits remain authoritative during later processing.
-
-PDF processing runs as a durable background job with one checkpoint per page. The Exams page polls the persisted job state and displays document/page progress. **Resume / retry from checkpoint** continues an interrupted job after a server restart. Fast cleanup is opportunistic: if the local model times out or returns malformed structured output, Colloquily keeps deterministic review candidates and finishes the corpus instead of discarding the job.
-
-```text
-data/exams/<exam-slug>/
-├── raw/
-├── extracted/
-├── preprocessing/
-├── cleaned/
-├── quarantined/
-├── accepted/
-├── reports/
-├── exam_packs/
-└── index/
-```
-
-SQLite migrations preserve existing requests, sources, quizzes, and attempts under a neutral imported-exam record. No existing learning data is deleted.
-
-## Training workflow
-
-- `/trainer` provides single-question, weak-topic, 30/60/90-second rapid practice, full exam simulations, and separate-session multi-exam tests.
-- `/exams/<exam-id>/five-day` combines accepted learning cards, coverage, scores, omissions, timing, recency, and remaining days into a ranked study plan.
-- `/progress/<subject-id>` shows score and response-time trends, missing core points, misconceptions, weak topics, mock history, and spaced-repetition priorities.
-- Generated questions, evaluations, follow-ups, and exam packs are rejected when evidence IDs do not resolve to accepted units in the active subject.
-- Manual knowledge edits and corrected evaluations are persisted as authoritative review/audit records.
-
-## Local model verification
-
-Model roles are configured separately per exam under **Exams → Local models**. Ollama and LM Studio are supported for cleaning, topic extraction, question generation, answering, evaluation, and examiner follow-ups. Local Ollama `embeddinggemma:latest` is the default exam embedding backend; SentenceTransformer and LM Studio remain optional.
-
-Run the disposable local-model smoke test with:
+From this directory:
 
 ```bash
-python3.11 scripts/smoke_oral_exam_trainer.py
-python3.11 scripts/verify_five_day_mvp.py
-```
-
-The first command validates an actual Ollama cleanup response and raw-file immutability. The second creates nested PDF and Markdown exams, then verifies ingestion, isolation, grounded question/evaluation, a short mock, the five-day recommender, and index persistence across reload.
-
-## Known limitations
-
-- Training uses typed text input only; microphone recording and speech-to-text are not part of Colloquily.
-- Adaptive simulation follow-ups are selected from the reviewed subject question pool. The system does not risk an unvalidated dynamic question when no grounded follow-up is available.
-- The Python package directory keeps its historical path only for import and migration compatibility; all product surfaces and prompts are branded Colloquily.
-- Imported PDF summary and multiple-choice routes remain available for older data, while new exams use the stricter accepted-evidence workflows.
-
-## Dokumentation
-
-Die ausfuehrliche Projektdokumentation liegt als statische HTML-Dokumentation im Repository:
-
-```text
-../docs/index.html
-```
-
-Die Datei kann direkt im Browser geoeffnet werden. Sie enthaelt Architektur, Workflows, Datenstruktur, Konfiguration, Evaluation, Betriebsnotizen und eine Projektstruktur-Uebersicht.
-
-## Features
-
-- Lokaler PDF-Upload und Speicherung unter `data/pdfs/`
-- PDF-Parsing mit PyMuPDF und optionalem Marker-Backend
-- Strukturierte Dokument-, Seiten-, Block-, Topic- und Chunk-Metadaten
-- Austauschbare Chunking-Strategien: `page`, `word`, `paragraph`, `semantic`, `structure`
-- FAISS-Vektorsuche mit Ollama EmbeddingGemma, SentenceTransformer oder LM Studio
-- Optionales Metadata-Reranking nach Topic-, Intent-, Rollen- und Qualitaetssignalen
-- LLM-Antworten ueber Ollama oder LM Studio
-- Inline-Zitate wie `[Q1]` mit klickbarer Quellenvorschau
-- Zusammenfassungen fuer einzelne Seiten oder Seitenbereiche
-- Quizgenerierung und Quiz-Auswertung pro Benutzer
-- Login, Benutzerverwaltung und Admin-Bereich
-- Request-Historie, Feedback, Analytics und Evaluation
-- Vorbereitete Indexprofile fuer vergleichbare Retrieval-Experimente
-- Lokale Evaluation ohne externe Telemetrie
-
-## Quick Start
-
-```bash
-cd meditech_rag
-python -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ollama pull phi3:mini
 python app.py
 ```
 
-Danach im Browser oeffnen:
+Open `http://localhost:8000` to start directly—no login is needed. Use Advanced settings to experiment with parsing, chunking, retrieval, and local models.
 
-```text
-http://localhost:8000
+From the repository root, `make dev`, `make test`, and `make verify` provide the same development workflow. Run `npm install && npm run build` after changing Tailwind, Alpine, Lucide, or UI templates.
+
+## Run as an installed Docker application
+
+Start Docker Desktop and Ollama, then double-click `Install Colloquily.command`, or run:
+
+```bash
+docker compose up -d --build
 ```
 
-Default-Login fuer lokale Entwicklung:
+The application runs from the Docker image at `http://localhost:8000`. Durable exam data is mounted at `data/`; Ollama is reached privately through `host.docker.internal`.
 
-- Benutzername: `admin`
-- Passwort: `admin`
+## Exam workflow
 
-Bitte das Passwort aendern, wenn die App laenger oder in einem geteilten Umfeld verwendet wird.
+1. Create an exam under **Exams & Review**.
+2. Add English PDF or Markdown course sources. Each exam uses an isolated `data/exams/<slug>/` workspace.
+3. Process material in Fast, Deep, or Deterministic mode. Jobs checkpoint each PDF page and can resume after an interruption.
+4. Review uncertain evidence. Raw source files are never rewritten.
+5. Build the accepted-evidence index.
+6. Study, practise accepted questions, run timed mock exams, and use the study plan.
 
-## Konfiguration
+Every Study question and grounded answer is stored under `/history` with its citations and local-model metadata. Each Ask request also creates its own `user_question` card with **Needs review** status under **Exams & Review → Questions**. Existing Ask history is backfilled during the database migration.
 
-Zentrale Defaults stehen in [`config.py`](config.py). Die App laedt zusaetzlich Umgebungswerte aus `.env` und `.env.local` im Projekt- oder App-Verzeichnis.
+Reported Colloquium questions can be imported under **Exams & Review → Reported questions** and converted into evidence-grounded cards. Their exact reported wording and follow-up-chain provenance remain immutable; current accepted course evidence supplies a draft rubric. Cards must still be reviewed and accepted before entering a mock exam. The same Questions screen can extend the pool with additional course-derived questions.
 
-Wichtige Einstellungen:
+The Trainer provides a single-exam **15-minute mock** and a **Complete Colloquium** consisting of exactly three separate 15-minute exams. The complete run shows readiness for all three question pools, preserves separate timers and scores, and requires an explicit transition between exams.
 
-| Einstellung | Zweck |
-| --- | --- |
-| `HOST`, `PORT`, `DEBUG` | Flask-Server |
-| `CHUNKING_STRATEGY` | Default-Chunker: `page`, `word`, `paragraph`, `semantic`, `structure` |
-| `ACTIVE_INDEX_NAME` | Vorbereitetes Indexprofil aus `configs/index_profiles.json` |
-| `EMBED_BACKEND` | `st` oder `lmstudio` |
-| `ST_EMBED_MODEL` | SentenceTransformer-Modell |
-| `ST_ALLOW_DOWNLOAD` | Erlaubt initialen Hugging-Face-Download |
-| `LLM_BACKEND` | `ollama` oder `lmstudio` |
-| `OLLAMA_LLM_MODEL` | Ollama-Modell, z. B. `phi3:mini` |
-| `ENABLE_METADATA_RERANK` | Aktiviert heuristisches Reranking |
+A 15-minute mock plans six grounded questions by default (about 2½ minutes each). Accepted cards are preferred; evidence-grounded cards awaiting review may fill a thin practice pool and remain visibly reviewable.
 
-Viele Runtime-Parameter koennen im Admin-Bereich unter `/admin/settings` angepasst werden. Fuer Parser-, Chunking-, Embedding- oder LLM-Wechsel sollte danach der Index neu aufgebaut werden.
+Timed mocks only collect answers while the clock is running. **Skip question** records an omission and advances without a model call. After the run, **Evaluate stored answers** produces the score, missing points, and improved oral answer for each response. Question History provides an exam-filtered, scrollable question list with a selected answer and evidence preview.
 
-## Architektur
+German grading uses 4.0 at 50% and 5.0 below 50%. A complete multi-exam Colloquium passes only when every selected exam reaches 50%; its overall grade is then the median of the individual German grades.
+
+CPU defaults route structured tasks to local `qwen2.5:1.5b` (2048 context, 180 output tokens) and oral answers to `phi3:mini` (3072 context, 320 output tokens). LLM responses and Ollama embeddings use persistent content/configuration caches. Measured Intel Mac results are stored under `data/eval/benchmarks/` and runtime metrics appear under **Admin → Local evaluation**.
+
+Only accepted, retrieval-enabled knowledge units enter an exam index. Question and answer generation rejects unresolved evidence identifiers.
+
+## Curated question pools
+
+Open **Exams & Review → Questions** for an exam to import reusable curated question pools. Colloquily accepts `.json`, `.jsonl`, `.md`, and `.markdown`, normalizes every format into the existing question model, and previews topic/priority counts, validation errors, and duplicates before confirmation. Importing never calls a model or rewrites curated wording and answer points.
+
+JSON accepts either an array or `{ "questions": [...] }`. Aliases include `question`/`text`, `topic`/`category`, `expected_answer_points`/`answer_points`, and `possible_followups`/`followups`. Markdown uses course-independent `# Topic` and `## ID — Question` headings with optional metadata, answer-point bullets, and follow-up bullets.
+
+Duplicates are skipped first by external ID within the exam, then by normalized question text. A confirmed pool is stored in one SQLite transaction. Questions can be filtered, enabled/disabled, deleted individually, or removed with the complete pool. Random practice balances selection across topics and deprioritizes recently answered questions.
+
+Schema migration 9 runs automatically at startup; no separate migration command is needed. Restart the app or container after updating.
+
+Every submitted learning action shows task-specific in-context progress and
+elapsed time while local retrieval, generation, evaluation, or indexing is
+running. Duplicate submissions are blocked, and reduced-motion preferences
+receive a static progress treatment.
+
+## Coverage terminology
+
+Colloquily keeps two dimensions separate everywhere in the UI.
+
+### Material coverage
+
+Material coverage describes whether accepted course evidence supports an exam-ready explanation of a topic. It does not measure the learner.
+
+The previous implementation used this exact calculation:
 
 ```text
-Browser UI
-  |
-  v
-Flask routes in app.py
-  |
-  +-- services/database.py          SQLite users, requests, feedback, quizzes
-  +-- services/rag_engine.py        RAG orchestration
-        |
-        +-- document_preprocessor.py
-        +-- pdf_parsers/
-        +-- chunking/
-        +-- embeddings/
-        +-- vector_store.py
-        +-- prompt_builder.py
-        +-- llm/
-        +-- persistence.py
-        +-- evaluator.py
-        +-- analytics.py
+if conflict_count > 0: conflicting
+else if accepted_unit_count >= 3: strong
+else if accepted_unit_count > 0: weak
+else: none
 ```
 
-Zentrale Module:
+That calculation was misleading because raw volume alone could make a topic appear ready, and `Unassigned` could become `strong`. It has been removed.
 
-| Pfad | Aufgabe |
-| --- | --- |
-| [`app.py`](app.py) | Flask-App, Auth, Admin, Chat, Summary, Quiz, Feedback, Struktur-Endpunkte |
-| [`config.py`](config.py) | Pfade, Modelle, Chunking und lokale Evaluation |
-| [`services/rag_engine.py`](services/rag_engine.py) | Index laden/aufbauen, Retrieval, Reranking, Prompts, Antworten, Summaries, Quiz |
-| [`services/index_builder.py`](services/index_builder.py) | Aufbau vorbereiteter Indexprofile |
-| [`services/document_preprocessor.py`](services/document_preprocessor.py) | Dokument-, Seiten-, Block- und SourceUnit-Erzeugung |
-| [`services/pdf_parsers/`](services/pdf_parsers/) | PyMuPDF- und Marker-Parser |
-| [`services/chunking/`](services/chunking/) | Chunking-Strategien |
-| [`services/embeddings/`](services/embeddings/) | Ollama-, SentenceTransformer- und LM-Studio-Embeddings |
-| [`services/llm/`](services/llm/) | Ollama- und LM-Studio-LLM-Clients |
-| [`services/vector_store.py`](services/vector_store.py) | FAISS-Suche |
-| [`services/persistence.py`](services/persistence.py) | JSON/FAISS-Persistenz |
-| [`services/database.py`](services/database.py) | SQLite-Persistenz fuer Benutzer, Requests, Feedback und Quiz |
-| [`services/evaluator.py`](services/evaluator.py) | Automatische Retrieval- und Groundedness-Heuristiken |
+The current calculation normalizes topic headings, then checks meaningful evidence dimensions:
 
-## Daten Und Persistenz
+- definition or central explanation;
+- core mechanism;
+- model components when applicable;
+- relationships or process when applicable;
+- example or application;
+- limitation or comparison when applicable;
+- reliable source traceability;
+- absence of unresolved conflicts.
 
-Die App arbeitet lokal und legt Laufzeitdaten unter `data/` ab:
+The material states are:
+
+- **Complete** — accepted, traceable evidence covers every required dimension.
+- **Partial** — usable accepted evidence exists, but required dimensions are missing.
+- **Missing** — no usable accepted evidence exists.
+- **Needs review** — relevant evidence exists but remains uncertain.
+- **Conflicting** — accepted evidence contains an unresolved source conflict.
+- **Unassigned** — material has no reliable normalized topic mapping. It can never be Complete, regardless of unit count.
+
+The applicable dimension set is explicit: every topic requires a central explanation, mechanism, application/example, and traceability. Model/framework topics also require components; process/workflow topics require relationships/process; and comparison/evaluation topics require limitations/comparisons.
+
+### Learner mastery
+
+Learner mastery describes answered-question performance and never derives from material count. Its states are:
+
+- **Not practised** — no answered questions exist for the topic.
+- **Learning** — practice exists but exam-ready criteria are not yet met.
+- **Weak** — average correctness is below 2.5/5 or repeated omissions/incorrect points exceed one per attempt.
+- **Exam-ready** — repeated recent answers average at least 4/5, the latest answer is at least 4/5, omissions are rare, average time is within 120% of the target, and performance is supported by either a successful mock or at least three attempts.
+
+The UI tooltip for each topic reports accepted evidence count, covered and missing dimensions, review and conflict counts, and practice evidence.
+
+## Topic normalization
+
+Before coverage is calculated, Colloquily removes slide/page number prefixes, ignores number-only headings, merges identical normalized titles, combines repeated sequential headings, and splits short concatenated heading lines. Original source titles remain attached for traceability. Uncertain or meaningless titles move to **Unassigned**.
+
+## Durable processing and storage
 
 ```text
 data/
-|-- colloquily.db                  Durable SQLite-Datenbank (WAL + FULL synchronous)
-|-- pdfs/                          Hochgeladene PDFs
-|-- index/                         Aktiver Legacy-/Runtime-Index
-|   |-- vectors.faiss
-|   |-- chunks.json
-|   |-- documents.json
-|   |-- pages.json
-|   |-- structure.json
-|   |-- analytics.json
-|   `-- request_history.json
-|-- indexes/                       Vorbereitete Indexprofile
-|-- cache/                         Modelle, extrahierte Seiten, Bildcache
-`-- eval/                          Datasets, Metriken, Runs
+├── colloquily.db
+└── exams/<exam-slug>/
+    ├── raw/
+    ├── extracted/
+    ├── preprocessing/
+    ├── cleaned/
+    ├── quarantined/
+    ├── accepted/
+    ├── reports/
+    ├── exam_packs/
+    └── index/
 ```
 
-Beim Start versucht `RAGEngine`, zuerst das aktive vorbereitete Indexprofil zu laden. Wenn dieses fehlt, faellt die App auf den Legacy-Index unter `data/index/` zurueck. Ein normaler Chat-Start baut den Index nicht automatisch neu auf; Reindexing erfolgt ueber Admin-UI oder Skripte.
+SQLite uses WAL and full synchronous writes. Processing hashes every source, skips unchanged files, checkpoints batches, records failures, and supports retry from the last durable checkpoint.
 
-## Indexing
+Repeated PDF headers and footers are detected across page boundaries. A unit
+containing only repeated page furniture is automatically rejected; when a unit
+also contains valid academic body text, Colloquily removes the repeated line
+and automatically accepts the clean remainder when all other quality checks
+pass. Icon-font glyphs, slide-number prefixes, duplicate titles, generic
+fragments, and ambiguous concatenated headings are removed from topic mappings;
+uncertain mappings remain Unassigned and original text stays in source records.
 
-PDFs koennen im Admin-Bereich unter `/admin/documents` hochgeladen und indexiert werden. Alternativ lassen sich vorbereitete Profile per Skript bauen:
+## Tests
 
 ```bash
-cd meditech_rag
-python scripts/prepare_indexes.py
+python -m unittest discover -s tests -v
+python scripts/verify_five_day_mvp.py
 ```
 
-Profile stehen in [`configs/index_profiles.json`](configs/index_profiles.json), z. B.:
-
-- `baseline_page_minilm`
-- `paragraph_overlap_mpnet`
-- `final_paragraph_overlap_mpnet_rerank`
-
-## App-Workflows
-
-| Workflow | Route | Beschreibung |
-| --- | --- | --- |
-| Login | `/login` | Benutzer anmelden |
-| Chat | `/ask` | Frage beantworten und Quellen anzeigen |
-| Summary | `/summarize` | Dokumentseiten zusammenfassen |
-| Quiz | `/quiz`, `/quiz/submit` | Quiz generieren und auswerten |
-| Feedback | `/feedback` | Like/Dislike und Freitext speichern |
-| Documents | `/admin/documents` | PDFs verwalten und Index neu bauen |
-| Settings | `/admin/settings` | Runtime-Parameter setzen |
-| Evaluation | `/admin/eval` | Lokale Metriken, Datensaetze und Indexprofile |
-| Structure API | `/structure` | Wissensstruktur als JSON exportieren |
-| Topics Debug | `/topics` | Topic- und Tagging-Debugansicht |
-
-## Evaluation
-
-Die Evaluation vergleicht Retrieval- und Antwortqualitaet anhand lokaler Datasets und Heuristiken.
-
-```bash
-cd meditech_rag
-python scripts/eval_smoke.py
-python scripts/eval_chunking.py
-python scripts/eval_retrieval_profiles.py
-python scripts/eval_answer_subset.py
-python scripts/eval_report.py
-```
-
-Datasets liegen unter `data/eval/datasets/`, Metriken unter `data/eval/metrics/`, Runs unter `data/eval/runs/`.
-
-Erfasste Signale umfassen unter anderem:
-
-- `hit_at_k`
-- `first_relevant_rank`
-- `citation_page_accuracy`
-- `duplicate_retrieval_ratio`
-- Warnsignale fuer moegliche Ungroundedness
-- Feedback-Scores
-
-## Entwicklung
-
-```bash
-cd meditech_rag
-python app.py
-```
-
-Oder aus dem Projektroot:
-
-```bash
-make dev
-```
-
-Tests:
-
-```bash
-cd meditech_rag
-python -m pytest
-```
-
-Falls `pytest` nicht installiert ist:
-
-```bash
-pip install pytest
-```
-
-## Hinweise
-
-- Die Anwendung ist fuer lokale Entwicklung und Studium ausgelegt.
-- PDFs, FAISS-Indizes, Modellcache und SQLite-Datenbank koennen gross werden und enthalten potenziell private Inhalte.
-- `data/` sollte nicht ungeprueft geteilt werden.
-- Der Default-Admin `admin/admin` ist nur fuer lokale Entwicklung gedacht.
+The suite includes explicit coverage regressions proving that 1,494 Unassigned units never become Complete, count alone cannot create Complete coverage, numbered slide headings merge, a few complete high-quality evidence units can be Complete, and mastery remains Not practised until a learner answers a question.

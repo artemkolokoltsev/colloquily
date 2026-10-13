@@ -6,6 +6,19 @@ from contextlib import closing
 from datetime import datetime, timezone
 
 from services.database import _connect
+from services.coverage import learner_mastery
+
+FAILURE_SCORE_THRESHOLD = 3
+SESSION_MODE_LABELS = {
+    "single_question": "Single question",
+    "rapid_practice": "Rapid practice",
+    "random_practice": "Balanced practice",
+    "weak_topic": "Weak-topic practice",
+    "oral_exam_simulation": "Oral simulation",
+    "subject_simulation": "Subject simulation",
+    "multi_subject": "Multi-subject exam",
+    "full_colloquium": "Complete Colloquium",
+}
 
 
 def _parse_time(value: str) -> datetime:
@@ -38,6 +51,12 @@ def subject_progress(user_id: int, subject_id: int, *, now: datetime | None = No
     due: list[dict] = []
     scores: list[float] = []
     time_trend: list[dict] = []
+    failed_attempts_by_day: dict[str, Counter[str]] = defaultdict(Counter)
+    failed_attempts_by_day_and_mode: dict[str, Counter[str]] = defaultdict(Counter)
+    failed_attempts_by_day_mode_topic: dict[str, dict[str, Counter[str]]] = defaultdict(lambda: defaultdict(Counter))
+    assessed_attempt_days: set[str] = set()
+    failure_topics: set[str] = set()
+    failure_modes: set[str] = set()
     for row in rows:
         evaluation = json.loads(row["evaluation_json"] or "{}")
         score = evaluation.get("score")
@@ -45,6 +64,19 @@ def subject_progress(user_id: int, subject_id: int, *, now: datetime | None = No
             scores.append(float(score))
         row["evaluation"] = evaluation
         topics[row["topic_name"]].append(row)
+        # Pending, needs-review, and skipped questions have no scored learner answer.
+        status = evaluation.get("status")
+        is_assessed = status not in {"pending", "needs_review", "skipped"} and score is not None
+        if is_assessed:
+            day = _parse_time(row["created_at"]).date().isoformat()
+            mode = SESSION_MODE_LABELS.get(row.get("session_mode"), "Independent practice")
+            assessed_attempt_days.add(day)
+            failure_topics.add(row["topic_name"])
+            failure_modes.add(mode)
+            if float(score) < FAILURE_SCORE_THRESHOLD:
+                failed_attempts_by_day[day][row["topic_name"]] += 1
+                failed_attempts_by_day_and_mode[day][mode] += 1
+                failed_attempts_by_day_mode_topic[day][mode][row["topic_name"]] += 1
         for item in evaluation.get("missing", []):
             missing_counter[item.get("text", "Missing point")] += 1
         for item in evaluation.get("incorrect", []):
@@ -72,7 +104,7 @@ def subject_progress(user_id: int, subject_id: int, *, now: datetime | None = No
             {
                 "name": name, "attempts": len(attempts), "average_score": round(average, 2) if average is not None else None,
                 "last_score": topic_scores[-1] if topic_scores else None,
-                "strength": "strong" if average is not None and average >= 4 else "weak",
+                **learner_mastery(attempts, now=now),
             }
         )
     due.sort(key=lambda item: item["priority"], reverse=True)
@@ -83,6 +115,16 @@ def subject_progress(user_id: int, subject_id: int, *, now: datetime | None = No
         }
         for row in rows if row.get("session_mode") in {"subject_simulation", "multi_subject"}
     ]
+    failure_trend = [
+        {
+            "date": day,
+            "failed_attempts": sum(failed_attempts_by_day[day].values()),
+            "topics": dict(failed_attempts_by_day[day]),
+            "modes": dict(failed_attempts_by_day_and_mode[day]),
+            "mode_topics": {mode: dict(topics) for mode, topics in failed_attempts_by_day_mode_topic[day].items()},
+        }
+        for day in sorted(assessed_attempt_days)
+    ]
     return {
         "attempts_count": len(rows),
         "average_score": round(sum(scores) / len(scores), 2) if scores else None,
@@ -90,10 +132,13 @@ def subject_progress(user_id: int, subject_id: int, *, now: datetime | None = No
         "last_score": scores[-1] if scores else None,
         "average_response_seconds": round(sum(row["duration_seconds"] for row in rows) / len(rows)) if rows else None,
         "last_practice_at": rows[-1]["created_at"] if rows else None,
-        "topics": sorted(topic_rows, key=lambda item: (item["strength"] != "weak", item["name"])),
+        "topics": sorted(topic_rows, key=lambda item: ({"weak": 0, "learning": 1, "exam_ready": 2}.get(item["mastery_state"], 3), item["name"])),
         "frequently_missing": missing_counter.most_common(10),
         "misconceptions": misconception_counter.most_common(10),
         "time_trend": time_trend[-20:],
+        "failure_trend": failure_trend,
+        "failure_topics": sorted(failure_topics),
+        "failure_modes": sorted(failure_modes),
         "due_questions": due[:20],
         "mock_exam_history": mock_history[-20:],
         "recent_attempts": list(reversed(rows[-20:])),

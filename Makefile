@@ -1,10 +1,20 @@
-.PHONY: dev test verify docker-build docker-up docker-down docker-logs
+.PHONY: dev test verify ui ui-watch docker-build docker-up docker-down docker-logs
+
+ui:
+	npm run build
+
+ui-watch:
+	npm run watch:css
 
 dev:
+	npm run dev:all
+
+legacy-dev:
 	cd meditech_rag && python app.py
 
 test:
-	cd meditech_rag && python -m unittest discover -s tests -v
+	python scripts/test_core.py
+	python -m unittest discover -s backend/tests -v
 
 verify:
 	cd meditech_rag && python scripts/verify_five_day_mvp.py

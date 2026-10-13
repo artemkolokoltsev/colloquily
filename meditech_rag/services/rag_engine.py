@@ -260,13 +260,13 @@ class RAGEngine:
             correct = preview[:100].strip() or "Keine Information verfuegbar"
             options = [
                 correct,
-                "Die Quelle enthaelt dazu keine Aussage.",
+                "The source does not contain a supported answer.",
                 "Das Thema wird ausschliesslich bildbasiert behandelt.",
                 "Die Seite beschreibt nur historische Hintergruende.",
             ]
             questions.append(
                 {
-                    "question": f"Welche Aussage passt am besten zu Quelle {context.get('citation_id', f'Q{index}')}?",
+                    "question": f"Which statement best matches source {context.get('citation_id', f'Q{index}')}?",
                     "options": options,
                     "correct_answer": correct,
                     "explanation": f"Die korrekte Aussage stammt aus {context.get('doc_name')} Seite {context.get('page_number')}.",
@@ -506,7 +506,7 @@ class RAGEngine:
         doc_id = f"doc::{doc_name}"
         removed_docs = [document for document in self.documents if document.get("doc_id") == doc_id or document.get("filename") == doc_name]
         if not removed_docs and doc_name not in self.get_available_documents():
-            raise ValueError(f"Dokument nicht gefunden: {doc_name}")
+            raise ValueError(f"Document not found: {doc_name}")
         removed_pages_count = sum(1 for page in self.pages if page.get("doc_id") == doc_id or page.get("doc_name") == doc_name)
         removed_chunks_count = sum(1 for chunk in self.metadata if chunk.get("doc_id") == doc_id or chunk.get("doc_name") == doc_name)
         current_dim = self.vector_store.dim if self.vector_store is not None else None
@@ -564,7 +564,7 @@ class RAGEngine:
 
     def answer_question(self, question: str) -> dict:
         if not self.vector_store or self.vector_store.size() == 0:
-            return {"answer": "Es ist noch kein Index verfuegbar. Bitte zuerst PDFs hochladen und indexieren.", "contexts": [], "request_id": None}
+            return {"answer": "No index is available yet. Add course sources and build the index first.", "contexts": [], "request_id": None}
         start = time.perf_counter()
         query_features = analyze_query(question)
         query_vector = self.embedder.embed([question])
@@ -715,7 +715,7 @@ class RAGEngine:
                 }
             )
             detailed_lines.append(
-                f"Frage {question.get('question_order', question_id)}: {'richtig' if is_correct else 'falsch'} "
+                f"Question {question.get('question_order', question_id)}: {'correct' if is_correct else 'incorrect'} "
                 f"({similarity * 100:.1f}% Aehnlichkeit)\n"
                 f"Deine Antwort: {user_answer or '-'}\n"
                 f"Korrekt: {correct_answer}\n"

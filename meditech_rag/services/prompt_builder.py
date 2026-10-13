@@ -18,7 +18,7 @@ def build_qa_prompt(question: str, contexts: list[dict], strict_rag: bool = True
             context_blocks.append(f"[{label}]\n{_trim(item['text'])}")
         context_text = "\n\n".join(context_blocks)
     else:
-        context_text = "Keine Quellen gefunden."
+        context_text = "No sources found."
     grounding_rule = (
         "Answer only from the supplied evidence. If the answer is absent, say so clearly."
         if strict_rag else "Prefer the supplied evidence and clearly label uncertainty when it is incomplete."
@@ -52,9 +52,9 @@ def build_summary_synthesis_prompt(doc_name: str, partial_summaries: list[dict])
 def build_quiz_prompt(topic_or_instruction: str, contexts: list[dict], n_questions: int) -> str:
     context_blocks = []
     for idx, item in enumerate(contexts, start=1):
-        label = f"Quelle {idx}: {item['doc_name']}, Seite {item['page_number']}, {item['source_type']}"
+        label = f"Source {idx}: {item['doc_name']}, page {item['page_number']}, {item['source_type']}"
         context_blocks.append(f"[{label}]\n{_trim(item['text'], 900)}")
-    joined = "\n\n".join(context_blocks) if context_blocks else "Keine Quellen verfuegbar."
+    joined = "\n\n".join(context_blocks) if context_blocks else "No sources available."
     return render_prompt("core", "quiz", count=n_questions, topic=topic_or_instruction, context=joined)
 
 
@@ -64,5 +64,5 @@ def build_quiz_json_prompt(topic_or_instruction: str, contexts: list[dict], n_qu
         citation_id = item.get("citation_id", f"Q{idx}")
         label = f"{citation_id}: {item['doc_name']}, Seite {item['page_number']}, {item['source_type']}"
         context_blocks.append(f"[{label}]\n{_trim(item['text'], 700)}")
-    joined = "\n\n".join(context_blocks) if context_blocks else "Keine Quellen verfuegbar."
+    joined = "\n\n".join(context_blocks) if context_blocks else "No sources available."
     return render_prompt("core", "quiz_json", count=n_questions, topic=topic_or_instruction, context=joined)

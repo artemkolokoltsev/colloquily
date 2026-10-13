@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import secrets
 import re
 from contextlib import closing
 from datetime import datetime
@@ -14,6 +15,7 @@ import config
 
 LOGGER = logging.getLogger(__name__)
 LEGACY_SUBJECT_ID = 1
+CURRENT_SCHEMA_VERSION = 10
 
 
 def _connect() -> sqlite3.Connection:
@@ -26,7 +28,8 @@ def _connect() -> sqlite3.Connection:
     return connection
 
 
-def init_db() -> None:
+def init_db(*, seed_admin: bool = True) -> None:
+    _prepare_migration()
     with closing(_connect()) as connection:
         cursor = connection.cursor()
         cursor.executescript(
@@ -64,7 +67,12 @@ def init_db() -> None:
                 chunk_type TEXT,
                 source_type TEXT,
                 score REAL,
-                preview TEXT
+                preview TEXT,
+                knowledge_unit_id INTEGER,
+                document_title TEXT,
+                relative_path TEXT,
+                source_location TEXT,
+                content TEXT
             );
 
             CREATE TABLE IF NOT EXISTS feedback (
@@ -122,13 +130,22 @@ def init_db() -> None:
                 slug TEXT UNIQUE NOT NULL,
                 name TEXT NOT NULL,
                 description TEXT NOT NULL DEFAULT '',
-                language TEXT NOT NULL DEFAULT 'de',
+                language TEXT NOT NULL DEFAULT 'en',
                 exam_duration_minutes INTEGER NOT NULL DEFAULT 15,
                 local_llm_config_json TEXT NOT NULL DEFAULT '{}',
                 embedding_config_json TEXT NOT NULL DEFAULT '{}',
                 active_index_profile TEXT NOT NULL DEFAULT 'default',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS learning_goals (
+                user_id INTEGER NOT NULL,
+                subject_id INTEGER NOT NULL,
+                settings_json TEXT NOT NULL,
+                PRIMARY KEY(user_id, subject_id),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
             );
 
             CREATE TABLE IF NOT EXISTS documents (
@@ -220,10 +237,29 @@ def init_db() -> None:
                 evidence_ids_json TEXT NOT NULL DEFAULT '[]',
                 quality_score REAL NOT NULL DEFAULT 0,
                 review_status TEXT NOT NULL DEFAULT 'needs_review',
+                origin_request_uuid TEXT,
+                origin_user_id INTEGER,
+                origin_reported_question_id INTEGER,
+                reported_chain_id TEXT,
+                source_provenance TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE,
                 FOREIGN KEY(topic_id) REFERENCES topics(id) ON DELETE SET NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS question_pools (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                original_filename TEXT NOT NULL,
+                import_format TEXT NOT NULL,
+                question_count INTEGER NOT NULL DEFAULT 0,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                imported_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
             );
 
             CREATE TABLE IF NOT EXISTS exam_runs (
@@ -379,17 +415,63 @@ def init_db() -> None:
         )
         _migrate_subject_scope(connection)
         _migrate_exam_state(connection)
+        _migrate_conversation_history(connection)
+        _migrate_reported_training_cards(connection)
+        _migrate_question_pools(connection)
         migration_time = datetime.now().isoformat(timespec="seconds")
         connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (3, ?)", (migration_time,))
         connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (4, ?)", (migration_time,))
         connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (5, ?)", (migration_time,))
+        # Keep the learner's language intact. Older builds accidentally mapped
+        # German and English alike to English during every startup.
+        connection.execute("UPDATE subjects SET language = 'de' WHERE lower(language) IN ('deu', 'german', 'deutsch')")
+        connection.execute("UPDATE subjects SET language = 'en' WHERE lower(language) IN ('eng', 'english')")
+        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (6, ?)", (migration_time,))
+        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (7, ?)", (migration_time,))
+        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (8, ?)", (migration_time,))
+        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (9, ?)", (migration_time,))
+        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (10, ?)", (migration_time,))
+        integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
+        if integrity != "ok":
+            raise RuntimeError(f"Database validation failed after migration: {integrity}")
         connection.commit()
-    seed_admin_user()
+    if seed_admin:
+        get_local_user()
     LOGGER.info("SQLite database initialized", extra={"db_path": config.DB_PATH})
 
 
 def _column_names(connection: sqlite3.Connection, table: str) -> set[str]:
     return {row[1] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _prepare_migration() -> None:
+    """Reject newer databases and snapshot older SQLite state, including WAL."""
+    from pathlib import Path
+
+    path = Path(config.DB_PATH)
+    if not path.exists() or path.stat().st_size == 0:
+        return
+    with sqlite3.connect(path, timeout=10) as source:
+        has_versions = source.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
+        ).fetchone()
+        version = int(source.execute("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").fetchone()[0]) if has_versions else 0
+        if version > CURRENT_SCHEMA_VERSION:
+            raise RuntimeError(
+                f"This workspace uses schema {version}, newer than supported schema {CURRENT_SCHEMA_VERSION}. "
+                "Install a newer Colloquily version; the workspace was not changed."
+            )
+        if version >= CURRENT_SCHEMA_VERSION:
+            return
+        backup_dir = path.parent / "backups" / "migrations"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        destination = backup_dir / f"colloquily-schema-{version}-before-{CURRENT_SCHEMA_VERSION}.db"
+        if destination.exists():
+            return
+        with sqlite3.connect(destination) as target:
+            source.backup(target)
+            if target.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                raise RuntimeError("The pre-migration database backup failed validation")
 
 
 def _add_subject_column(connection: sqlite3.Connection, table: str) -> None:
@@ -403,16 +485,21 @@ def _add_subject_column(connection: sqlite3.Connection, table: str) -> None:
 def _migrate_subject_scope(connection: sqlite3.Connection) -> None:
     """Idempotently scopes imported activity to a neutral Colloquily exam."""
     now = datetime.now().isoformat(timespec="seconds")
-    connection.execute(
-        """
-        INSERT OR IGNORE INTO subjects (
-            id, slug, name, description, language, exam_duration_minutes,
-            local_llm_config_json, embedding_config_json, active_index_profile,
-            created_at, updated_at
-        ) VALUES (?, 'imported-exam', 'Imported Exam', 'Imported course material', 'de', 15, '{}', '{}', 'legacy', ?, ?)
-        """,
-        (LEGACY_SUBJECT_ID, now, now),
+    legacy_rows = any(
+        connection.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone()
+        for table in ("requests", "quiz_sessions")
     )
+    if legacy_rows:
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO subjects (
+                id, slug, name, description, language, exam_duration_minutes,
+                local_llm_config_json, embedding_config_json, active_index_profile,
+                created_at, updated_at
+            ) VALUES (?, 'imported-exam', 'Imported Exam', 'Imported course material', 'en', 15, '{}', '{}', 'legacy', ?, ?)
+            """,
+            (LEGACY_SUBJECT_ID, now, now),
+        )
     connection.execute(
         """
         UPDATE subjects SET slug = 'imported-exam', name = 'Imported Exam',
@@ -457,6 +544,152 @@ def _migrate_exam_state(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_conversation_history(connection: sqlite3.Connection) -> None:
+    """Add durable request provenance and backfill one review card per Study question."""
+    for name, definition in {
+        "knowledge_unit_id": "INTEGER",
+        "document_title": "TEXT",
+        "relative_path": "TEXT",
+        "source_location": "TEXT",
+        "content": "TEXT",
+    }.items():
+        _ensure_column(connection, "request_sources", name, definition)
+    _ensure_column(connection, "questions", "origin_request_uuid", "TEXT")
+    _ensure_column(connection, "questions", "origin_user_id", "INTEGER")
+    connection.execute(
+        """
+        UPDATE request_sources
+        SET source_location = CAST(page_number AS TEXT)
+        WHERE (source_location IS NULL OR trim(source_location) = '')
+          AND typeof(page_number) = 'text' AND trim(CAST(page_number AS TEXT)) <> ''
+        """
+    )
+    # Older subject-scoped citations used E<knowledge-unit-id> but did not
+    # persist that relationship explicitly. Recover it only when the unit is
+    # still accepted in the same exam.
+    for source in connection.execute(
+        """
+        SELECT rs.id, rs.citation_id, r.subject_id
+        FROM request_sources rs JOIN requests r ON r.request_uuid = rs.request_uuid
+        WHERE rs.knowledge_unit_id IS NULL
+        """
+    ).fetchall():
+        match = re.fullmatch(r"E(\d+)", str(source["citation_id"] or ""), re.I)
+        if not match:
+            continue
+        evidence = connection.execute(
+            """
+            SELECT ku.id, ku.source_location, ku.content, d.title, d.relative_path, d.source_type
+            FROM knowledge_units ku JOIN documents d ON d.id = ku.document_id
+            WHERE ku.id = ? AND ku.subject_id = ? AND ku.review_status = 'accepted'
+              AND ku.enabled_for_retrieval = 1
+            """,
+            (int(match.group(1)), source["subject_id"]),
+        ).fetchone()
+        if evidence:
+            connection.execute(
+                """
+                UPDATE request_sources SET knowledge_unit_id = ?, document_title = ?,
+                    relative_path = ?, source_location = ?, source_type = ?,
+                    content = COALESCE(content, ?)
+                WHERE id = ?
+                """,
+                (
+                    evidence["id"], evidence["title"], evidence["relative_path"],
+                    evidence["source_location"], evidence["source_type"], evidence["content"], source["id"],
+                ),
+            )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_questions_origin_request "
+        "ON questions(origin_request_uuid) WHERE origin_request_uuid IS NOT NULL"
+    )
+    connection.execute(
+        """
+        INSERT OR IGNORE INTO questions (
+            subject_id, topic_id, question_type, question_text, difficulty,
+            expected_duration_seconds, expected_core_points_json, optional_details_json,
+            evidence_ids_json, quality_score, review_status, origin_request_uuid,
+            origin_user_id, created_at, updated_at
+        )
+        SELECT
+            requests.subject_id, NULL, 'user_question', requests.input_text, 'medium',
+            60, '[]', '[]', '[]', 0.25, 'needs_review', requests.request_uuid,
+            requests.user_id, requests.created_at, requests.created_at
+        FROM requests
+        WHERE requests.request_type = 'ask'
+          AND trim(requests.input_text) <> ''
+          AND NOT EXISTS (
+              SELECT 1 FROM questions WHERE questions.origin_request_uuid = requests.request_uuid
+          )
+        """
+    )
+    for question in connection.execute(
+        """
+        SELECT q.id, q.origin_request_uuid, r.output_text
+        FROM questions q JOIN requests r ON r.request_uuid = q.origin_request_uuid
+        WHERE q.origin_request_uuid IS NOT NULL AND q.review_status = 'needs_review'
+        """
+    ).fetchall():
+        evidence_ids = [int(row["knowledge_unit_id"]) for row in connection.execute(
+            """
+            SELECT DISTINCT knowledge_unit_id FROM request_sources
+            WHERE request_uuid = ? AND knowledge_unit_id IS NOT NULL
+            ORDER BY knowledge_unit_id
+            """,
+            (question["origin_request_uuid"],),
+        ).fetchall()]
+        connection.execute(
+            """
+            UPDATE questions SET evidence_ids_json = ?, expected_core_points_json = ?,
+                quality_score = ? WHERE id = ?
+            """,
+            (
+                json.dumps(evidence_ids),
+                json.dumps(_core_points_from_answer(question["output_text"], evidence_ids), ensure_ascii=False),
+                0.7 if evidence_ids else 0.25, question["id"],
+            ),
+        )
+
+
+def _migrate_reported_training_cards(connection: sqlite3.Connection) -> None:
+    _ensure_column(connection, "questions", "origin_reported_question_id", "INTEGER")
+    _ensure_column(connection, "questions", "reported_chain_id", "TEXT")
+    _ensure_column(connection, "questions", "source_provenance", "TEXT")
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_questions_origin_reported "
+        "ON questions(origin_reported_question_id) WHERE origin_reported_question_id IS NOT NULL"
+    )
+
+
+def _migrate_question_pools(connection: sqlite3.Connection) -> None:
+    """Add reusable imported-question metadata without replacing training cards."""
+    for name, definition in {
+        "question_pool_id": "INTEGER REFERENCES question_pools(id) ON DELETE CASCADE",
+        "external_id": "TEXT",
+        "concept_id": "TEXT",
+        "topic_name": "TEXT",
+        "priority": "TEXT NOT NULL DEFAULT 'B'",
+        "possible_followups_json": "TEXT NOT NULL DEFAULT '[]'",
+        "tags_json": "TEXT NOT NULL DEFAULT '[]'",
+        "source_file": "TEXT",
+        "source_slides_json": "TEXT NOT NULL DEFAULT '[]'",
+        "supporting_sources_json": "TEXT NOT NULL DEFAULT '[]'",
+        "enabled": "INTEGER NOT NULL DEFAULT 1",
+        "import_provenance_json": "TEXT NOT NULL DEFAULT '{}'",
+    }.items():
+        _ensure_column(connection, "questions", name, definition)
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_question_pools_subject ON question_pools(subject_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_questions_pool ON questions(question_pool_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_questions_subject_topic_name ON questions(subject_id, topic_name)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_questions_subject_priority ON questions(subject_id, priority)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_questions_subject_concept ON questions(subject_id, concept_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_questions_subject_difficulty ON questions(subject_id, difficulty)")
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_questions_subject_external "
+        "ON questions(subject_id, external_id) WHERE external_id IS NOT NULL AND trim(external_id) <> ''"
+    )
+
+
 def _subject_slug(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-")
     if not slug:
@@ -496,7 +729,7 @@ def create_subject(
     *,
     slug: str | None = None,
     description: str = "",
-    language: str = "de",
+    language: str = "en",
     exam_duration_minutes: int = 15,
     local_llm_config: dict | None = None,
     embedding_config: dict | None = None,
@@ -517,7 +750,7 @@ def create_subject(
                 normalized_slug,
                 name.strip(),
                 description.strip(),
-                language.strip() or "de",
+                language.strip() or "en",
                 max(1, int(exam_duration_minutes)),
                 json.dumps(local_llm_config or {}, ensure_ascii=False),
                 json.dumps(embedding_config or {}, ensure_ascii=False),
@@ -541,7 +774,7 @@ def update_subject(subject_id: int, values: dict) -> dict:
         "slug": current["slug"],
         "name": str(values.get("name", current["name"])).strip(),
         "description": str(values.get("description", current["description"])).strip(),
-        "language": str(values.get("language", current["language"])).strip() or "de",
+        "language": str(values.get("language", current["language"])).strip() or "en",
         "exam_duration_minutes": max(1, int(values.get("exam_duration_minutes", current["exam_duration_minutes"]))),
         "local_llm_config": values.get("local_llm_config", current["local_llm_config"]),
         "embedding_config": values.get("embedding_config", current["embedding_config"]),
@@ -572,10 +805,20 @@ def delete_subject(subject_id: int) -> bool:
         return cursor.rowcount > 0
 
 
-def seed_admin_user() -> None:
-    if get_user_by_username(config.DEFAULT_ADMIN_USERNAME):
-        return
-    create_user(config.DEFAULT_ADMIN_USERNAME, config.DEFAULT_ADMIN_PASSWORD, is_admin=True)
+def get_local_user() -> dict:
+    """Reuse the legacy owner so existing progress stays attached to the same ID."""
+    with closing(_connect()) as connection:
+        row = connection.execute(
+            "SELECT * FROM users ORDER BY CASE WHEN username = 'admin' THEN 0 ELSE 1 END, username LIMIT 1"
+        ).fetchone()
+        if row:
+            return dict(row)
+        connection.execute(
+            "INSERT OR IGNORE INTO users (username, password_hash, is_admin, created_at) VALUES (?, ?, 0, ?)",
+            ("local", generate_password_hash(secrets.token_urlsafe(48)), datetime.now().isoformat(timespec="seconds")),
+        )
+        connection.commit()
+    return get_user_by_username("local")
 
 
 def create_user(username: str, password: str, is_admin: bool = False) -> None:
@@ -625,6 +868,103 @@ def authenticate_user(username: str, password: str) -> dict | None:
     return user
 
 
+def _source_page_number(source: dict) -> int | None:
+    for key in ("source_page_number", "source_start", "page_number"):
+        value = source.get(key)
+        if isinstance(value, int) and value > 0:
+            return value
+        if isinstance(value, str) and value.strip().isdigit() and int(value) > 0:
+            return int(value)
+    match = re.search(r"\b(?:page|seite)\s*(\d+)\b", str(source.get("source_location") or ""), re.I)
+    return int(match.group(1)) if match else None
+
+
+def _core_points_from_answer(answer: str | None, evidence_ids: list[int]) -> list[dict]:
+    """Create a conservative draft rubric from a grounded answer for human review."""
+    if not evidence_ids or not str(answer or "").strip():
+        return []
+    body = re.split(r"\n\s*(?:Citations?|Sources?|Evidence)\s*:", str(answer), maxsplit=1, flags=re.I)[0]
+    body = re.sub(r"\[(?:E|Q)\d+\]", "", body)
+    sentences = [re.sub(r"\s+", " ", item).strip(" -•\t") for item in re.split(r"(?<=[.!?])\s+|\n+", body)]
+    points = []
+    for sentence in sentences:
+        if len(sentence) < 25:
+            continue
+        text = sentence if len(sentence) <= 360 else sentence[:357].rstrip() + "…"
+        points.append({"text": text, "priority": "must_know", "evidence_ids": evidence_ids})
+        if len(points) == 4:
+            break
+    if not points and body.strip():
+        fallback = re.sub(r"\s+", " ", body).strip()
+        points.append({
+            "text": fallback if len(fallback) <= 360 else fallback[:357].rstrip() + "…",
+            "priority": "must_know",
+            "evidence_ids": evidence_ids,
+        })
+    return points
+
+
+def _store_question_card_for_request(
+    connection: sqlite3.Connection, user_id: int, subject_id: int, request_entry: dict
+) -> None:
+    if request_entry.get("request_type") != "ask" or not str(request_entry.get("input_text") or "").strip():
+        return
+    requested_ids = sorted({
+        int(source.get("knowledge_unit_id") or source.get("evidence_id"))
+        for source in request_entry.get("sources", [])
+        if str(source.get("knowledge_unit_id") or source.get("evidence_id") or "").isdigit()
+    })
+    evidence_ids: list[int] = []
+    if requested_ids:
+        placeholders = ",".join("?" for _ in requested_ids)
+        evidence_ids = [int(row["id"]) for row in connection.execute(
+            f"""
+            SELECT id FROM knowledge_units
+            WHERE subject_id = ? AND review_status = 'accepted' AND enabled_for_retrieval = 1
+              AND id IN ({placeholders})
+            ORDER BY id
+            """,
+            [subject_id, *requested_ids],
+        ).fetchall()]
+    request_uuid = str(request_entry["request_id"])
+    existing = connection.execute(
+        "SELECT id, review_status FROM questions WHERE origin_request_uuid = ?",
+        (request_uuid,),
+    ).fetchone()
+    now = str(request_entry.get("timestamp") or datetime.now().isoformat(timespec="seconds"))
+    core_points = _core_points_from_answer(request_entry.get("output_text"), evidence_ids)
+    if existing:
+        if existing["review_status"] == "needs_review":
+            connection.execute(
+                """
+                UPDATE questions SET question_text = ?, evidence_ids_json = ?,
+                    expected_core_points_json = ?, quality_score = ?, updated_at = ? WHERE id = ?
+                """,
+                (
+                    str(request_entry["input_text"]).strip(), json.dumps(evidence_ids),
+                    json.dumps(core_points, ensure_ascii=False),
+                    0.7 if evidence_ids else 0.25, now, existing["id"],
+                ),
+            )
+        return
+    connection.execute(
+        """
+        INSERT INTO questions (
+            subject_id, topic_id, question_type, question_text, difficulty,
+            expected_duration_seconds, expected_core_points_json, optional_details_json,
+            evidence_ids_json, quality_score, review_status, origin_request_uuid,
+            origin_user_id, created_at, updated_at
+        ) VALUES (?, NULL, 'user_question', ?, 'medium', 60, ?, '[]', ?, ?,
+                  'needs_review', ?, ?, ?, ?)
+        """,
+        (
+            subject_id, str(request_entry["input_text"]).strip(),
+            json.dumps(core_points, ensure_ascii=False), json.dumps(evidence_ids),
+            0.7 if evidence_ids else 0.25, request_uuid, user_id, now, now,
+        ),
+    )
+
+
 def store_request(user_id: int, request_entry: dict, subject_id: int = LEGACY_SUBJECT_ID) -> None:
     with closing(_connect()) as connection:
         connection.execute(
@@ -654,21 +994,29 @@ def store_request(user_id: int, request_entry: dict, subject_id: int = LEGACY_SU
             connection.execute(
                 """
                 INSERT INTO request_sources (
-                    request_uuid, citation_id, doc_name, page_number, chunk_type, source_type, score, preview, subject_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    request_uuid, citation_id, doc_name, page_number, chunk_type, source_type,
+                    score, preview, subject_id, knowledge_unit_id, document_title,
+                    relative_path, source_location, content
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     request_entry["request_id"],
                     source.get("citation_id"),
-                    source.get("doc_name"),
-                    source.get("page_number"),
+                    source.get("doc_name") or source.get("relative_path"),
+                    _source_page_number(source),
                     source.get("chunk_type"),
                     source.get("source_type"),
                     source.get("score"),
-                    source.get("preview"),
+                    source.get("preview") or str(source.get("content") or "")[:500],
                     subject_id,
+                    source.get("knowledge_unit_id") or source.get("evidence_id"),
+                    source.get("document_title") or source.get("doc_name"),
+                    source.get("relative_path") or source.get("doc_name"),
+                    source.get("source_location"),
+                    source.get("content") or source.get("preview"),
                 ),
             )
+        _store_question_card_for_request(connection, user_id, subject_id, request_entry)
         connection.commit()
 
 
@@ -679,6 +1027,43 @@ def request_exists(request_uuid: str) -> bool:
             (request_uuid,),
         ).fetchone()
         return row is not None
+
+
+def list_conversation_history(
+    user_id: int, *, subject_id: int | None = None, query: str = "", limit: int = 200
+) -> list[dict]:
+    """Return complete persisted Study conversations with evidence and review-card state."""
+    clauses = ["r.user_id = ?", "r.request_type = 'ask'"]
+    params: list[object] = [user_id]
+    if subject_id is not None:
+        clauses.append("r.subject_id = ?")
+        params.append(subject_id)
+    if query.strip():
+        clauses.append("(r.input_text LIKE ? OR r.output_text LIKE ?)")
+        pattern = f"%{query.strip()}%"
+        params.extend([pattern, pattern])
+    params.append(max(1, min(int(limit), 500)))
+    with closing(_connect()) as connection:
+        rows = connection.execute(
+            f"""
+            SELECT r.*, s.name AS subject_name, q.id AS question_card_id,
+                   q.review_status AS question_card_status
+            FROM requests r
+            LEFT JOIN subjects s ON s.id = r.subject_id
+            LEFT JOIN questions q ON q.origin_request_uuid = r.request_uuid
+            WHERE {' AND '.join(clauses)}
+            ORDER BY r.created_at DESC, r.id DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+        conversations = [dict(row) for row in rows]
+        for item in conversations:
+            item["sources"] = [dict(row) for row in connection.execute(
+                "SELECT * FROM request_sources WHERE request_uuid = ? ORDER BY id",
+                (item["request_uuid"],),
+            ).fetchall()]
+        return conversations
 
 
 def store_feedback(user_id: int, request_uuid: str, helpful: bool, details: str) -> None:

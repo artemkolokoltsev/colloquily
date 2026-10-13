@@ -1,7 +1,13 @@
+# Local secrets; sanitized configuration templates can be committed
 .env
-.env.local
-.env.langtrace
-.env.langtrace.local
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
 
 .DS_Store
 
@@ -13,18 +19,28 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage.*
 htmlcov/
+*.egg-info/
 
 # Local virtual environments
 .venv/
 venv/
 env/
+node_modules/
+output/
+.playwright-cli/
+*.log
+*.tsbuildinfo
 
 # Runtime data, generated indexes, model caches, uploads, and local DBs
 meditech_rag/data/
-meditech_rag/**/*.db
-meditech_rag/**/*.sqlite
-meditech_rag/**/*.sqlite3
+*.db
+*.sqlite
+*.sqlite3
+*.db-*
+*.sqlite-*
+*.sqlite3-*
 *.faiss
 
 # Generated/local document artifacts that are not part of the codebase
@@ -33,3 +49,18 @@ Literature/
 *.potx
 test.pdf
 meditech_rag/Fragenkatalog.pdf
+
+# Personal study material and UI working notes
+/quantum_questions_2.json
+/questions_window.md
+/meditech_rag/templates/quantum_questions.md
+
+# Desktop migration build outputs
+frontend/dist/
+src-tauri/target/
+src-tauri/binaries/colloquily-backend-*
+build/
+data/
+src-tauri/gen/
+src-tauri/icons/android/
+src-tauri/icons/ios/

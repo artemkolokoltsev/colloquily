@@ -5,6 +5,7 @@ from contextlib import closing
 from datetime import datetime
 
 from services.database import _connect
+from services.topic_normalization import normalize_topic_titles, single_topic_title
 
 
 def upsert_document(subject_id: int, source: dict) -> tuple[dict, bool]:
@@ -63,11 +64,98 @@ def list_documents(subject_id: int) -> list[dict]:
 
 def list_topics(subject_id: int) -> list[dict]:
     with closing(_connect()) as connection:
-        return [
-            dict(row) for row in connection.execute(
-                "SELECT * FROM topics WHERE subject_id = ? ORDER BY name", (subject_id,)
-            ).fetchall()
-        ]
+        rows = connection.execute(
+            """
+            SELECT * FROM topics t WHERE subject_id = ? AND (
+                EXISTS (SELECT 1 FROM knowledge_units ku WHERE ku.topic_id = t.id)
+                OR EXISTS (SELECT 1 FROM questions q WHERE q.topic_id = t.id)
+            ) ORDER BY name
+            """,
+            (subject_id,),
+        ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            titles = normalize_topic_titles(item["name"])
+            item["name"] = " / ".join(titles) if titles else "Unassigned"
+            result.append(item)
+        return result
+
+
+def normalize_subject_topics(subject_id: int) -> dict:
+    """Canonicalize active topics and remove stale extraction artefacts.
+
+    Original headings remain in knowledge-unit raw content and are recorded in
+    the topic description when a canonical title replaces an extracted title.
+    Ambiguous multi-heading mappings are moved to Unassigned.
+    """
+    renamed = merged = unassigned = 0
+    with closing(_connect()) as connection:
+        rows = connection.execute(
+            "SELECT * FROM topics WHERE subject_id = ? ORDER BY id", (subject_id,)
+        ).fetchall()
+        canonical: dict[str, int] = {}
+        for row in rows:
+            topic_id = int(row["id"])
+            original = str(row["name"])
+            titles = normalize_topic_titles(original)
+            if len(titles) != 1:
+                connection.execute("UPDATE knowledge_units SET topic_id = NULL WHERE topic_id = ?", (topic_id,))
+                connection.execute("UPDATE questions SET topic_id = NULL WHERE topic_id = ?", (topic_id,))
+                connection.execute("DELETE FROM topics WHERE id = ?", (topic_id,))
+                unassigned += 1
+                continue
+            clean = titles[0][:160]
+            key = clean.casefold()
+            target_id = canonical.get(key)
+            if target_id is None:
+                existing = connection.execute(
+                    "SELECT id FROM topics WHERE subject_id = ? AND lower(name) = lower(?) AND id != ? ORDER BY id LIMIT 1",
+                    (subject_id, clean, topic_id),
+                ).fetchone()
+                target_id = int(existing["id"]) if existing else topic_id
+                canonical[key] = target_id
+            if target_id != topic_id:
+                connection.execute("UPDATE knowledge_units SET topic_id = ? WHERE topic_id = ?", (target_id, topic_id))
+                connection.execute("UPDATE questions SET topic_id = ? WHERE topic_id = ?", (target_id, topic_id))
+                connection.execute("DELETE FROM topics WHERE id = ?", (topic_id,))
+                merged += 1
+                continue
+            if clean != original:
+                trace = f"Original source heading: {original}"
+                description = str(row["description"] or "")
+                if trace not in description:
+                    description = f"{description}\n{trace}".strip()
+                connection.execute(
+                    "UPDATE topics SET name = ?, description = ? WHERE id = ?",
+                    (clean, description, topic_id),
+                )
+                renamed += 1
+        cursor = connection.execute(
+            """
+            DELETE FROM topics WHERE subject_id = ?
+              AND NOT EXISTS (SELECT 1 FROM knowledge_units ku WHERE ku.topic_id = topics.id)
+              AND NOT EXISTS (SELECT 1 FROM questions q WHERE q.topic_id = topics.id)
+            """,
+            (subject_id,),
+        )
+        deleted_orphans = max(0, cursor.rowcount)
+        connection.execute(
+            """
+            UPDATE topics SET evidence_count = (
+                SELECT COUNT(*) FROM knowledge_units ku
+                WHERE ku.topic_id = topics.id AND ku.review_status = 'accepted'
+            ) WHERE subject_id = ?
+            """,
+            (subject_id,),
+        )
+        connection.commit()
+    return {
+        "renamed": renamed,
+        "merged": merged,
+        "moved_to_unassigned": unassigned,
+        "deleted_orphans": deleted_orphans,
+    }
 
 
 def prepare_document_units(document_id: int, *, force: bool = False) -> None:
@@ -96,7 +184,9 @@ def insert_knowledge_units(subject_id: int, document_id: int, units: list[dict])
             if unit["source_location"] in protected:
                 continue
             topic_id = None
-            detected_topic = str(unit.get("detected_topic") or "").strip()
+            detected_topic = single_topic_title(unit.get("detected_topic"))
+            if unit.get("recommended_status") in {"quarantined", "rejected"}:
+                detected_topic = None
             if detected_topic:
                 connection.execute(
                     """
@@ -371,3 +461,20 @@ def review_unit(
         connection.commit()
         updated = connection.execute("SELECT * FROM knowledge_units WHERE id = ?", (unit_id,)).fetchone()
         return dict(updated)
+
+
+def remove_document(subject_id: int, relative_path: str) -> dict:
+    """Remove a source and derived evidence without deleting historical attempts."""
+    with closing(_connect()) as connection:
+        row = connection.execute(
+            "SELECT id, title FROM documents WHERE subject_id = ? AND relative_path = ?",
+            (subject_id, relative_path),
+        ).fetchone()
+        if not row:
+            raise ValueError("SOURCE_NOT_FOUND")
+        evidence = connection.execute(
+            "SELECT COUNT(*) FROM knowledge_units WHERE document_id = ?", (row["id"],)
+        ).fetchone()[0]
+        connection.execute("DELETE FROM documents WHERE id = ? AND subject_id = ?", (row["id"], subject_id))
+        connection.commit()
+        return {"document": row["title"], "evidence_removed": int(evidence)}

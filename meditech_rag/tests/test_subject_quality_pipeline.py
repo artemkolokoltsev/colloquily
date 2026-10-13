@@ -21,7 +21,8 @@ from services.knowledge_repository import (
     list_review_units,
     review_unit,
 )
-from services.quality_pipeline import deterministic_cleanup, process_subject
+from services.quality_pipeline import deterministic_cleanup, extract_source_units, process_subject
+from services.topic_normalization import normalize_topic_titles, single_topic_title
 from services.grounded_training import evaluate_grounded_answer, generate_grounded_questions
 from services.exam_packs import generate_exam_pack, list_exam_pack_sections, review_exam_pack_section
 from services.subject_index import SubjectIndex
@@ -48,8 +49,10 @@ class FakeEmbedder:
 class FakeLLM:
     def __init__(self, response_factory) -> None:
         self.response_factory = response_factory
+        self.calls = 0
 
     def generate(self, prompt: str, **_kwargs) -> str:
+        self.calls += 1
         return self.response_factory(prompt)
 
 
@@ -159,6 +162,67 @@ class SubjectQualityPipelineTest(unittest.TestCase):
         )
         self.assertEqual(noise["recommended_status"], "quarantined")
         self.assertEqual(valid["recommended_status"], "accepted")
+
+    def test_repeated_page_furniture_is_rejected_but_valid_body_is_accepted(self) -> None:
+        furniture = deterministic_cleanup(
+            {
+                "raw_content": "Learning Technologies · RWTH",
+                "repeated_lines": ["Learning Technologies · RWTH"],
+                "source_location": "page 1, lines 1-1",
+                "source_start": 1,
+                "source_end": 1,
+            }
+        )
+        body = deterministic_cleanup(
+            {
+                "raw_content": "Learning Technologies · RWTH\nCognitive load theory explains how limited working memory affects learning.",
+                "repeated_lines": ["Learning Technologies · RWTH"],
+                "source_location": "page 2, lines 1-2",
+                "source_start": 2,
+                "source_end": 2,
+            }
+        )
+
+        self.assertEqual(furniture["recommended_status"], "rejected")
+        self.assertEqual(furniture["cleaned_content"], "")
+        self.assertEqual(body["recommended_status"], "accepted")
+        self.assertNotIn("Learning Technologies · RWTH", body["cleaned_content"])
+
+    def test_pdf_headers_repeated_across_pages_are_detected(self) -> None:
+        subject = self.subject("Repeated PDF")
+        path = workspace_for(subject).folder("raw") / "headers.pdf"
+        document = fitz.open()
+        for page_number in range(1, 5):
+            page = document.new_page()
+            page.insert_text((72, 72), "Learning Technologies · RWTH")
+            page.insert_text((72, 110), f"Page {page_number} explains a distinct academic mechanism with an example.")
+        document.save(path)
+        document.close()
+        source = workspace_for(subject).discover_sources()[0]
+
+        units = extract_source_units(source)
+
+        self.assertTrue(any("Learning Technologies · RWTH" in unit["repeated_lines"] for unit in units))
+
+    def test_icon_font_and_concatenated_topics_are_normalized(self) -> None:
+        raw = "\uf07dUser-Centered Evaluation\n\uf07dAutomated Data Collection\n\uf07dEye Tracking"
+
+        self.assertEqual(
+            normalize_topic_titles(raw),
+            ["User-Centered Evaluation", "Automated Data Collection", "Eye Tracking"],
+        )
+        self.assertIsNone(single_topic_title(raw))
+        self.assertEqual(normalize_topic_titles("\uf07dSolution:"), [])
+        cleaned = deterministic_cleanup(
+            {
+                "raw_content": "\uf07dCognitive load theory explains limited working-memory capacity.",
+                "source_location": "page 1, lines 1-1",
+                "source_start": 1,
+                "source_end": 1,
+            }
+        )
+        self.assertNotIn("\uf07d", cleaned["cleaned_content"])
+        self.assertIn("•", cleaned["cleaned_content"])
 
     def test_interrupted_batch_resumes_after_completed_batch(self) -> None:
         subject = self.subject("Recovery")
@@ -288,18 +352,35 @@ class SubjectQualityPipelineTest(unittest.TestCase):
             generate_grounded_questions(subject, 1, llm_client=FakeLLM(lambda _: self._question_response(999999)))
         self.assertEqual(list_questions(subject["id"]), [])
 
-    def test_evaluation_rejects_claim_without_valid_evidence(self) -> None:
+    def test_evaluation_drops_claim_without_valid_evidence(self) -> None:
         subject, evidence_id = self._accepted_subject()
         question = generate_grounded_questions(
             subject, 1, llm_client=FakeLLM(lambda _: self._question_response(evidence_id))
         )[0]
         payload = self._evaluation_payload(evidence_id)
         payload["missing"] = [{"text": "Invalid claim", "evidence_ids": [999999], "contradicted_by_evidence": False}]
-        with self.assertRaises(ValueError):
-            evaluate_grounded_answer(
-                subject["id"], question["id"], "Reinforcement changes behavior.", 45,
-                llm_client=FakeLLM(lambda _: json.dumps(payload)),
-            )
+        evaluation = evaluate_grounded_answer(
+            subject["id"], question["id"], "Reinforcement changes behavior.", 45,
+            llm_client=FakeLLM(lambda _: json.dumps(payload)),
+        )
+        self.assertEqual(evaluation["missing"], [])
+
+    def test_malformed_evaluation_uses_deterministic_fallback(self) -> None:
+        subject, evidence_id = self._accepted_subject()
+        question = generate_grounded_questions(
+            subject, 1, llm_client=FakeLLM(lambda _: self._question_response(evidence_id))
+        )[0]
+        fast = FakeLLM(lambda _: '{"status":"evaluated" broken')
+        quality = FakeLLM(lambda _: '{also broken')
+        evaluation = evaluate_grounded_answer(
+            subject["id"], question["id"], "Reinforcement changes observable behavior.", 45,
+            llm_client=fast, quality_llm_client=quality,
+        )
+        self.assertEqual(evaluation["status"], "evaluated")
+        self.assertTrue(evaluation["fallback_used"])
+        self.assertNotIn(f"[E{evidence_id}]", evaluation["better_oral_answer"])
+        self.assertEqual(fast.calls, 1)
+        self.assertEqual(quality.calls, 0)
 
     def _evaluation_payload(self, evidence_id: int) -> dict:
         return {
@@ -338,11 +419,11 @@ class SubjectQualityPipelineTest(unittest.TestCase):
         invalid["incorrect"] = [
             {"text": "Claim is wrong", "evidence_ids": [evidence_id], "contradicted_by_evidence": False}
         ]
-        with self.assertRaises(ValueError):
-            evaluate_grounded_answer(
-                subject["id"], question["id"], "answer", 30,
-                llm_client=FakeLLM(lambda _: json.dumps(invalid)),
-            )
+        sanitized = evaluate_grounded_answer(
+            subject["id"], question["id"], "answer", 30,
+            llm_client=FakeLLM(lambda _: json.dumps(invalid)),
+        )
+        self.assertEqual(sanitized["incorrect"], [])
 
     def test_exam_pack_requires_resolvable_evidence_and_review(self) -> None:
         subject, evidence_id = self._accepted_subject()
