@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import { api } from "../api/client";
 import type { Exam } from "../types";
@@ -9,6 +10,7 @@ export function ExamEditor({
   exam: Exam;
   onSaved: () => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState(exam);
   const [error, setError] = useState("");
   const [confirm, setConfirm] = useState(false);
@@ -39,32 +41,24 @@ export function ExamEditor({
   }
   return (
     <details>
-      <summary>Edit exam</summary>
+      <summary>{t('ui.s0bbb4f1ba2')}</summary>
       <ErrorNotice error={error} />
-      <label>
-        Name
-        <input
+      <label> {t('ui.sdcd1d5223f')} <input
           value={draft.name}
           onChange={(e) => setDraft({ ...draft, name: e.target.value })}
         />
       </label>
-      <label>
-        Description
-        <input
+      <label> {t('ui.s526e0087cc')} <input
           value={draft.description}
           onChange={(e) => setDraft({ ...draft, description: e.target.value })}
         />
       </label>
-      <label>
-        Language
-        <input
+      <label> {t('ui.sa4fe65264e')} <input
           value={draft.language}
           onChange={(e) => setDraft({ ...draft, language: e.target.value })}
         />
       </label>
-      <label>
-        Mock duration in minutes
-        <input
+      <label> {t('ui.s45fbf7a17c')} <input
           type="number"
           min="1"
           max="240"
@@ -77,19 +71,12 @@ export function ExamEditor({
           }
         />
       </label>
-      <button disabled={busy} onClick={() => save()}>
-        Save exam
-      </button>
-      <button disabled={busy} onClick={() => setConfirm(true)}>
-        Delete exam…
-      </button>
+      <button disabled={busy} onClick={() => save()}> {t('ui.s77d3a2df6c')} </button>
+      <button disabled={busy} onClick={() => setConfirm(true)}> {t('ui.s9f9d2a99ea')} </button>
       {confirm && (
-        <p>
-          Delete this exam and its practice records? Raw files remain on disk.{" "}
-          <button disabled={busy} onClick={() => save(true)}>
-            Confirm deletion
-          </button>
-          <button onClick={() => setConfirm(false)}>Cancel</button>
+        <p> {t('release.deletePreview')}{" "}
+          <button disabled={busy} onClick={() => save(true)}> {t('ui.sfa57243dc0')} </button>
+          <button onClick={() => setConfirm(false)}>{t('ui.s19766ed6cc')}</button>
         </p>
       )}
     </details>

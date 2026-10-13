@@ -12,8 +12,17 @@ from fastapi.testclient import TestClient
 from backend.main import app
 from app_paths import data_directory
 from backend.services.models import OllamaProvider
+from backend.api.routes import _copy_limited
+from fastapi import UploadFile
+from io import BytesIO
 
 class ArchitectureTests(unittest.TestCase):
+    def test_upload_limit_removes_partial_file(self):
+        destination = Path(_TEMP.name) / "oversize.md"
+        with self.assertRaisesRegex(ValueError, "SOURCE_TOO_LARGE"):
+            _copy_limited(UploadFile(filename="oversize.md", file=BytesIO(b"12345")), destination, limit=4)
+        self.assertFalse(destination.exists())
+
     def test_paths(self):
         self.assertEqual(data_directory(packaged=True, platform='darwin', environ={}, home='/home/me'), Path('/home/me/Library/Application Support/Colloquily'))
         self.assertEqual(data_directory(packaged=True, platform='win32', environ={'APPDATA':'C:/Roaming'}), Path('C:/Roaming/Colloquily'))
@@ -79,7 +88,7 @@ class ArchitectureTests(unittest.TestCase):
     def test_generated_topic_practice(self):
         from contextlib import closing
         from services.database import _connect
-        fixture = Path(__file__).resolve().parents[2] / 'meditech_rag/tests/fixtures/question_pool.json'
+        fixture = Path(__file__).resolve().parents[2] / 'tests/core/fixtures/question_pool.json'
         with TestClient(app) as client:
             ident = client.post('/api/exams', json={'name':'Generated topic practice'}).json()['id']
             client.post(f'/api/exams/{ident}/questions/import', files={'file':('pool.json',fixture.read_bytes(),'application/json')})
@@ -106,7 +115,7 @@ class ArchitectureTests(unittest.TestCase):
             self.assertEqual(preflight.status_code,200)
 
     def test_practice_round_trip(self):
-        fixture = Path(__file__).resolve().parents[2] / 'meditech_rag/tests/fixtures/question_pool.json'
+        fixture = Path(__file__).resolve().parents[2] / 'tests/core/fixtures/question_pool.json'
         with TestClient(app) as client:
             exam = client.post('/api/exams', json={'name':'Practice API smoke'}).json()
             ident = exam['id']
@@ -128,9 +137,23 @@ class ArchitectureTests(unittest.TestCase):
                         break
                     time.sleep(.02)
             self.assertEqual(job['status'],'completed',job)
+            ended = client.post(f'/api/practice/{run["id"]}/finish')
+            self.assertEqual(ended.status_code, 200, ended.text)
+            before = client.get(f'/api/practice/{run["id"]}').json()
+            question_id = before['sessions'][0]['attempts'][0]['question_id']
+            self.assertTrue(client.delete(f'/api/exams/{ident}/questions/{question_id}').json()['deleted'])
+            after = client.get(f'/api/practice/{run["id"]}').json()
+            self.assertEqual(before['sessions'][0]['attempts'], after['sessions'][0]['attempts'])
             self.assertEqual(job['result']['evaluation']['score'],5)
             saved = client.get(f'/api/practice/{run["id"]}').json()
             self.assertEqual(saved['status'],'completed')
             self.assertEqual(len(saved['sessions'][0]['attempts']),1)
             filtered = client.post('/api/practice', json={'subject_ids':[ident], 'mode':'random_practice','topics':['Nonexistent topic']})
             self.assertEqual(filtered.status_code,400)
+
+    def test_preference_and_remote_endpoint_validation(self):
+        with TestClient(app) as client:
+            self.assertEqual(client.patch('/api/preferences', json={'language': 'de'}).status_code, 200)
+            self.assertEqual(client.get('/api/preferences').json()['language'], 'de')
+            self.assertEqual(client.patch('/api/preferences', json={'language': 'fr'}).status_code, 422)
+            self.assertEqual(client.patch('/api/settings', json={'values': {'OLLAMA_URL': 'https://remote.example'}}).status_code, 400)

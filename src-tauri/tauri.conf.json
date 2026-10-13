@@ -25,6 +25,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "externalBin": ["binaries/colloquily-backend"],
     "macOS": {
@@ -42,5 +43,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "TAURI_UPDATER_PUBLIC_KEY_REQUIRED_BEFORE_RELEASE",
+      "endpoints": ["https://github.com/artemkolokoltsev/colloquily/releases/latest/download/latest.json"],
+      "windows": { "installMode": "passive" }
+    }
   }
 }

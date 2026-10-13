@@ -99,3 +99,10 @@ class LearningGoalInput(BaseModel):
     exam_date: date | None = None
     repetitions: int = Field(default=3, ge=1, le=10)
     questions_per_session: int = Field(default=10, ge=1, le=100)
+
+class RestoreInput(BaseModel):
+    path: str = Field(min_length=1, max_length=4096)
+    confirmed: bool = False
+
+class LanguageInput(BaseModel):
+    language: Literal['en', 'de']

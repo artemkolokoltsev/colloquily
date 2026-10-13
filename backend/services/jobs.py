@@ -31,6 +31,10 @@ class Jobs:
             ident = uuid4().hex
             self.items[ident] = {"id": ident, "status": "queued", "message": message}
             self.keys[key] = ident
+        from backend.services.maintenance import gate
+        if not gate.enter():
+            self.update(ident, status='failed', error='WORKSPACE_BUSY')
+            return self.get(ident)
         def run():
             self.update(ident, status="running")
             try:
@@ -38,6 +42,8 @@ class Jobs:
                 self.update(ident, status="completed", result=result)
             except Exception as exc:
                 self.update(ident, status="failed", error=str(exc), message=str(exc))
+            finally:
+                gate.leave()
         self.pool.submit(run)
         return self.get(ident)
 

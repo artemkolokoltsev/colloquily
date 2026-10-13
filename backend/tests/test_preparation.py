@@ -54,7 +54,7 @@ class PreparationTests(unittest.TestCase):
         with patch('backend.services.preparation.source_starters', return_value=[{'id':99}]) as fallback:
             prepare_exam(7, Mock())
         fallback.assert_called_once_with(7)
-        self.review.assert_called_once_with(99, 'accepted', subject_id=7)
+        self.review.assert_not_called()
 
     def test_starter_rubric_is_exactly_the_accepted_source(self):
         from backend.services.preparation import source_starters

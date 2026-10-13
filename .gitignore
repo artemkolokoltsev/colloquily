@@ -34,7 +34,7 @@ output/
 *.tsbuildinfo
 
 # Runtime data, generated indexes, model caches, uploads, and local DBs
-meditech_rag/data/
+data/
 *.db
 *.sqlite
 *.sqlite3
@@ -48,19 +48,17 @@ Literature/
 *.pptx
 *.potx
 test.pdf
-meditech_rag/Fragenkatalog.pdf
+backend/core/Fragenkatalog.pdf
 
 # Personal study material and UI working notes
 /quantum_questions_2.json
 /questions_window.md
-/meditech_rag/templates/quantum_questions.md
 
-# Desktop migration build outputs
+# Desktop build outputs
 frontend/dist/
 src-tauri/target/
 src-tauri/binaries/colloquily-backend-*
 build/
-data/
 src-tauri/gen/
 src-tauri/icons/android/
 src-tauri/icons/ios/

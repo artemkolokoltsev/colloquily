@@ -1,18 +1,22 @@
+import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { api, operation } from "../api/client";
 import { ErrorNotice, Progress } from "../components/Common";
 import type { Job, ModelStatus } from "../types";
 export function Models({ onReady }: { onReady?: () => void }) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<ModelStatus>();
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [free, setFree] = useState<number>();
   const refresh = () =>
     api<ModelStatus>("/models/status")
       .then(setStatus)
       .catch((e) => setError(String(e)));
   useEffect(() => {
     void refresh();
+    void api<{free_bytes: number}>('/system/storage').then(data => setFree(data.free_bytes)).catch(() => undefined);
   }, []);
   async function pull(model: string) {
     setBusy(true);
@@ -28,26 +32,23 @@ export function Models({ onReady }: { onReady?: () => void }) {
   }
   return (
     <section>
-      <h2>Local AI setup</h2>
-      <p>
-        Your documents stay on this computer. Model downloads require internet
-        access and may use several GB of disk space.
-      </p>
+      <h2>{t('ui.sbe59b6d66c')}</h2>
+      <p> {t('ui.s3feb932584')} </p>
       <ErrorNotice error={error} />
+      {free !== undefined && <p>{t('dynamic.modelStorage', { gb: new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(free / 1024**3) })}</p>}
       {!status ? (
-        <p>Checking local AI…</p>
+        <p>{t('ui.s6d6b6cc894')}</p>
       ) : (
         <>
           <p>
             {status.ollama === "available"
-              ? "Your local AI service is running."
-              : "Open Ollama to continue setup."}
+              ? t('ui.sab53cee8b6')
+              : t('ui.s38059cf32e')}
           </p>
           {status.ollama !== "available" && (
             <article>
-              <h3>Install or open Ollama</h3>
-              <p>
-                Install Ollama from{" "}
+              <h3>{t('ui.s7ed17cde1a')}</h3>
+              <p> {t('ui.sc549207ef1')}{" "}
                 <a
                   href="https://ollama.com/download"
                   onClick={async (event) => {
@@ -63,17 +64,11 @@ export function Models({ onReady }: { onReady?: () => void }) {
                   }}
                   target="_blank"
                   rel="noreferrer"
-                >
-                  ollama.com/download
-                </a>
-                , then open the Ollama application. Return here and check again.
-              </p>
+                > {t('ui.s672661d756')} </a> {t('ui.s2c0e621fdb')} </p>
               <p>{status.error}</p>
             </article>
           )}
-          <button disabled={busy} onClick={refresh}>
-            Check again
-          </button>
+          <button disabled={busy} onClick={refresh}> {t('ui.sfb7099ad8e')} </button>
           {!!status.missing.length && (
             <button
               className="primary"
@@ -91,49 +86,37 @@ export function Models({ onReady }: { onReady?: () => void }) {
                   setBusy(false);
                 }
               }}
-            >
-              Download everything needed
-            </button>
+            > {t('ui.s22e63945bf')} </button>
           )}
           <details>
-            <summary>Model details</summary>
+            <summary>{t('ui.s5ddbc1e74d')}</summary>
             {status.required.map((model) => (
               <article key={model}>
                 <strong>{model}</strong>
                 <span>
-                  {status.missing.includes(model) ? "Missing" : "Installed"}
+                  {status.missing.includes(model) ? t('ui.s6be36ca49e') : t('ui.sf8b32f4e92')}
                 </span>
                 {status.missing.includes(model) && (
                   <button
                     disabled={busy || status.ollama !== "available"}
                     onClick={() => pull(model)}
-                  >
-                    Download AI model
-                  </button>
+                  > {t('ui.s8f2fd8eea0')} </button>
                 )}
               </article>
             ))}
           </details>
           {status.ollama === "available" && !status.missing.length && (
             <div className="success">
-              <p>
-                You’re ready to go. Your files and answers stay on this
-                computer.
-              </p>
+              <p> {t('ui.sed3833c4b3')} </p>
               {onReady && (
-                <button className="primary" onClick={onReady}>
-                  Continue to my materials →
-                </button>
+                <button className="primary" onClick={onReady}> {t('ui.s9fedeef0fb')} </button>
               )}
             </div>
           )}
         </>
       )}
       <Progress job={job} />
-      <p>
-        Interrupted downloads can be retried; Ollama reuses downloaded layers.
-        Download and disk errors appear here.
-      </p>
+      <p> {t('ui.saa50e918f8')} </p>
     </section>
   );
 }

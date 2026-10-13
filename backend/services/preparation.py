@@ -32,17 +32,22 @@ def prepare_exam(ident, progress):
     available = [q for q in training.list_questions(ident, accepted_only=True) if q.get('question_pool_id') not in disabled_pools]
     if not available:
         progress(message='Writing your first practice questions…')
+        trusted_generation = True
         try:
             questions = generate_grounded_questions(subject, 5, llm_client=subject_task_llm(subject, 'question_generation'))
         except (ValueError, requests.RequestException):
             progress(message='Preparing starter questions directly from your notes…')
             questions = source_starters(ident)
+            trusted_generation = False
         if not questions:
             raise ValueError('We could not prepare new questions. Check your material or add another PDF and try again.')
         # Only newly generated, validated questions are activated. Previously rejected
         # or manually held questions are never approved by this convenience workflow.
-        for question in questions:
-            training.review_question(question['id'], 'accepted', subject_id=ident)
+        if trusted_generation:
+            for question in questions:
+                training.review_question(question['id'], 'accepted', subject_id=ident)
+        else:
+            progress(message='Starter questions are ready for your review')
     progress(message='Your practice is ready')
     return {'questions': len([q for q in training.list_questions(ident, accepted_only=True) if q.get('question_pool_id') not in disabled_pools])}
 

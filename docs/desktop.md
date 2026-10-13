@@ -41,15 +41,14 @@ The source checks comprise 68 existing tests and five focused API tests, includi
 - Validate native artifacts on clean Apple Silicon and Windows x64 machines; cross-compilation of the Python sidecar is not supported.
 - Configure Apple Developer ID signing and notarization credentials. Ensure all nested PyInstaller native libraries are signed correctly; verify with Gatekeeper on a clean machine.
 - Configure Windows code signing and verify installer/SmartScreen behavior.
-- Review and distribute third-party license notices for Python/native dependencies, including PyMuPDF, before choosing an application license or publishing binaries. No repository-wide license is assumed by this migration.
+- Review and distribute third-party license notices for Python/native dependencies, including PDFium, before choosing an application license or publishing binaries. No repository-wide license is assumed by this migration.
 - Test first-run Ollama installation instructions and downloads, disk-full/interrupted downloads, cached offline operation, and existing workspace migration on each platform.
-- Manually compare workflows with the compatibility Flask app before removing it. Flask-specific multi-user admin, legacy global-index quiz/summarization and developer evaluation dashboards have not been ported as desktop screens. Exam-scoped oral practice, RAG and evaluation use their original domain services.
 
 No signing secrets, updater keys, telemetry, cloud model fallback, model weights, or user databases belong in the bundle.
 
-## Cleanup after manual acceptance
+## Repository cleanup
 
-Candidates: `meditech_rag/app.py`, `meditech_rag/templates/`, `meditech_rag/assets/`, legacy `static/app.bundle.js`, `static/tailwind.css`, `static/app.css`, Docker packaging and the old `.command` installer. Keep the favicon as the desktop icon source. Existing Flask route tests must be migrated before deleting Flask; Python domain services and their tests remain shared.
+The obsolete Flask interface, generated web assets, Docker packaging, old installer, global RAG engine and experimental index pipelines have been removed. Current import, domain and API regressions remain. See `migration.md` for the supported structure.
 
 ### Learning dashboard and deadline planning
 
@@ -85,15 +84,15 @@ Scanned PDFs without extractable text need text recognition before upload.
 
 The main navigation focuses on Dashboard, Materials, Questions, Practice, Progress,
 and Ask your materials. AI configuration, reported-question management, and the
-legacy study-plan tools sit under Advanced tools. Manual source review and processing
+additional study-plan tools sit under Advanced tools. Manual source review and processing
 are expandable controls on Materials. Practice uses defaults with optional session
 customisation. Local AI setup is still required once; learners can create exams and
 upload files before completing it. After an app restart, choose Prepare my practice
 again if preparation was interrupted; ingestion reuses its saved checkpoints.
 
 If the local model returns invalid question output or a request fails, preparation
-falls back to up to five extractive starter questions. These ask the learner to
+falls back to up to five extractive starter questions that require explicit review. These ask the learner to
 explain an accepted passage in their own words, with the exact passage as the
 answer rubric. They do not add model-invented facts. Source links and normal
-question validation still apply. The one-time AI screen offers a single action to
+question validation still applies; fallback content is never silently trusted. The one-time AI screen offers a single action to
 download the required models, with individual model controls under Model details.

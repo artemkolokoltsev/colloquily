@@ -20,6 +20,29 @@ from services.progress import subject_progress
 from services.exam_packs import generate_exam_pack, list_exam_pack_sections, review_exam_pack_section
 
 router = APIRouter(prefix="/api")
+from backend.models.api import LanguageInput
+
+@router.get('/preferences', response_model=Record)
+def preferences():
+    from backend.services.preferences import load_preferences
+    return load_preferences()
+
+@router.patch('/preferences', response_model=Record)
+def change_preferences(body: LanguageInput):
+    from backend.services.preferences import save_preferences
+    return save_preferences(body.language)
+MAX_SOURCE_BYTES = 100 * 1024 * 1024
+
+def _copy_limited(upload: UploadFile, destination: Path, limit: int = MAX_SOURCE_BYTES) -> None:
+    written = 0
+    with destination.open("xb") as output:
+        while chunk := upload.file.read(1024 * 1024):
+            written += len(chunk)
+            if written > limit:
+                output.close()
+                destination.unlink(missing_ok=True)
+                raise ValueError("SOURCE_TOO_LARGE")
+            output.write(chunk)
 
 @router.get("/health", response_model=Health)
 def health():
@@ -50,7 +73,7 @@ def exams():
 @router.post("/exams", response_model=Exam, status_code=201)
 def create_exam(body: NewExamInput):
     if not body.name.strip():
-        raise ValueError("Exam name is required")
+        raise ValueError("EXAM_NAME_REQUIRED")
     result = db.create_subject(**body.model_dump(exclude={"exam_date"}))
     if body.exam_date:
         from backend.services.learning import save_goal
@@ -70,8 +93,7 @@ def update_exam(ident: int, body: ExamInput):
 @router.delete("/exams/{ident}", response_model=Record)
 def delete_exam(ident: int):
     flow.exam(ident)
-    if len(db.list_subjects()) <= 1:
-        raise ValueError("The final exam cannot be deleted")
+    create_backup()
     db.delete_subject(ident)
     clear_subject_index_cache()
     return {"deleted": True, "raw_workspace_preserved": True}
@@ -89,11 +111,10 @@ def upload(ident: int, files: list[UploadFile] = File(...)):
     for file in files:
         name = secure_filename(file.filename or "")
         if not name or Path(name).suffix.lower() not in {".pdf", ".md", ".markdown"}:
-            raise ValueError("Only PDF and Markdown files are accepted")
+            raise ValueError("SOURCE_TYPE_UNSUPPORTED")
         destination = root / name
         try:
-            with destination.open("xb") as output:
-                shutil.copyfileobj(file.file, output)
+            _copy_limited(file, destination)
         except FileExistsError:
             raise HTTPException(409, f"Source already exists: {name}")
         saved.append(name)
@@ -104,6 +125,19 @@ def source(ident: int, filename: str):
     path = flow.source_path(ident, filename)
     return FileResponse(path, media_type="application/pdf" if path.suffix.lower() == ".pdf" else "text/plain",
         headers={"X-Content-Type-Options": "nosniff"})
+
+@router.delete("/exams/{ident}/sources/{filename:path}", response_model=Record)
+def delete_source(ident: int, filename: str):
+    subject = flow.exam(ident)
+    path = flow.source_path(ident, filename)
+    result = knowledge.remove_document(ident, filename)
+    path.unlink()
+    index = workspace_for(subject).folder("index")
+    if index.exists():
+        shutil.rmtree(index)
+        index.mkdir(parents=True, exist_ok=True)
+    clear_subject_index_cache()
+    return {**result, "deleted": True, "index_invalidated": True}
 
 @router.post("/exams/{ident}/process", response_model=Record, status_code=202)
 def process(ident: int, body: ProcessInput):
@@ -255,8 +289,10 @@ def settings():
 @router.patch("/settings", response_model=Record)
 def update_settings(body: SettingsInput):
     values = runtime_settings.load_runtime_settings() | body.values
+    from backend.services.models import require_loopback
+    require_loopback(str(values.get('OLLAMA_URL', config.OLLAMA_URL)))
+    require_loopback(str(values.get('LMSTUDIO_BASE_URL', config.LMSTUDIO_BASE_URL)))
     # Keep downloads explicit; desktop inference must never silently fetch model weights.
-    values["ST_ALLOW_DOWNLOAD"] = False
     result = runtime_settings.save_runtime_settings_from_form(values)
     clear_subject_index_cache()
     return result
@@ -281,6 +317,7 @@ from backend.models.api import EnabledInput, CorrectionInput, ReportedInput
 from services.reported_questions import (import_question_bank, list_reported_questions,
     export_question_bank, create_training_cards_from_reported)
 from services.progress import correct_evaluation
+from backend.services.backups import create_backup, inspect_backup, restore_backup
 
 @router.patch("/exams/{ident}/questions/{question_id}/enabled", response_model=Record)
 def enabled(ident: int, question_id: int, body: EnabledInput):
@@ -325,6 +362,82 @@ def ground_reported(ident: int):
 def correct(ident: int, attempt_id: int, body: CorrectionInput):
     correct_evaluation(attempt_id, flow.local_user_id(), ident, body.evaluation)
     return {"saved": True}
+
+
+@router.post("/backups", response_model=Record)
+def backup_workspace():
+    return create_backup()
+
+@router.get('/system/activity', response_model=Record)
+def workspace_activity():
+    from backend.services.maintenance import activity
+    return activity()
+
+@router.get('/system/storage', response_model=Record)
+def workspace_storage():
+    return {'free_bytes': shutil.disk_usage(config.DATA_DIR).free}
+
+@router.post('/system/update/begin', response_model=Record)
+def reserve_update():
+    from backend.services.maintenance import gate
+    result = create_backup()
+    gate.update_pending = True
+    return result
+
+@router.post('/system/update/cancel', response_model=Record)
+def cancel_update():
+    from backend.services.maintenance import gate
+    gate.update_pending = False
+    return {'cancelled': True}
+
+@router.post('/practice/{ident}/finish', response_model=Record)
+def finish_practice(ident: int):
+    flow.run(ident)
+    from contextlib import closing
+    with closing(db._connect()) as database:
+        database.execute("UPDATE exam_sessions SET status='completed', deadline_at=NULL WHERE exam_run_id=? AND status NOT IN ('completed','expired')", (ident,))
+        database.execute("UPDATE exam_runs SET status='completed' WHERE id=?", (ident,))
+        database.commit()
+    return flow.run(ident)
+
+@router.get('/backups/{filename}')
+def download_backup(filename: str):
+    root = Path(config.DATA_DIR).resolve() / 'backups' / 'exports'
+    path = (root / filename).resolve()
+    if not path.is_relative_to(root) or not path.is_file() or path.suffix != '.colloquily-backup':
+        raise HTTPException(404, 'Backup not found')
+    return FileResponse(path, filename=path.name, media_type='application/zip')
+
+
+@router.post("/backups/inspect", response_model=Record)
+def inspect_workspace_backup(file: UploadFile = File(...)):
+    suffix = Path(file.filename or "backup").suffix
+    temporary = Path(config.DATA_DIR) / "backups" / "incoming" / f"inspection{suffix}"
+    temporary.parent.mkdir(parents=True, exist_ok=True)
+    with temporary.open("wb") as output:
+        shutil.copyfileobj(file.file, output)
+    try:
+        return inspect_backup(temporary)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+@router.post("/backups/restore", response_model=Record)
+def restore_workspace_backup(file: UploadFile = File(...), confirmed: bool = False):
+    incoming = Path(config.DATA_DIR) / "backups" / "incoming" / secure_filename(file.filename or "restore.colloquily-backup")
+    incoming.parent.mkdir(parents=True, exist_ok=True)
+    with incoming.open("wb") as output:
+        shutil.copyfileobj(file.file, output)
+    try:
+        result = restore_backup(incoming, confirmed=confirmed)
+        db.init_db(seed_admin=False)
+        runtime_settings.initialize_runtime_settings()
+        from backend.services.preferences import load_preferences
+        load_preferences()
+        clear_subject_index_cache()
+        return result
+    finally:
+        incoming.unlink(missing_ok=True)
 
 
 from backend.models.api import LearningGoalInput

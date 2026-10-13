@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { ErrorNotice, EvaluationView } from "../components/Common";
@@ -22,6 +23,7 @@ interface ProgressData {
   }[];
 }
 export function ProgressPage({ exam }: { exam: number }) {
+  const { t: tr } = useTranslation();
   const [learning, setLearning] = useState<LearningData>();
   const [data, setData] = useState<ProgressData>();
   const [error, setError] = useState("");
@@ -43,33 +45,33 @@ export function ProgressPage({ exam }: { exam: number }) {
   }, [exam]);
   return (
     <section>
-      <h2>Learning progress</h2>
+      <h2>{tr('ui.s839de264eb')}</h2>
       <ErrorNotice error={error} />
       {!data ? (
-        <p>Loading progress…</p>
+        <p>{tr('ui.s7e34513f0c')}</p>
       ) : (
         <>
           <div className="stat-grid compact-stats">
             <article>
-              <span>Practice attempts</span>
+              <span>{tr('ui.s1e636982e8')}</span>
               <strong>{data.attempts_count}</strong>
             </article>
             <article>
-              <span>Average score</span>
+              <span>{tr('ui.se4870be722')}</span>
               <strong>
                 {data.average_score ?? "—"}
                 <small> / 5</small>
               </strong>
             </article>
             <article>
-              <span>Average answer</span>
+              <span>{tr('ui.s0cfb6b5382')}</span>
               <strong>
                 {data.average_response_seconds ?? "—"}
-                <small> s</small>
+                <small> {tr('ui.s043a718774')}</small>
               </strong>
             </article>
             <article>
-              <span>Topics exam ready</span>
+              <span>{tr('ui.s659b6f396d')}</span>
               <strong>
                 {learning?.topics.filter(
                   (t) => t.mastery_state === "exam_ready",
@@ -78,7 +80,7 @@ export function ProgressPage({ exam }: { exam: number }) {
               </strong>
             </article>
           </div>
-          <div className="toolbar" aria-label="Progress views">
+          <div className="toolbar" aria-label={tr('ui.sb9cf9b8b98')}>
             {[
               ["topics", "Topic mastery"],
               ["answers", "Recent answers"],
@@ -87,7 +89,7 @@ export function ProgressPage({ exam }: { exam: number }) {
               <button
                 key={key}
                 aria-pressed={tab === key}
-                className={tab === key ? "active" : ""}
+                className={tab === key ? tr('ui.s9687961165') : ""}
                 onClick={() => {
                   setTab(key);
                   setQuery("");
@@ -98,18 +100,17 @@ export function ProgressPage({ exam }: { exam: number }) {
             ))}
           </div>
           {tab !== "patterns" && (
-            <label className="table-search">
-              Search {tab === "topics" ? "topics" : "answers"}
+            <label className="table-search"> {tr('ui.s49c266baaa')} {tab === "topics" ? tr('ui.sf013aa4b8d') : tr('ui.s677fe21b65')}
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Filter this view…"
+                placeholder={tr('ui.s26634f572c')}
               />
             </label>
           )}
           {tab === "topics" && (
             <PagedTable
-              label="Topics"
+              label={tr('ui.se22820fcf5')}
               resetKey={`${exam}:${query}`}
               headers={["Topic", "Mastery", "Practised", "Score"]}
               rows={(learning?.topics ?? []).filter((t) =>
@@ -120,7 +121,7 @@ export function ProgressPage({ exam }: { exam: number }) {
                   <td>
                     <strong>{t.name}</strong>
                     <details>
-                      <summary>Why this result?</summary>
+                      <summary>{tr('ui.s23e4ca427c')}</summary>
                       <p>{t.mastery_reason}</p>
                     </details>
                   </td>
@@ -146,9 +147,9 @@ export function ProgressPage({ exam }: { exam: number }) {
           )}
           {tab === "patterns" && (
             <>
-              <h3>Frequently missing points</h3>
+              <h3>{tr('ui.s1b5db84e99')}</h3>
               <PagedTable
-                label="Missing points"
+                label={tr('ui.sb910ef4678')}
                 rows={data.frequently_missing}
                 headers={["Point to revisit", "Occurrences"]}
                 renderRow={([s, n]) => (
@@ -158,9 +159,9 @@ export function ProgressPage({ exam }: { exam: number }) {
                   </tr>
                 )}
               />
-              <h3>Misconceptions</h3>
+              <h3>{tr('ui.sd3e410d6fc')}</h3>
               <PagedTable
-                label="Misconceptions"
+                label={tr('ui.sd3e410d6fc')}
                 rows={data.misconceptions}
                 headers={["Misconception", "Occurrences"]}
                 renderRow={([s, n]) => (
@@ -174,7 +175,7 @@ export function ProgressPage({ exam }: { exam: number }) {
           )}
           {tab === "answers" && (
             <PagedTable
-              label="Recent answers"
+              label={tr('ui.sc210cd034b')}
               resetKey={`${exam}:${query}`}
               headers={["Question & feedback", "Score"]}
               rows={data.recent_attempts.filter((a) =>
@@ -197,14 +198,10 @@ export function ProgressPage({ exam }: { exam: number }) {
                           setEditing(a.id);
                           setCorrection(JSON.stringify(a.evaluation, null, 2));
                         }}
-                      >
-                        Correct evaluation
-                      </button>
+                      > {tr('ui.s32a5e72fbf')} </button>
                       {editing === a.id && (
                         <>
-                          <label>
-                            Evaluation JSON
-                            <textarea
+                          <label> {tr('ui.sf00ab044f7')} <textarea
                               value={correction}
                               onChange={(e) => setCorrection(e.target.value)}
                             />
@@ -226,9 +223,7 @@ export function ProgressPage({ exam }: { exam: number }) {
                                 setError(String(e));
                               }
                             }}
-                          >
-                            Save correction
-                          </button>
+                          > {tr('ui.s16d626ca5f')} </button>
                         </>
                       )}
                     </details>
