@@ -11,6 +11,11 @@ def run():
     from services.subject_index import SubjectIndex
     from services.prompt_templates import PROMPT_ROOT
     from services.knowledge_repository import accepted_units, review_unit
+    import sys
+    if getattr(sys, 'frozen', False):
+        licenses = Path(sys._MEIPASS) / 'licenses'
+        for name in ('LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.txt', 'FRONTEND_NOTICES.txt', 'RUST_NOTICES.txt', 'MPL-SOURCES.zip'):
+            assert (licenses / name).is_file(), f'Missing redistributed notice/source: {name}'
 
     class Embedder:
         def embed(self, texts):

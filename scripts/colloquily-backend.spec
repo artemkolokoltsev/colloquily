@@ -35,8 +35,8 @@ if sys.platform == 'darwin':
 pyz = PYZ(a.pure)
 sys.path.insert(0, str(root/'scripts'))
 from runtime_notices import collect_notices
-notices = collect_notices([item[0] for item in a.pure], root/'build/release-notices')
-a.datas += [(f'licenses/{file.name}', str(file), 'DATA') for file in notices.iterdir() if file.suffix in {'.txt', '.json'}]
+notices = collect_notices([item[0] for item in a.pure], root/'build/release-notices', a.binaries)
+a.datas += [(f'licenses/{file.name}', str(file), 'DATA') for file in notices.iterdir() if file.is_file() and file.name != 'runtime-audit.txt']
 exe = EXE(pyz, a.scripts, a.binaries, a.datas, [], name='colloquily-backend',
     console=True, strip=False, upx=False,
     codesign_identity=__import__('os').environ.get('COLLOQUILY_CODESIGN_IDENTITY'))

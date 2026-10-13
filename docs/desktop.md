@@ -41,7 +41,7 @@ The source checks comprise 68 existing tests and five focused API tests, includi
 - Validate native artifacts on clean Apple Silicon and Windows x64 machines; cross-compilation of the Python sidecar is not supported.
 - Configure Apple Developer ID signing and notarization credentials. Ensure all nested PyInstaller native libraries are signed correctly; verify with Gatekeeper on a clean machine.
 - Configure Windows code signing and verify installer/SmartScreen behavior.
-- Review and distribute third-party license notices for Python/native dependencies, including PDFium, before choosing an application license or publishing binaries. No repository-wide license is assumed by this migration.
+- Original project code is Apache-2.0. Every native build checks and bundles Python/native, Rust and frontend notices plus MPL-covered sources. See `LICENSING.md`; changing dependencies requires repeating the inventory.
 - Test first-run Ollama installation instructions and downloads, disk-full/interrupted downloads, cached offline operation, and existing workspace migration on each platform.
 
 No signing secrets, updater keys, telemetry, cloud model fallback, model weights, or user databases belong in the bundle.

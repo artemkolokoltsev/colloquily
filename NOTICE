@@ -1,0 +1,11 @@
+Colloquily
+Copyright 2026 Artem Kolokoltsev and contributors.
+
+Colloquily's original source code and documentation are licensed under the
+Apache License, Version 2.0. Third-party components retain their own licenses.
+
+Redistributed installers include Python, PDFium, FAISS, JavaScript, Rust, and
+native dependency notices under the installed licenses directory. Matching
+license inventories, notices, and MPL-covered source archives are also supplied
+as release assets. Model weights are not bundled. Course material imported by
+users is not licensed or redistributed by this repository.

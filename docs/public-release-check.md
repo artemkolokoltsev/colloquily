@@ -29,7 +29,7 @@ Keep source, tests, synthetic test fixtures, desktop icons, `.github/workflows/d
 ## Before the final push
 
 1. Finish UI/app polishing and update README from the owner's notes.
-2. Choose a license before adding a LICENSE file; no license choice was made in this audit.
+2. Apache-2.0 has now been adopted for original project code. Preserve third-party notices/source obligations and repeat the native inventory whenever dependencies change.
 3. Review the staged diff, including new files, and repeat the credential scan after final edits.
 4. Review Git author names/emails if publishing existing history; that identity metadata is public with commits.
 5. Verify installers and release archives separately: `.gitignore` does not filter packaging tools or arbitrary ZIP creation.

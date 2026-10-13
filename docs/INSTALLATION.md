@@ -1,14 +1,20 @@
 # Installing Colloquily
 
-> Signed public installers have not been published yet. Do not treat locally built or CI `unsigned` artifacts as production downloads.
+> **v0.1.0-rc.1 is an unsigned preview.** It is published under [GitHub Releases](https://github.com/artemkolokoltsev/colloquily/releases), not just Actions artifacts. Signed production installers are not available yet.
+
+Download your platform's installer and matching `licenses-*.zip`, then compare
+the installer SHA-256 with `SHA256SUMS.txt`. macOS/Windows may warn or refuse
+unsigned software. Only use files from this repository after reviewing their
+origin and checksum. Do not disable system security globally; if your policy
+blocks unsigned apps, wait for a signed release. Preview updates are manual.
 
 ## macOS
 
-Colloquily targets macOS 14 or newer on Apple Silicon and Intel. Download the matching DMG, drag Colloquily to Applications, and open it. A production release must be signed with an Apple Developer ID and notarized.
+Colloquily targets macOS 14 or newer. Choose `Colloquily_0.1.0_aarch64.dmg` for Apple Silicon or `Colloquily_0.1.0_x64.dmg` for Intel. Mount the DMG, drag Colloquily to Applications, and open it. A production release must be signed with an Apple Developer ID and notarized; this preview is not.
 
 ## Windows
 
-Colloquily targets 64-bit Windows through an NSIS per-user installer. A production installer must carry an Authenticode signature. WebView2 is normally present on supported Windows systems.
+Choose `Colloquily_0.1.0_x64-setup.exe` for 64-bit Windows. The NSIS installer installs for the current user. A production installer must carry an Authenticode signature; this preview does not. WebView2 is normally present on supported Windows systems; the installer can arrange it when needed.
 
 ## Local AI
 

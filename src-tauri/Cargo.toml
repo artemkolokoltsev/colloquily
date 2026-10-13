@@ -2,6 +2,8 @@
 name = "colloquily"
 version = "0.1.0"
 description = "Local evidence-grounded oral exam preparation"
+license = "Apache-2.0"
+repository = "https://github.com/artemkolokoltsev/colloquily"
 edition = "2021"
 
 [build-dependencies]

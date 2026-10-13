@@ -27,6 +27,7 @@
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": "all",
+    "resources": { "../build/release-notices/": "licenses/" },
     "externalBin": ["binaries/colloquily-backend"],
     "macOS": {
       "minimumSystemVersion": "14.0"

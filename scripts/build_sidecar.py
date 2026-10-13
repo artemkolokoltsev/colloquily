@@ -15,6 +15,7 @@ if host not in allowed:
 python_arm = platform.machine().lower() in {"arm64", "aarch64"}
 if python_arm != host.startswith("aarch64"):
     raise SystemExit("Python architecture must match the Rust host target. Use native Python and Rust.")
+subprocess.run([sys.executable, str(root / 'scripts/release_notices.py'), host], cwd=root, check=True)
 command = [sys.executable, "-m", "PyInstaller", "--noconfirm",
     "--distpath", str(root / "build/sidecar"), "--workpath", str(root / "build/pyinstaller"),
     str(root / "scripts/colloquily-backend.spec")]

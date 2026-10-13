@@ -1,5 +1,10 @@
 # Colloquily
 
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![Desktop preview](https://img.shields.io/github/v/release/artemkolokoltsev/colloquily?include_prereleases&label=desktop%20preview)](https://github.com/artemkolokoltsev/colloquily/releases)
+
+[Download](https://github.com/artemkolokoltsev/colloquily/releases) · [User guide](docs/USER_GUIDE.md) · [Installation](docs/INSTALLATION.md) · [License information](docs/LICENSING.md) · [Privacy](docs/PRIVACY.md)
+
 Colloquily helps you prepare for university oral exams using your own course material. Create an exam, set its date, upload your lecture PDFs, and choose **Prepare my practice**. Colloquily checks the study text and prepares source-grounded questions so you can start practising without managing indexes or review queues.
 
 Your dashboard shows a daily practice plan, topic progress, and activity. Processing, source review, question management, and model configuration remain available under **Advanced tools** or expandable options.
@@ -12,9 +17,9 @@ English and German can be switched without restarting. See the [English settings
 
 ## Desktop installation
 
-Downloads are published on [GitHub Releases](https://github.com/artemkolokoltsev/colloquily/releases). See [installation](docs/INSTALLATION.md), [updates](docs/UPDATES.md), and [privacy](docs/PRIVACY.md).
+The **v0.1.0-rc.1 unsigned preview** is distributed through [GitHub Releases](https://github.com/artemkolokoltsev/colloquily/releases). Download the Windows x64 EXE or the DMG matching Apple Silicon/Intel macOS, and its matching `licenses-*.zip` bundle. Verify `SHA256SUMS.txt`. See [installation](docs/INSTALLATION.md), the [user guide](docs/USER_GUIDE.md), [updates](docs/UPDATES.md), and [privacy](docs/PRIVACY.md).
 
-The desktop migration is under development. **Signed public installers are not yet published.** Packaging is configured for macOS 14+ on Apple Silicon and Intel, and Windows x64. An unsigned Intel macOS debug application has been built and launch-tested. Apple Silicon and Windows builds still require native validation; signing/notarization requires release credentials.
+**This is a prerelease, not a signed production release.** Windows, Apple Silicon, and Intel macOS native packaging and frozen-backend checks pass in CI. Clean-machine GUI installation and complete hardware coverage remain separate checks. Apple Developer ID/notarization, Windows Authenticode, and signed automatic updates are not configured for this preview. Operating-system security may warn or block installation; do not disable security globally.
 
 A desktop release contains the React UI, Tauri application, Python runtime, FastAPI backend, and native Python dependencies. End users will not need Python, Node.js, Docker, or a terminal. Install the macOS application or Windows installer, open Colloquily, and follow **AI setup**. The backend starts and stops with the desktop application.
 
@@ -160,3 +165,12 @@ docs/                     Architecture, migration and packaging notes
 ```
 
 The repository contains only the desktop application and its supporting tools. Study data lives in ignored `data/`; packaged installations use the OS application-data directory. Database migration code is retained to protect existing workspaces.
+
+## License
+
+Original Colloquily code and documentation are licensed under [Apache-2.0](LICENSE).
+Dependencies retain their own licenses. Full third-party notices, target-specific
+inventories and MPL-covered sources are packaged with installers and release
+license bundles. See [licensing and redistribution](docs/LICENSING.md). PDFium is
+used instead of PyMuPDF; the distribution checks reject AGPL dependencies.
+Model weights and personal course documents are not bundled or relicensed.

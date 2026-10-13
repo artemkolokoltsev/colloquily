@@ -3,16 +3,53 @@ import importlib.metadata as metadata
 import json
 from pathlib import Path
 import re
+import sys
+import sysconfig
+import urllib.request
+import ssl
+import certifi
 
 FORBIDDEN = {'pymupdf', 'pymupdf4llm', 'marker-pdf', 'surya-ocr'}
 
-def collect_notices(modules, destination):
+def read_upstream(url):
+    with urllib.request.urlopen(url, timeout=30, context=ssl.create_default_context(cafile=certifi.where())) as response:
+        return response.read().decode('utf-8')
+
+def collect_notices(modules, destination, binaries=()):
     mapping = metadata.packages_distributions()
     names = {'pyinstaller', 'pypdfium2'}
     for module in modules:
         names.update(mapping.get(module.split('.')[0], []))
     entries = []
-    notices = ['Colloquily third-party runtime notices\n', 'Python interpreter: Python Software Foundation License. See https://docs.python.org/3/license.html\n']
+    candidates = [Path(sys.base_prefix)/'LICENSE.txt', Path(sysconfig.get_path('stdlib'))/'LICENSE.txt']
+    interpreter_license = next((path for path in candidates if path.is_file()), None)
+    if interpreter_license is None:
+        interpreter_text = read_upstream(f'https://raw.githubusercontent.com/python/cpython/v{sys.version.split()[0]}/LICENSE')
+    else:
+        interpreter_text = interpreter_license.read_text(encoding='utf-8')
+    notices = ['Colloquily third-party runtime notices\n', f'Python interpreter {sys.version.split()[0]}\n' + interpreter_text]
+    native_names = ' '.join(str(item[0]).lower() for item in binaries)
+    if '_ssl' in native_names or 'libssl' in native_names or 'libcrypto' in native_names:
+        version = ssl.OPENSSL_VERSION.split()[1]
+        tag = f'OpenSSL_{version.replace(".", "_")}' if version.startswith('1.') else f'openssl-{version}'
+        filename = 'LICENSE' if version.startswith('1.') else 'LICENSE.txt'
+        url = f'https://raw.githubusercontent.com/openssl/openssl/{tag}/{filename}'
+        notices.append(f'\nOpenSSL {version}\nSource: {url}\n' + read_upstream(url))
+    if '_bz2' in native_names or 'libbz2' in native_names:
+        url = 'https://raw.githubusercontent.com/libarchive/bzip2/bzip2-1.0.8/LICENSE'
+        notices.append('\nbzip2 compression library\nSource: '+url+'\n'+read_upstream(url))
+    if 'zlib' in native_names:
+        import zlib
+        url = f'https://raw.githubusercontent.com/madler/zlib/v{zlib.ZLIB_RUNTIME_VERSION}/README'
+        notices.append('\nzlib\nSource: '+url+'\n'+read_upstream(url))
+    if '_lzma' in native_names or 'liblzma' in native_names:
+        url = 'https://raw.githubusercontent.com/tukaani-project/xz/v5.4.4/COPYING'
+        notices.append('\nliblzma compression library (library portion only; command-line xz is not bundled)\nSource: '+url+'\n'+read_upstream(url))
+    if 'libffi' in native_names or '_ctypes' in native_names:
+        url = 'https://raw.githubusercontent.com/libffi/libffi/v3.4.4/LICENSE'
+        notices.append('\nlibffi\nSource: '+url+'\n'+read_upstream(url))
+    if '_sqlite3' in native_names or 'sqlite3' in native_names:
+        notices.append('\nSQLite: public domain. https://www.sqlite.org/copyright.html\nThe author disclaims copyright to this source code. In place of a legal notice, here is a blessing:\nMay you do good and not evil.\nMay you find forgiveness for yourself and forgive others.\nMay you share freely, never taking more than you give.\n')
     for name in sorted(names, key=str.lower):
         normalized = name.lower().replace('_','-')
         if normalized in FORBIDDEN:
@@ -38,7 +75,7 @@ def collect_notices(modules, destination):
             notices.append(f'\n--- {name}: {relative.name} ---\n{text}\n')
             found = True
         if not found:
-            notices.append('License metadata provided above; upstream project URL: ' + str(distribution.metadata.get('Home-page', '')) + '\n')
+            raise RuntimeError(f'Full copyright/license text missing for {name}')
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
     (destination/'THIRD_PARTY_NOTICES.txt').write_text('\n'.join(notices), encoding='utf-8')
