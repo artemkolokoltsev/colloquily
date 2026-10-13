@@ -12,8 +12,17 @@ from fastapi.testclient import TestClient
 from backend.main import app
 from app_paths import data_directory
 from backend.services.models import OllamaProvider
+from backend.api.routes import _copy_limited
+from fastapi import UploadFile
+from io import BytesIO
 
 class ArchitectureTests(unittest.TestCase):
+    def test_upload_limit_removes_partial_file(self):
+        destination = Path(_TEMP.name) / "oversize.md"
+        with self.assertRaisesRegex(ValueError, "SOURCE_TOO_LARGE"):
+            _copy_limited(UploadFile(filename="oversize.md", file=BytesIO(b"12345")), destination, limit=4)
+        self.assertFalse(destination.exists())
+
     def test_paths(self):
         self.assertEqual(data_directory(packaged=True, platform='darwin', environ={}, home='/home/me'), Path('/home/me/Library/Application Support/Colloquily'))
         self.assertEqual(data_directory(packaged=True, platform='win32', environ={'APPDATA':'C:/Roaming'}), Path('C:/Roaming/Colloquily'))

@@ -20,6 +20,18 @@ from services.progress import subject_progress
 from services.exam_packs import generate_exam_pack, list_exam_pack_sections, review_exam_pack_section
 
 router = APIRouter(prefix="/api")
+MAX_SOURCE_BYTES = 100 * 1024 * 1024
+
+def _copy_limited(upload: UploadFile, destination: Path, limit: int = MAX_SOURCE_BYTES) -> None:
+    written = 0
+    with destination.open("xb") as output:
+        while chunk := upload.file.read(1024 * 1024):
+            written += len(chunk)
+            if written > limit:
+                output.close()
+                destination.unlink(missing_ok=True)
+                raise ValueError("SOURCE_TOO_LARGE")
+            output.write(chunk)
 
 @router.get("/health", response_model=Health)
 def health():
@@ -92,8 +104,7 @@ def upload(ident: int, files: list[UploadFile] = File(...)):
             raise ValueError("SOURCE_TYPE_UNSUPPORTED")
         destination = root / name
         try:
-            with destination.open("xb") as output:
-                shutil.copyfileobj(file.file, output)
+            _copy_limited(file, destination)
         except FileExistsError:
             raise HTTPException(409, f"Source already exists: {name}")
         saved.append(name)
