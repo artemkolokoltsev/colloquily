@@ -1,6 +1,6 @@
 # Installing Colloquily
 
-> **v0.1.0-rc.2 is an unsigned preview.** It is published under [GitHub Releases](https://github.com/artemkolokoltsev/colloquily/releases), not just Actions artifacts. Signed production installers are not available yet.
+> **v0.1.0-rc.3 is an unsigned preview.** It is published under [GitHub Releases](https://github.com/artemkolokoltsev/colloquily/releases), not just Actions artifacts. Signed production installers are not available yet.
 
 Download your platform's installer and matching `licenses-*.zip`, then compare
 the installer SHA-256 with `SHA256SUMS.txt`. macOS/Windows may warn or refuse

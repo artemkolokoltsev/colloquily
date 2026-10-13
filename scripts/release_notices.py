@@ -113,7 +113,10 @@ def main(target):
     lock = json.loads((ROOT/'package-lock.json').read_text())
     frontend, js_inventory = ['Colloquily frontend third-party notices\n'], []
     for path, details in sorted(lock['packages'].items()):
-        if not path or details.get('dev') or not path.startswith('node_modules/'):
+        if not path or not path.startswith('node_modules/'):
+            continue
+        name = path.rsplit('node_modules/', 1)[-1]
+        if details.get('dev') and name not in {'vite', 'rollup', 'esbuild', 'typescript'}:
             continue
         directory = ROOT/path
         manifest = json.loads((directory/'package.json').read_text())

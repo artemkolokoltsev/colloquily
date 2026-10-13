@@ -23,8 +23,9 @@ headings, and refuses missing license texts. Legacy parser names are accepted
 only to normalize saved settings to PDFium, not to load removed dependencies.
 
 Each native build inventories its actual frozen Python graph and target-specific
-Rust dependency graph, along with the production npm graph. `scripts/release_notices.py`
-and `scripts/runtime_notices.py` produce full notices, versioned inventories,
+Rust dependency graph, along with the production npm graph. The inventory also
+retains Vite, Rollup, esbuild and TypeScript notices for emitted runtime helpers.
+`scripts/release_notices.py` and `scripts/runtime_notices.py` produce full notices, versioned inventories,
 and `MPL-SOURCES.zip`. Notices omitted by crate archives are retrieved from their
 recorded upstream VCS commit. MPL source headers can additionally refer to the
 canonical full Mozilla license text; both those headers and the covered source

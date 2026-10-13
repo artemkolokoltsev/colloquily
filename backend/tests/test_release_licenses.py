@@ -64,4 +64,4 @@ class ReleaseLicenseTests(unittest.TestCase):
                 archive_source(archive, root, 'example-1')
             with zipfile.ZipFile(destination) as archive:
                 self.assertEqual(archive.namelist(), ['example-1/lib.rs'])
-                self.assertEqual(archive.read('example-1/lib.rs').decode(), source.read_text())
+                self.assertEqual(archive.read('example-1/lib.rs'), source.read_bytes())
