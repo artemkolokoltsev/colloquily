@@ -37,7 +37,7 @@ def upstream_text(url):
 def upstream_license(package):
     """Recover notices omitted from crates using the crate's recorded VCS SHA."""
     directory = Path(package['manifest_path']).parent
-    info = json.loads((directory/'.cargo_vcs_info.json').read_text())
+    info = json.loads((directory/'.cargo_vcs_info.json').read_text(encoding='utf-8'))
     repository = package['repository'].removesuffix('.git').removeprefix('https://github.com/').strip('/')
     if '/' not in repository or repository.startswith('http'):
         raise RuntimeError(f'Unsupported upstream for missing license: {package["name"]}')
@@ -106,11 +106,15 @@ def archive_source(archive, directory, prefix):
         if path.is_file() and not path.is_symlink() and not any(part in {'.git', '__pycache__', 'target'} for part in relative.parts):
             archive.write(path, f'{prefix}/{relative.as_posix()}')
 
+def cargo_metadata(target):
+    return json.loads(subprocess.check_output(['cargo', 'metadata', '--locked', '--format-version', '1', '--filter-platform', target,
+        '--manifest-path', str(ROOT/'src-tauri/Cargo.toml')], text=True, encoding='utf-8'))
+
 def main(target):
     OUTPUT.mkdir(parents=True, exist_ok=True)
     for name in ('LICENSE', 'NOTICE'):
         shutil.copy2(ROOT/name, OUTPUT/name)
-    lock = json.loads((ROOT/'package-lock.json').read_text())
+    lock = json.loads((ROOT/'package-lock.json').read_text(encoding='utf-8'))
     frontend, js_inventory = ['Colloquily frontend third-party notices\n'], []
     for path, details in sorted(lock['packages'].items()):
         if not path or not path.startswith('node_modules/'):
@@ -119,10 +123,9 @@ def main(target):
         if details.get('dev') and name not in {'vite', 'rollup', 'esbuild', 'typescript'}:
             continue
         directory = ROOT/path
-        manifest = json.loads((directory/'package.json').read_text())
+        manifest = json.loads((directory/'package.json').read_text(encoding='utf-8'))
         append_notices(manifest['name'], manifest['version'], manifest.get('license') or details.get('license'), directory, frontend, js_inventory)
-    cargo = json.loads(subprocess.check_output(['cargo', 'metadata', '--locked', '--format-version', '1', '--filter-platform', target,
-        '--manifest-path', str(ROOT/'src-tauri/Cargo.toml')], text=True))
+    cargo = cargo_metadata(target)
     nodes = {node['id']: node for node in cargo['resolve']['nodes']}
     reachable, pending = set(), [cargo['resolve']['root']]
     while pending:

@@ -7,9 +7,14 @@ from unittest.mock import patch
 import json
 import zipfile
 
-from scripts.release_notices import append_notices, archive_source, upstream_license
+from scripts.release_notices import append_notices, archive_source, upstream_license, cargo_metadata
 
 class ReleaseLicenseTests(unittest.TestCase):
+    def test_cargo_metadata_decodes_unicode_independently_of_windows_locale(self):
+        with patch('scripts.release_notices.subprocess.check_output', return_value='{"author":"東京"}') as command:
+            self.assertEqual(cargo_metadata('x86_64-pc-windows-msvc'), {'author':'東京'})
+        self.assertEqual(command.call_args.kwargs['encoding'], 'utf-8')
+
     def test_mpl_multiline_source_header_requires_full_mozilla_text(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
