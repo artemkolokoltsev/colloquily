@@ -1,4 +1,6 @@
+import { useTranslation } from "react-i18next";
 import { useState, type ReactNode } from "react";
+import { tablePage } from './tablePage';
 
 export function PagedTable<T>({
   rows,
@@ -13,13 +15,12 @@ export function PagedTable<T>({
   label: string;
   resetKey?: string;
 }) {
+  const { t } = useTranslation();
   const [selection, setSelection] = useState({ key: resetKey, page: 1 });
   if (selection.key !== resetKey) {
     setSelection({ key: resetKey, page: 1 });
   }
-  const pages = Math.max(1, Math.ceil(rows.length / 10));
-  const page = Math.min(selection.key === resetKey ? selection.page : 1, pages);
-  const start = (page - 1) * 10;
+  const { pages, page, start, rows: visibleRows } = tablePage(rows, selection.key === resetKey ? selection.page : 1);
   return (
     <div className="paged-table">
       <div className="table-scroll">
@@ -29,39 +30,34 @@ export function PagedTable<T>({
             <tr>
               {headers.map((h) => (
                 <th key={h} scope="col">
-                  {h}
+                  {t(`dynamic.${h}`, { defaultValue: h })}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody>{rows.slice(start, start + 10).map(renderRow)}</tbody>
+          <tbody>{visibleRows.map(renderRow)}</tbody>
         </table>
       </div>
       {!rows.length && (
-        <p className="empty-state">No {label.toLowerCase()} match this view.</p>
+        <p className="empty-state">{t('ui.s1ea442a134')} {label.toLowerCase()} {t('ui.sac686793c4')}</p>
       )}
       <nav className="table-pagination" aria-label={`${label} pagination`}>
         <span role="status">
           {rows.length
-            ? `${start + 1}–${Math.min(start + 10, rows.length)} of ${rows.length}`
-            : "0 results"}
+            ? t('dynamic.pagination', { start: start + 1, end: Math.min(start + 10, rows.length), total: rows.length })
+            : t('ui.sff7009f4a9')}
         </span>
         <div>
           <button
             disabled={page === 1}
             onClick={() => setSelection({ key: resetKey, page: page - 1 })}
-          >
-            Previous
-          </button>
-          <span>
-            Page {page} of {pages}
+          > {t('ui.sa57b08a480')} </button>
+          <span> {t('ui.s0a30a815d6')} {page} {t('ui.s28391d3bc6')} {pages}
           </span>
           <button
             disabled={page === pages}
             onClick={() => setSelection({ key: resetKey, page: page + 1 })}
-          >
-            Next
-          </button>
+          > {t('ui.s1ff57a29d7')} </button>
         </div>
       </nav>
     </div>

@@ -1,8 +1,10 @@
+import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { api, operation } from "../api/client";
 import { ErrorNotice, Progress, Sources } from "../components/Common";
 import type { Job, Source } from "../types";
 export function Study({ exam }: { exam: number }) {
+  const { t } = useTranslation();
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<{
     answer: string;
@@ -33,18 +35,16 @@ export function Study({ exam }: { exam: number }) {
   }
   return (
     <section>
-      <h2>Study with your sources</h2>
-      <p>Answers use this exam’s accepted evidence.</p>
+      <h2>{t('ui.s83b5a04df3')}</h2>
+      <p>{t('ui.sf72d3f1e58')}</p>
       <ErrorNotice error={error} />
       <textarea
-        aria-label="Question for your course material"
+        aria-label={t('ui.s94a707fa26')}
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
-        placeholder="What would you like to understand?"
+        placeholder={t('ui.sa9ca7f3cee')}
       />
-      <button disabled={busy || !question.trim()} onClick={ask}>
-        Ask local AI
-      </button>
+      <button disabled={busy || !question.trim()} onClick={ask}> {t('ui.s7e9ec7c610')} </button>
       <Progress job={job} />
       {answer && (
         <article>
@@ -52,7 +52,7 @@ export function Study({ exam }: { exam: number }) {
           <Sources exam={exam} sources={answer.contexts} />
         </article>
       )}
-      <h3>Question history</h3>
+      <h3>{t('ui.s62db59f7ee')}</h3>
       {history.map((h, i) => (
         <details key={h.id || i}>
           <summary>{h.input_text}</summary>
@@ -70,6 +70,7 @@ interface Plan {
   sections: { id: number; title?: string; content?: string }[];
 }
 export function StudyPlan({ exam }: { exam: number }) {
+  const { t } = useTranslation();
   const [plan, setPlan] = useState<Plan>();
   const [days, setDays] = useState(5);
   const [error, setError] = useState("");
@@ -104,18 +105,16 @@ export function StudyPlan({ exam }: { exam: number }) {
   }
   return (
     <section>
-      <h2>Five-day study plan</h2>
+      <h2>{t('ui.sdaff920206')}</h2>
       <ErrorNotice error={error} />
-      <label>
-        Days remaining
-        <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
+      <label> {t('ui.sd5b090546f')} <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
           {[5, 4, 3, 2, 1].map((d) => (
             <option key={d}>{d}</option>
           ))}
         </select>
       </label>
       {!plan ? (
-        <p>Loading plan…</p>
+        <p>{t('ui.sc9773eb959')}</p>
       ) : (
         <>
           <h3>{plan.focus}</h3>
@@ -125,7 +124,7 @@ export function StudyPlan({ exam }: { exam: number }) {
               <p>{r.reason}</p>
             </article>
           ))}
-          <h3>Material coverage</h3>
+          <h3>{t('ui.sa352d1efdd')}</h3>
           {plan.coverage.map((c, i) => (
             <p key={i}>
               {c.topic_name} · {c.material_state}
@@ -133,15 +132,13 @@ export function StudyPlan({ exam }: { exam: number }) {
           ))}
         </>
       )}
-      <h3>Exam learning cards</h3>
+      <h3>{t('ui.s10dc530f8e')}</h3>
       <button
         disabled={busy}
         onClick={() =>
           act(() => operation(`/exams/${exam}/exam-pack`, {}, setJob))
         }
-      >
-        Generate exam pack
-      </button>
+      > {t('ui.s7d6c2bd616')} </button>
       <Progress job={job} />
       {pack.map((s) => (
         <article key={s.id}>

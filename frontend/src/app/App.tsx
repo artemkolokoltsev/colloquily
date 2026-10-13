@@ -12,7 +12,10 @@ import { Practice } from "../features/Practice";
 import { Study, StudyPlan } from "../features/Study";
 import { Settings } from "../features/Settings";
 import { Dashboard } from "../features/Dashboard";
-const pages = ["Dashboard", "Materials", "Questions", "Practice", "Progress"];
+import { useTranslation } from "react-i18next";
+import { checkForUpdate } from "../update";
+const pages = ["Dashboard", "Materials", "Questions", "Practice", "Progress"] as const;
+const pageLabels = { Dashboard: "nav.dashboard", Materials: "nav.materials", Questions: "nav.questions", Practice: "nav.practice", Progress: "nav.progress" } as const;
 const advancedPages = [
   "Reported questions",
   "Study plan",
@@ -20,6 +23,8 @@ const advancedPages = [
   "Advanced settings",
 ];
 export default function App() {
+  const { t, i18n } = useTranslation();
+  const [welcomed, setWelcomed] = useState(() => localStorage.getItem('colloquily.welcomed') === 'true');
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [exams, setExams] = useState<Exam[]>([]);
@@ -46,6 +51,9 @@ export default function App() {
     setError("");
     try {
       await connect();
+      const preferences = await api<{language?: string}>('/preferences');
+      if (preferences.language) await i18n.changeLanguage(preferences.language);
+      else await api('/preferences', 'PATCH', { language: i18n.resolvedLanguage || 'en' });
       const existing = await refresh();
       if (!existing.length) setPage("Exams");
       else if (existing.length === 1 && existing[0].slug === "imported-exam") {
@@ -56,6 +64,8 @@ export default function App() {
         if (!files.raw.length && !prep.questions) setPage("Exams");
       }
       setReady(true);
+      // Update checks are best-effort and never block local study.
+      void checkForUpdate().catch(() => undefined);
       const status = await api<{ ollama: string; missing: string[] }>(
         "/models/status",
       );
@@ -71,9 +81,11 @@ export default function App() {
     setBusy(true);
     setError("");
     try {
+      await api('/preferences', 'PATCH', { language: i18n.resolvedLanguage || 'en' });
       const exam = await api<Exam>("/exams", "POST", {
         name,
         exam_date: examDate || null,
+        language: i18n.resolvedLanguage || 'en',
       });
       await refresh();
       setSelected(exam.id);
@@ -93,9 +105,9 @@ export default function App() {
           <img src="/favicon.svg" alt="" />
           Colloquily
         </h1>
-        <p>Starting your local study workspace…</p>
+        <p>{t("startup.starting")}</p>
         <ErrorNotice error={error} />
-        {error && <button onClick={start}>Retry connection</button>}
+        {error && <button onClick={start}>{t("startup.retry")}</button>}
       </main>
     );
   return (
@@ -105,9 +117,9 @@ export default function App() {
           <img src="/favicon.svg" alt="" />
           Colloquily
         </h1>
-        <p className="muted">Your local oral-exam workspace</p>
+        <p className="muted">{t("app.tagline")}</p>
         <label>
-          Current exam
+          {t("app.currentExam")}
           <select
             value={selected}
             onChange={(e) => setSelected(Number(e.target.value))}
@@ -120,7 +132,7 @@ export default function App() {
           </select>
         </label>
         <button className="primary" onClick={() => navigate("Exams")}>
-          + Create an exam
+          + {t("app.createExam")}
         </button>
         <nav aria-label="Your learning">
           {pages.map((p) => (
@@ -130,18 +142,18 @@ export default function App() {
               aria-current={p === page ? "page" : undefined}
               onClick={() => navigate(p)}
             >
-              {p}
+              {t(pageLabels[p])}
             </button>
           ))}
           <button
             className={page === "Study" ? "active" : ""}
             onClick={() => navigate("Study")}
           >
-            Ask your materials
+            {t("nav.ask")}
           </button>
         </nav>
         <details className="advanced-nav">
-          <summary>Advanced tools</summary>
+          <summary>{t("nav.advanced")}</summary>
           <nav aria-label="Advanced tools">
             {advancedPages.map((p) => (
               <button
@@ -149,34 +161,34 @@ export default function App() {
                 className={page === p ? "active" : ""}
                 onClick={() => navigate(p)}
               >
-                {p === "Local AI" ? "AI setup" : p}
+                {p === "Local AI" ? t("nav.ai") : p === "Reported questions" ? t("nav.reported") : p === "Study plan" ? t("nav.plan") : t("nav.settings")}
               </button>
             ))}
           </nav>
         </details>
         <small>
-          Local files. Local inference.
-          <br />
-          No cloud account.
+          {t("app.localPromise")}
         </small>
       </aside>
       <main>
         <ErrorNotice error={error} />
+        {!welcomed && !exams.length && <section>
+          <h2>{t('release.welcome')}</h2>
+          <label>{t('settings.language')}<select value={i18n.resolvedLanguage || 'en'} onChange={event => void i18n.changeLanguage(event.target.value)}><option value="de">Deutsch</option><option value="en">English</option></select></label>
+          <p>{t('release.privacy')}</p>
+          <button onClick={() => { localStorage.setItem('colloquily.welcomed', 'true'); setWelcomed(true); }}>{t('release.continue')}</button>
+        </section>}
         {aiSetup && page !== "Local AI" && (
           <div className="setup-notice">
-            One-time setup: your local AI needs to be ready before we can
-            prepare questions.{" "}
-            <button onClick={() => navigate("Local AI")}>Set up AI</button>
+            {t("setup.notice")}{" "}
+            <button onClick={() => navigate("Local AI")}>{t("setup.action")}</button>
           </div>
         )}
         {page === "Exams" && (
           <section>
-            <p className="eyebrow">Prepare with evidence</p>
-            <h2>What are you preparing for?</h2>
-            <p>
-              Name your exam, choose a date, then add your lecture PDFs. We’ll
-              prepare your first practice questions.
-            </p>
+            <p className="eyebrow">{t("exam.eyebrow")}</p>
+            <h2>{t("exam.title")}</h2>
+            <p>{t("exam.intro")}</p>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -184,16 +196,16 @@ export default function App() {
               }}
             >
               <label>
-                New exam name
+                {t("exam.name")}
                 <input
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Quantum physics"
+                  placeholder={t("exam.placeholder")}
                 />
               </label>
               <label>
-                Exam date <span className="muted">(optional)</span>
+                {t("exam.date")} <span className="muted">({t("exam.optional")})</span>
                 <input
                   type="date"
                   value={examDate}
@@ -201,7 +213,7 @@ export default function App() {
                 />
               </label>
               <button className="primary" disabled={busy || !name.trim()}>
-                Create exam & add PDFs →
+                {t("exam.create")}
               </button>
             </form>
             <div className="cards">
@@ -210,16 +222,16 @@ export default function App() {
                   <h3>{e.name}</h3>
                   <p>
                     {e.description ||
-                      "PDF and Markdown sources, isolated evidence and practice."}
+                      t("exam.defaultDescription")}
                   </p>
-                  <p>{e.exam_duration_minutes}-minute mock exam</p>
+                  <p>{t("exam.minutes", { count: e.exam_duration_minutes })}</p>
                   <button
                     onClick={() => {
                       setSelected(e.id);
                       setPage("Materials");
                     }}
                   >
-                    Open materials
+                    {t("exam.open")}
                   </button>
                   <ExamEditor
                     exam={e}
@@ -240,6 +252,7 @@ export default function App() {
             }}
           />
         )}
+        {page === 'Advanced settings' && <Settings exam={selected} />}
         {selected > 0 && (
           <div key={`${page}:${selected}`}>
             {page === "Dashboard" && (
@@ -274,7 +287,6 @@ export default function App() {
             )}{" "}
             {page === "Progress" && <ProgressPage exam={selected} />}{" "}
             {page === "Study plan" && <StudyPlan exam={selected} />}{" "}
-            {page === "Advanced settings" && <Settings exam={selected} />}
           </div>
         )}
       </main>

@@ -1,0 +1,36 @@
+{
+  "en": {
+    "daily": "{{count}} answers today. One step closer.",
+    "workload": "About {{sessions}} sessions today. {{answers}} answers remain across {{days}} days, including today and exam day.",
+    "days": "{{count}} days",
+    "activity": "{{date}}: {{count}} assessed answers",
+    "pagination": "{{start}}–{{end}} of {{total}}",
+    "remaining": "{{time}} remaining",
+    "questionToggle": "{{action}} question {{id}} for practice",
+    "enable": "Enable", "disable": "Disable",
+    "accepted": "Accepted", "rejected": "Rejected", "needs_review": "Needs review", "quarantined": "Quarantined",
+    "single_question": "Single question", "rapid_practice": "Rapid practice", "weak_topic": "Weak topic", "random_practice": "Random practice", "oral_exam_simulation": "Oral exam simulation", "subject_simulation": "Subject simulation", "multi_subject": "Multiple subjects", "full_colloquium": "Full colloquium",
+    "not_practised": "Not practised", "practising": "Practising", "exam_ready": "Exam ready", "needs_work": "Needs work",
+    "Topic": "Topic", "Mastery": "Mastery", "Practised": "Practised", "Score": "Score", "Question": "Question", "Review": "Review", "Practice": "Practice", "Point to revisit": "Point to revisit", "Occurrences": "Occurrences", "Misconception": "Misconception", "Question & feedback": "Question & feedback", "Topic mastery": "Topic mastery", "Recent answers": "Recent answers", "Learning gaps": "Learning gaps",
+    "modelStorage": "Ollama stores models separately from your study workspace. Download sizes depend on the model variant; progress shows actual bytes. Free space on the workspace volume: {{gb}} GB.",
+    "cleaning": "Text cleaning", "topic_extraction": "Topic extraction", "question_generation": "Question generation", "answer_evaluation": "Answer evaluation", "answering": "Answering", "examiner_follow_up": "Examiner follow-up",
+    "Chunking": "Chunking", "PDF Parsing": "PDF parsing", "Retrieval": "Retrieval", "Models & Inference": "Models and inference"
+  },
+  "de": {
+    "daily": "Heute {{count}} Antworten. Ein Schritt näher.",
+    "workload": "Heute etwa {{sessions}} Übungen. {{answers}} Antworten verbleiben über {{days}} Tage, einschließlich heute und Prüfungstag.",
+    "days": "{{count}} Tage",
+    "activity": "{{date}}: {{count}} bewertete Antworten",
+    "pagination": "{{start}}–{{end}} von {{total}}",
+    "remaining": "{{time}} verbleibend",
+    "questionToggle": "Frage {{id}} für Übungen {{action}}",
+    "enable": "aktivieren", "disable": "deaktivieren",
+    "accepted": "Akzeptiert", "rejected": "Abgelehnt", "needs_review": "Prüfung erforderlich", "quarantined": "Ausgesondert",
+    "single_question": "Einzelne Frage", "rapid_practice": "Schnellübung", "weak_topic": "Schwaches Thema", "random_practice": "Zufällige Übung", "oral_exam_simulation": "Mündliche Prüfung simulieren", "subject_simulation": "Fachprüfung simulieren", "multi_subject": "Mehrere Fächer", "full_colloquium": "Vollständiges Kolloquium",
+    "not_practised": "Noch nicht geübt", "practising": "In Übung", "exam_ready": "Prüfungsbereit", "needs_work": "Übung erforderlich",
+    "Topic": "Thema", "Mastery": "Beherrschung", "Practised": "Geübt", "Score": "Bewertung", "Question": "Frage", "Review": "Prüfstatus", "Practice": "Übung", "Point to revisit": "Zu wiederholender Punkt", "Occurrences": "Häufigkeit", "Misconception": "Fehlvorstellung", "Question & feedback": "Frage & Feedback", "Topic mastery": "Themenbeherrschung", "Recent answers": "Letzte Antworten", "Learning gaps": "Wissenslücken",
+    "modelStorage": "Ollama speichert Modelle getrennt von deinem Lernbereich. Die Downloadgröße hängt von der Modellvariante ab; der Fortschritt zeigt tatsächliche Bytes. Freier Speicher auf dem Laufwerk des Arbeitsbereichs: {{gb}} GB.",
+    "cleaning": "Textbereinigung", "topic_extraction": "Themenextraktion", "question_generation": "Fragenerstellung", "answer_evaluation": "Antwortbewertung", "answering": "Antworten", "examiner_follow_up": "Nachfragen der Prüfperson",
+    "Chunking": "Textaufteilung", "PDF Parsing": "PDF-Verarbeitung", "Retrieval": "Quellensuche", "Models & Inference": "Modelle und Inferenz"
+  }
+}

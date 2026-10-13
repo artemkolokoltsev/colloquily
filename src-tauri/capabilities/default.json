@@ -2,5 +2,5 @@
   "identifier": "main",
   "description": "Local Colloquily window; sidecar launches only from Rust.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "updater:default", "process:allow-restart"]
 }

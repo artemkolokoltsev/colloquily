@@ -34,6 +34,8 @@ fn main() {
             if let Some(window) = app.get_webview_window("main") { let _ = window.set_focus(); }
         }))
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(Backend { child: Mutex::new(None), connection: Mutex::new(Err("starting".into())) })
         .invoke_handler(tauri::generate_handler![backend_connection, open_ollama_download])
         .setup(|app| {

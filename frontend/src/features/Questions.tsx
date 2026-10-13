@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { api, operation } from "../api/client";
 import { ErrorNotice, Progress } from "../components/Common";
@@ -12,6 +13,7 @@ export function Questions({
   initialTopic?: string;
   onPractice: (topic: string) => void;
 }) {
+  const { t } = useTranslation();
   const [topic, setTopic] = useState(initialTopic);
   const [learning, setLearning] = useState<LearningData>();
   const [status, setStatus] = useState("");
@@ -54,38 +56,35 @@ export function Questions({
   };
   return (
     <section>
-      <p className="eyebrow">Explore. Explain. Understand.</p>
-      <h2>Your question library</h2>
-      <p className="muted">
-        Follow a topic, check your understanding, and practise explaining it
-        aloud.
-      </p>
+      <p className="eyebrow">{t('ui.s2907aaf86b')}</p>
+      <h2>{t('ui.s83ed79c22e')}</h2>
+      <p className="muted"> {t('ui.s5a40fc78c4')} </p>
       <div className="stat-grid compact-stats">
         <article>
-          <span>Total questions</span>
+          <span>{t('ui.scafd3bd241')}</span>
           <strong>{items.length}</strong>
         </article>
         <article>
-          <span>Available to practise</span>
+          <span>{t('ui.scbf0dfe6ba')}</span>
           <strong>
             {learning?.topics.reduce((n, t) => n + t.available, 0) ?? "—"}
           </strong>
         </article>
         <article>
-          <span>Needs review</span>
+          <span>{t('ui.s07297fa94a')}</span>
           <strong>
             {items.filter((q) => q.review_status === "needs_review").length}
           </strong>
         </article>
         <article>
-          <span>Topics</span>
+          <span>{t('ui.se22820fcf5')}</span>
           <strong>
             {new Set(items.map((q) => q.topic_name || "Unassigned")).size}
           </strong>
         </article>
       </div>
       <div className="page-heading">
-        <h3>{topic || "All questions"}</h3>
+        <h3>{topic || t('ui.s5314becbd6')}</h3>
         <button
           className="primary"
           disabled={
@@ -94,13 +93,12 @@ export function Questions({
             )
           }
           onClick={() => onPractice(topic)}
-        >
-          Practise {topic || "these questions"} →
+        > {t('ui.scb93da9e26')} {topic || t('ui.see6ba3f561')} →
         </button>
       </div>
       <ErrorNotice error={error} />
       <details>
-        <summary>Manage questions · generate, import & review</summary>
+        <summary>{t('ui.s465e030650')}</summary>
         <div className="toolbar">
           <button
             disabled={busy}
@@ -113,15 +111,11 @@ export function Questions({
                 ),
               )
             }
-          >
-            Generate 5 grounded questions
-          </button>
+          > {t('ui.sfe13549010')} </button>
         </div>
         <details>
-          <summary>Add a curated question pool</summary>
-          <label>
-            Import curated question pool
-            <input
+          <summary>{t('ui.s422b432c52')}</summary>
+          <label> {t('ui.sc989cc910d')} <input
               type="file"
               accept=".json,.jsonl,.md,.markdown"
               onChange={(e) => {
@@ -139,9 +133,7 @@ export function Questions({
                 ),
               )
             }
-          >
-            Preview import
-          </button>
+          > {t('ui.sab5c8e55ce')} </button>
           {preview !== undefined && (
             <article>
               <pre>{JSON.stringify(preview, null, 2)}</pre>
@@ -157,33 +149,24 @@ export function Questions({
                     setPreview(undefined);
                   })
                 }
-              >
-                Confirm import
-              </button>
+              > {t('ui.s4ca48b4230')} </button>
             </article>
           )}
         </details>
         <Progress job={job} />
       </details>
       {!items.length && (
-        <p className="empty-state">
-          No practice questions yet. Open Materials, upload your PDFs, and
-          choose Prepare my practice.
-        </p>
+        <p className="empty-state"> {t('ui.sfd6d154a98')} </p>
       )}
       <div className="table-filters">
-        <label>
-          Search questions
-          <input
-            placeholder="Find a question…"
+        <label> {t('ui.s7fa8a1cfca')} <input
+            placeholder={t('ui.s4f2ac56036')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </label>
-        <label>
-          Topic
-          <select value={topic} onChange={(e) => setTopic(e.target.value)}>
-            <option value="">All topics</option>
+        <label> {t('ui.s7e61847d61')} <select value={topic} onChange={(e) => setTopic(e.target.value)}>
+            <option value="">{t('ui.s29366ff597')}</option>
             {Array.from(new Set(items.map((q) => q.topic_name || "Unassigned")))
               .sort()
               .map((t) => (
@@ -191,10 +174,8 @@ export function Questions({
               ))}
           </select>
         </label>
-        <label>
-          Review status
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">All statuses</option>
+        <label> {t('ui.sa410d70156')} <select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">{t('ui.s8ee57323a6')}</option>
             {["accepted", "needs_review", "rejected", "quarantined"].map(
               (s) => (
                 <option key={s} value={s}>
@@ -210,12 +191,10 @@ export function Questions({
             setTopic("");
             setStatus("");
           }}
-        >
-          Clear filters
-        </button>
+        > {t('ui.s7179ea0035')} </button>
       </div>
       <PagedTable
-        label="Questions"
+        label={t('ui.s9a72221a27')}
         resetKey={`${exam}:${query}:${topic}:${status}`}
         headers={["Question", "Topic", "Review", "Practice"]}
         rows={items.filter(
@@ -235,7 +214,7 @@ export function Questions({
                 </summary>
                 <div className="row-detail">
                   <p>{q.question_text}</p>
-                  <h4>Expected answer points</h4>
+                  <h4>{t('ui.s6d139c6975')}</h4>
                   {q.expected_core_points?.length ? (
                     <ul>
                       {q.expected_core_points.map((p, i) => (
@@ -243,7 +222,7 @@ export function Questions({
                       ))}
                     </ul>
                   ) : (
-                    <p>No answer points yet.</p>
+                    <p>{t('ui.sc67fe62b5d')}</p>
                   )}
                   <div className="toolbar">
                     {["accepted", "rejected", "needs_review"].map((status) => (
@@ -258,23 +237,23 @@ export function Questions({
                           )
                         }
                       >
-                        {status.replaceAll("_", " ")}
+                        {t(`dynamic.${status}`, { defaultValue: status.replaceAll('_', ' ') })}
                       </button>
                     ))}
                   </div>
                 </div>
               </details>
             </td>
-            <td>{q.topic_name || "Unassigned"}</td>
+            <td>{q.topic_name || t('ui.s14d33bd014')}</td>
             <td>
               <span className="status-label">
-                {q.review_status.replaceAll("_", " ")}
+                {t(`dynamic.${q.review_status}`, { defaultValue: q.review_status.replaceAll('_', ' ') })}
               </span>
             </td>
             <td>
               <button
                 disabled={busy}
-                aria-label={`${q.enabled ? "Disable" : "Enable"} question ${q.id} for practice`}
+                aria-label={t('dynamic.questionToggle', { action: t(q.enabled ? 'dynamic.disable' : 'dynamic.enable'), id: q.id })}
                 onClick={() =>
                   act(() =>
                     api(`/exams/${exam}/questions/${q.id}/enabled`, "PATCH", {
@@ -283,7 +262,7 @@ export function Questions({
                   )
                 }
               >
-                {q.enabled ? "Enabled" : "Disabled"}
+                {q.enabled ? t('ui.s92c1cdfdf4') : t('ui.s75081b593d')}
               </button>
             </td>
           </tr>

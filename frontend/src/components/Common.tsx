@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { sourceBlob } from "../api/client";
 import type { Evaluation, Job, Source } from "../types";
+import { useTranslation } from "react-i18next";
+import { sourcePage } from './sourcePage';
 export function ErrorNotice({ error }: { error: string }) {
   return error ? (
     <p role="alert" className="error">
@@ -9,14 +11,15 @@ export function ErrorNotice({ error }: { error: string }) {
   ) : null;
 }
 export function Progress({ job }: { job: Job | null }) {
+  const { t } = useTranslation();
   if (!job) return null;
   return (
     <div role="status" className="progress">
       <strong>
         {job.status === "completed"
-          ? "Completed · "
+          ? `${t("common.completed")} · `
           : job.status === "failed"
-            ? "Failed · "
+            ? `${t("common.failed")} · `
             : ""}
         {job.message || job.status}
       </strong>
@@ -43,13 +46,14 @@ export function Progress({ job }: { job: Job | null }) {
   );
 }
 export function EvaluationView({ value }: { value: Evaluation | null }) {
+  const { t } = useTranslation();
   if (!value) return null;
   return (
     <article>
-      <h3>Answer feedback {value.score != null && `· ${value.score}/5`}</h3>
-      {["correct", "missing", "incorrect"].map((key) => (
+      <h3>{t("common.answerFeedback")} {value.score != null && `· ${value.score}/5`}</h3>
+      {(["correct", "missing", "incorrect"] as const).map((key) => (
         <div key={key}>
-          <h4>{key}</h4>
+          <h4>{t(`common.${key}`)}</h4>
           <ul>
             {(value[key as "correct"] || []).map((item, i) => (
               <li key={i}>{item.text || item.claim || JSON.stringify(item)}</li>
@@ -71,11 +75,12 @@ export function Sources({
   exam: number;
   sources: Source[];
 }) {
+  const { t } = useTranslation();
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
   useEffect(
     () => () => {
-      if (url) URL.revokeObjectURL(url);
+      if (url) URL.revokeObjectURL(url.split('#')[0]);
     },
     [url],
   );
@@ -85,7 +90,7 @@ export function Sources({
       {sources.map((s, i) => (
         <details key={i}>
           <summary>
-            {s.citation_id || (s.id ? `E${s.id}` : `Source ${i + 1}`)} ·{" "}
+            {s.citation_id || (s.id ? `E${s.id}` : t("common.source", { count: i + 1 }))} ·{" "}
             {s.document_title || s.doc_name} · {s.source_location}
           </summary>
           <p className="prose">{s.content || s.preview}</p>
@@ -93,18 +98,21 @@ export function Sources({
             <button
               onClick={() => {
                 sourceBlob(exam, s.relative_path || s.doc_name!)
-                  .then(setUrl)
+                  .then((blobUrl) => {
+                    const page = sourcePage(s);
+                    setUrl(page ? `${blobUrl}#page=${page}` : blobUrl);
+                  })
                   .catch((e) => setError(String(e)));
               }}
             >
-              Open original source
+              {t("common.openSource")}
             </button>
           )}
         </details>
       ))}
       {url && (
         <div className="source-preview">
-          <button onClick={() => setUrl("")}>Close source</button>
+          <button onClick={() => setUrl("")}>{t("common.closeSource")}</button>
           <iframe title="Original course source" src={url} />
         </div>
       )}

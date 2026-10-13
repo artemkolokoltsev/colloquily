@@ -1,8 +1,10 @@
+import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { api, operation } from "../api/client";
 import { ErrorNotice, Progress } from "../components/Common";
 import type { Job } from "../types";
 export function Reported({ exam }: { exam: number }) {
+  const { t } = useTranslation();
   const [items, setItems] = useState<
     {
       id: number;
@@ -34,15 +36,10 @@ export function Reported({ exam }: { exam: number }) {
   }
   return (
     <section>
-      <h2>Reported exam questions</h2>
-      <p>
-        Import a schema 1.0 question bank. Its exam IDs must match existing exam
-        slugs; original wording and provenance are preserved.
-      </p>
+      <h2>{t('ui.s26b5568238')}</h2>
+      <p> {t('ui.sa1c7375328')} </p>
       <ErrorNotice error={error} />
-      <label>
-        Question bank JSON
-        <input
+      <label> {t('ui.s362157f4b1')} <input
           type="file"
           accept=".json"
           disabled={busy}
@@ -66,9 +63,7 @@ export function Reported({ exam }: { exam: number }) {
             operation(`/exams/${exam}/reported-questions/ground`, {}, setJob),
           )
         }
-      >
-        Create evidence-grounded training cards
-      </button>
+      > {t('ui.s644897c054')} </button>
       <button
         disabled={busy}
         onClick={() =>
@@ -86,11 +81,9 @@ export function Reported({ exam }: { exam: number }) {
             setTimeout(() => URL.revokeObjectURL(url), 1000);
           })
         }
-      >
-        Export question bank
-      </button>
+      > {t('ui.sc58dd6a7d6')} </button>
       <Progress job={job} />
-      {!items.length && <p>No reported questions in this exam.</p>}
+      {!items.length && <p>{t('ui.sa50c4d61ce')}</p>}
       {items.map((q) => (
         <article key={q.id}>
           <h3>{q.wording_source}</h3>
