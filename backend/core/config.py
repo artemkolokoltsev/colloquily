@@ -1,4 +1,6 @@
 import os
+from contextlib import closing
+import sqlite3
 from typing import Tuple
 
 def _load_env_file(path: str) -> None:
@@ -102,8 +104,7 @@ DEBUG = _env_flag("DEBUG", True)
 LEGACY_DB_PATH = os.path.join(DATA_DIR, "app.db")
 DB_PATH = os.path.join(DATA_DIR, "colloquily.db")
 if not os.path.exists(DB_PATH) and os.path.exists(LEGACY_DB_PATH):
-    import sqlite3
-    with sqlite3.connect(LEGACY_DB_PATH) as source, sqlite3.connect(DB_PATH) as destination:
+    with closing(sqlite3.connect(LEGACY_DB_PATH)) as source, closing(sqlite3.connect(DB_PATH)) as destination:
         source.backup(destination)
 
 RUNTIME_SETTINGS_PATH = os.path.join(INDEX_DIR, "runtime_settings.json")

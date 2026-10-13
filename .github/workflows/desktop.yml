@@ -1,5 +1,15 @@
 name: Build desktop artifacts (manual, unsigned)
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'scripts/**'
+      - 'frontend/**'
+      - 'tests/**'
+      - 'src-tauri/**'
+      - '.github/workflows/desktop.yml'
+      - 'package*.json'
 permissions:
   contents: read
 jobs:
@@ -19,11 +29,11 @@ jobs:
             bundles: nsis
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
@@ -38,7 +48,7 @@ jobs:
       - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
       - run: npm run tauri -- build --config src-tauri/tauri.unsigned.conf.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
       - run: python scripts/checksums.py src-tauri/target/${{ matrix.target }}/release/bundle ${{ matrix.target }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: colloquily-${{ matrix.target }}-unsigned
           path: src-tauri/target/${{ matrix.target }}/release/bundle/

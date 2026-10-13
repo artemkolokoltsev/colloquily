@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import shutil
+from contextlib import closing
 import sqlite3
 import tempfile
 import zipfile
@@ -35,7 +36,7 @@ def create_backup() -> dict:
     with tempfile.TemporaryDirectory(prefix="colloquily-backup-") as temporary:
         stage = Path(temporary)
         database = stage / "colloquily.db"
-        with sqlite3.connect(config.DB_PATH, timeout=10) as source, sqlite3.connect(database) as target:
+        with closing(sqlite3.connect(config.DB_PATH, timeout=10)) as source, closing(sqlite3.connect(database)) as target:
             source.backup(target)
             if target.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise ValueError("BACKUP_DATABASE_INVALID")
@@ -112,7 +113,7 @@ def restore_backup(path: Path, *, confirmed: bool) -> dict:
                     shutil.copyfileobj(source, output)
                 if _sha256(target) != expected_hash:
                     raise ValueError("BACKUP_CHECKSUM_MISMATCH")
-        with sqlite3.connect(stage / "colloquily.db") as database:
+        with closing(sqlite3.connect(stage / "colloquily.db")) as database:
             if database.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise ValueError("BACKUP_DATABASE_INVALID")
             installed = database.execute("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").fetchone()[0]

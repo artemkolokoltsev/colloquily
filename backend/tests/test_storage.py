@@ -1,4 +1,5 @@
 import json
+from contextlib import closing, contextmanager
 import sqlite3
 import tempfile
 import unittest
@@ -12,6 +13,54 @@ from services.database import CURRENT_SCHEMA_VERSION, init_db
 
 
 class StorageSafetyTests(unittest.TestCase):
+    @contextmanager
+    def retained_connections(self):
+        """Prevent garbage collection from masking unclosed SQLite handles."""
+        opened = []
+        connect = sqlite3.connect
+        def track(*args, **kwargs):
+            connection = connect(*args, **kwargs)
+            opened.append(connection)
+            return connection
+        try:
+            with patch('sqlite3.connect', side_effect=track):
+                yield opened
+        finally:
+            for connection in opened:
+                connection.close()
+
+    def assert_connections_closed(self, opened):
+        self.assertTrue(opened)
+        for connection in opened:
+            with self.assertRaises(sqlite3.ProgrammingError):
+                connection.execute('SELECT 1')
+
+    def test_backup_restore_closes_handles_before_replacing_files(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(config, 'DATA_DIR', directory), patch.object(config, 'DB_PATH', str(Path(directory) / 'colloquily.db')), self.retained_connections() as opened:
+            init_db(seed_admin=False)
+            self.assert_connections_closed(opened)
+            saved = Path(create_backup()['path'])
+            self.assert_connections_closed(opened)
+            restore_backup(saved, confirmed=True)
+            self.assert_connections_closed(opened)
+
+    def test_migration_and_status_close_handles_even_on_refusal(self):
+        from services.performance import performance_summary
+        with tempfile.TemporaryDirectory() as directory, patch.object(config, 'DATA_DIR', directory), patch.object(config, 'DB_PATH', str(Path(directory) / 'colloquily.db')), self.retained_connections() as opened:
+            init_db(seed_admin=False)
+            with closing(sqlite3.connect(config.DB_PATH)) as connection:
+                connection.execute('DELETE FROM schema_migrations WHERE version=?', (CURRENT_SCHEMA_VERSION,))
+                connection.commit()
+            init_db(seed_admin=False)
+            performance_summary()
+            self.assert_connections_closed(opened)
+            with closing(sqlite3.connect(config.DB_PATH)) as connection:
+                connection.execute('INSERT INTO schema_migrations VALUES (?, ?)', (CURRENT_SCHEMA_VERSION + 1, 'future'))
+                connection.commit()
+            with self.assertRaisesRegex(RuntimeError, 'newer'):
+                init_db(seed_admin=False)
+            self.assert_connections_closed(opened)
+
     def test_restore_round_trip_and_confirmation(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(config, 'DATA_DIR', directory), patch.object(config, 'DB_PATH', str(Path(directory) / 'colloquily.db')):
             init_db(seed_admin=False)
@@ -36,7 +85,7 @@ class StorageSafetyTests(unittest.TestCase):
                 archive.writestr('../escape', 'invalid')
             with self.assertRaisesRegex(ValueError, 'UNSAFE_PATH'):
                 restore_backup(unsafe, confirmed=True)
-            with sqlite3.connect(config.DB_PATH) as connection:
+            with closing(sqlite3.connect(config.DB_PATH)) as connection:
                 connection.execute('INSERT INTO schema_migrations VALUES (?, ?)', (CURRENT_SCHEMA_VERSION + 1, 'future'))
                 connection.commit()
             before = Path(config.DB_PATH).read_bytes()
@@ -47,20 +96,20 @@ class StorageSafetyTests(unittest.TestCase):
     def test_fresh_database_has_no_example_exam(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(config, "DATA_DIR", directory), patch.object(config, "DB_PATH", str(Path(directory) / "colloquily.db")):
             init_db(seed_admin=False)
-            with sqlite3.connect(config.DB_PATH) as connection:
+            with closing(sqlite3.connect(config.DB_PATH)) as connection:
                 self.assertEqual(connection.execute("SELECT COUNT(*) FROM subjects").fetchone()[0], 0)
                 self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], CURRENT_SCHEMA_VERSION)
 
     def test_forward_migration_backs_up_and_preserves_german(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(config, "DATA_DIR", directory), patch.object(config, "DB_PATH", str(Path(directory) / "colloquily.db")):
             init_db(seed_admin=False)
-            with sqlite3.connect(config.DB_PATH) as connection:
+            with closing(sqlite3.connect(config.DB_PATH)) as connection:
                 connection.execute("DELETE FROM schema_migrations WHERE version = ?", (CURRENT_SCHEMA_VERSION,))
                 connection.execute("INSERT INTO subjects (slug,name,description,language,exam_duration_minutes,local_llm_config_json,embedding_config_json,active_index_profile,created_at,updated_at) VALUES ('test','Test','', 'de',15,'{}','{}','default','now','now')")
                 connection.commit()
             init_db(seed_admin=False)
             self.assertTrue((Path(directory) / "backups" / "migrations" / f"colloquily-schema-9-before-{CURRENT_SCHEMA_VERSION}.db").exists())
-            with sqlite3.connect(config.DB_PATH) as connection:
+            with closing(sqlite3.connect(config.DB_PATH)) as connection:
                 self.assertEqual(connection.execute("SELECT language FROM subjects WHERE slug='test'").fetchone()[0], "de")
 
     def test_backup_manifest_and_checksums(self):

@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import threading
+from contextlib import closing
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -59,7 +60,7 @@ def performance_summary(limit: int = 500) -> dict:
     calls = [row for row in rows if not row.get("cache_hit")]
     queued_jobs = 0
     try:
-        with sqlite3.connect(config.DB_PATH) as connection:
+        with closing(sqlite3.connect(config.DB_PATH)) as connection:
             queued_jobs = int(connection.execute(
                 "SELECT COUNT(*) FROM processing_jobs WHERE status IN ('queued','running','retrying')"
             ).fetchone()[0])

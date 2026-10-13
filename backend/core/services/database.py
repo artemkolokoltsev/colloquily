@@ -452,7 +452,7 @@ def _prepare_migration() -> None:
     path = Path(config.DB_PATH)
     if not path.exists() or path.stat().st_size == 0:
         return
-    with sqlite3.connect(path, timeout=10) as source:
+    with closing(sqlite3.connect(path, timeout=10)) as source:
         has_versions = source.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
         ).fetchone()
@@ -469,7 +469,7 @@ def _prepare_migration() -> None:
         destination = backup_dir / f"colloquily-schema-{version}-before-{CURRENT_SCHEMA_VERSION}.db"
         if destination.exists():
             return
-        with sqlite3.connect(destination) as target:
+        with closing(sqlite3.connect(destination)) as target:
             source.backup(target)
             if target.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise RuntimeError("The pre-migration database backup failed validation")
