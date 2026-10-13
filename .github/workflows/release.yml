@@ -31,7 +31,7 @@ jobs:
       APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Require release credentials
         shell: bash
         env:
@@ -47,7 +47,7 @@ jobs:
             test -n "$APPLE_TEAM_ID"
           fi
           node scripts/configure_release_key.mjs "$UPDATER_PUBLIC_KEY"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with: { python-version: "3.11", cache: pip }
       - name: Configure Windows Authenticode
         if: runner.os == 'Windows'
@@ -56,7 +56,7 @@ jobs:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: ./scripts/configure_windows_signing.ps1
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: "22", cache: npm }
       - uses: dtolnay/rust-toolchain@1.90.0
       - name: Import Developer ID before signing Python libraries
@@ -85,7 +85,7 @@ jobs:
           assetNamePattern: "Colloquily_[version]_[arch][setup][ext]"
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
       - run: python scripts/checksums.py src-tauri/target/${{ matrix.target }}/release/bundle ${{ matrix.target }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: signed-${{ matrix.target }}
           path: src-tauri/target/${{ matrix.target }}/release/bundle/

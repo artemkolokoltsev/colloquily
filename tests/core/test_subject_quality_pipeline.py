@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from contextlib import closing
 import sqlite3
 import tempfile
 import unittest
@@ -287,9 +288,10 @@ class SubjectQualityPipelineTest(unittest.TestCase):
         connection.close()
         config.DB_PATH = legacy_path
         init_db()
-        migrated = sqlite3.connect(legacy_path).execute(
-            "SELECT subject_id FROM requests WHERE request_uuid = 'legacy'"
-        ).fetchone()
+        with closing(sqlite3.connect(legacy_path)) as connection:
+            migrated = connection.execute(
+                "SELECT subject_id FROM requests WHERE request_uuid = 'legacy'"
+            ).fetchone()
         self.assertEqual(migrated[0], 1)
         self.assertEqual(get_subject(1)["slug"], "imported-exam")
 
