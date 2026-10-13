@@ -17,7 +17,7 @@ English and German can be switched without restarting. See the [English settings
 
 ## Desktop installation
 
-The **v0.1.0-rc.1 unsigned preview** is distributed through [GitHub Releases](https://github.com/artemkolokoltsev/colloquily/releases). Download the Windows x64 EXE or the DMG matching Apple Silicon/Intel macOS, and its matching `licenses-*.zip` bundle. Verify `SHA256SUMS.txt`. See [installation](docs/INSTALLATION.md), the [user guide](docs/USER_GUIDE.md), [updates](docs/UPDATES.md), and [privacy](docs/PRIVACY.md).
+The **v0.1.0-rc.2 unsigned preview** is distributed through [GitHub Releases](https://github.com/artemkolokoltsev/colloquily/releases). Download the Windows x64 EXE or the DMG matching Apple Silicon/Intel macOS, and its matching `licenses-*.zip` bundle. Verify `SHA256SUMS.txt`. See [installation](docs/INSTALLATION.md), the [user guide](docs/USER_GUIDE.md), [updates](docs/UPDATES.md), and [privacy](docs/PRIVACY.md).
 
 **This is a prerelease, not a signed production release.** Windows, Apple Silicon, and Intel macOS native packaging and frozen-backend checks pass in CI. Clean-machine GUI installation and complete hardware coverage remain separate checks. Apple Developer ID/notarization, Windows Authenticode, and signed automatic updates are not configured for this preview. Operating-system security may warn or block installation; do not disable security globally.
 

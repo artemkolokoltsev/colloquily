@@ -1,4 +1,4 @@
-# Colloquily v0.1.0-rc.1 — unsigned preview
+# Colloquily v0.1.0-rc.2 — unsigned preview
 
 First public desktop release candidate for local, source-grounded university
 oral exam preparation. **This is a prerelease, not a signed production release.**

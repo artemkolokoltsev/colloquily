@@ -24,13 +24,14 @@ def main():
         assets.append(archive_path)
     if len(assets) != 6:
         raise SystemExit('Three target-specific license/source bundles are required')
+    assets.extend([Path('LICENSE'), Path('NOTICE')])
     sums = root/'SHA256SUMS.txt'
     checksums = []
     for path in assets:
         with path.open('rb') as source:
             checksums.append(f'{hashlib.file_digest(source, "sha256").hexdigest()}  {path.name}')
     sums.write_text('\n'.join(checksums)+'\n')
-    assets.extend([sums, Path('LICENSE'), Path('NOTICE')])
+    assets.append(sums)
     subprocess.run(['gh', 'release', 'create', tag, '--repo', os.environ['GITHUB_REPOSITORY'],
         '--verify-tag', '--prerelease', '--title', f'Colloquily {tag} — unsigned preview',
         '--notes-file', 'docs/RELEASE_NOTES.md', *map(str, assets)], check=True)

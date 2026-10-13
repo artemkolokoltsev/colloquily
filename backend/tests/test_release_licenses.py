@@ -16,7 +16,7 @@ class ReleaseLicenseTests(unittest.TestCase):
             (root/'Cargo.toml').write_text('[package]\nname="fixture"\n')
             (root/'.cargo_vcs_info.json').write_text(json.dumps({'git':{'sha1':'abc'},'path_in_vcs':''}))
             (root/'lib.rs').write_text('/* This Source Code Form is subject to the Mozilla Public\n * License, v. 2.0. */\n')
-            package = {'name':'fixture','license':'MPL-2.0','manifest_path':str(root/'Cargo.toml'),'repository':'https://github.com/example/fixture'}
+            package = {'name':'fixture','version':'1.0','license':'MPL-2.0','manifest_path':str(root/'Cargo.toml'),'repository':'https://github.com/example/fixture'}
             with patch('scripts.release_notices.upstream_text', side_effect=lambda url: 'Full Mozilla license fixture' if 'mozilla.org' in url else None):
                 result = upstream_license(package)
             self.assertIn('Full Mozilla license fixture', result[0][1])
