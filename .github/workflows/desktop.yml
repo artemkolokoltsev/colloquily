@@ -33,10 +33,11 @@ jobs:
       - run: npm test
       - run: npm run test:api
       - run: npm run build
-      - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
       - run: npm run build:sidecar
       - run: python scripts/smoke_sidecar.py
+      - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
       - run: npm run tauri -- build --config src-tauri/tauri.unsigned.conf.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - run: python scripts/checksums.py src-tauri/target/${{ matrix.target }}/release/bundle ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         with:
           name: colloquily-${{ matrix.target }}-unsigned

@@ -103,3 +103,6 @@ class LearningGoalInput(BaseModel):
 class RestoreInput(BaseModel):
     path: str = Field(min_length=1, max_length=4096)
     confirmed: bool = False
+
+class LanguageInput(BaseModel):
+    language: Literal['en', 'de']

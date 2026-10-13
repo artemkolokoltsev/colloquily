@@ -40,7 +40,7 @@ React + TypeScript (Vite) → HTTP API → FastAPI
 Tauri v2 → bundled PyInstaller backend → loopback-only listener
 ```
 
-The frontend contains presentation and API calls, not RAG or persistence logic. FastAPI adapters reuse `meditech_rag/services/` and the existing database schema. Ingestion retains durable checkpoints; indexing, generation, evaluation, and downloads run as background operations with status polling. Other operation handles are process-local: after a restart, retry the action; completed exam attempts and evaluations remain in SQLite.
+The frontend contains presentation and API calls, not RAG or persistence logic. FastAPI adapters reuse `backend/core/services/` and the existing database schema. Ingestion retains durable checkpoints; indexing, generation, evaluation, and downloads run as background operations with status polling. Other operation handles are process-local: after a restart, retry the action; completed exam attempts and evaluations remain in SQLite.
 
 The desktop uses a random loopback port and a per-launch API token. Foreign browser origins are rejected. Both the desktop and browser applications open without a login. Existing owner records are reused to preserve progress; new databases use a local identity with a random unused password. Advanced settings provide parsing, chunking, retrieval, and model controls for RAG experiments.
 
@@ -118,7 +118,7 @@ Mutable files always live outside the installed application:
 
 | Mode | Directory |
 | --- | --- |
-| Browser development | `meditech_rag/data/` (compatible with existing data) |
+| Browser development | `data/` (compatible with existing data) |
 | macOS desktop | `~/Library/Application Support/Colloquily/` |
 | Windows desktop | `%APPDATA%/Colloquily/` |
 | Explicit override | `COLLOQUILY_DATA_DIR` |
@@ -139,7 +139,7 @@ npm run build
 cargo check --manifest-path src-tauri/Cargo.toml
 ```
 
-`make test` runs both Python suites. Native checking requires the generated sidecar and icons. The original integration verifier is available with `make verify` and requires configured local inference models. Architecture smoke tests use disposable data and mock model availability; they do not download models.
+`make test` runs both Python suites. Native checking requires the generated sidecar and icons. The end-to-end verifier is available with `make smoke` and requires configured local inference models. Architecture smoke tests use disposable data and mock model availability; they do not download models.
 
 ## Repository layout
 
@@ -152,11 +152,11 @@ backend/main.py           Local API lifecycle and access controls
 backend/launcher.py       Loopback sidecar entry point
 src-tauri/                Desktop lifecycle, capabilities, packaging and icons
 scripts/                  Native sidecar build and isolated test runner
-meditech_rag/services/     Preserved Python RAG, ingestion, evaluation and storage
-meditech_rag/app_paths.py  Packaged/development data location resolution
-meditech_rag/tests/        Existing regression suite
-meditech_rag/app.py        Temporary Flask compatibility application
+backend/core/services/    Exam-scoped ingestion, retrieval, evaluation and storage
+backend/core/app_paths.py  Packaged/development data location resolution
+tests/core/               Domain regression suite
+tests/frontend/           Shared UI pagination and source-viewer regressions
 docs/                     Architecture, migration and packaging notes
 ```
 
-The old Flask templates, Alpine/Tailwind assets, Docker files and `Install Colloquily.command` remain for compatibility and comparison while manual workflow parity is validated. They are not used by the desktop build. `make legacy-dev` and `npm run build:legacy` explicitly target that application. The old static `docs/index.html` describes the Flask-era application; use this README and the new migration/desktop notes for the current architecture.
+The repository contains only the desktop application and its supporting tools. Study data lives in ignored `data/`; packaged installations use the OS application-data directory. Database migration code is retained to protect existing workspaces.

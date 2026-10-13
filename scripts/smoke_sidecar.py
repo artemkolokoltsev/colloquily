@@ -57,4 +57,10 @@ def smoke(binary):
                     process.wait(timeout=10)
 
 if __name__ == '__main__':
-    smoke(sys.argv[1])
+    if len(sys.argv) > 1:
+        binary = sys.argv[1]
+    else:
+        target = subprocess.check_output(['rustc', '--print', 'host-tuple'], text=True).strip()
+        extension = '.exe' if sys.platform == 'win32' else ''
+        binary = Path(__file__).resolve().parents[1] / 'src-tauri' / 'binaries' / f'colloquily-backend-{target}{extension}'
+    smoke(binary)

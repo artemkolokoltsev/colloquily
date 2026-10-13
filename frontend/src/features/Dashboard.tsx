@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { ErrorNotice } from "../components/Common";
@@ -10,6 +11,7 @@ export function Dashboard({
   exam: Exam;
   navigate: (page: string, topic?: string, count?: number) => void;
 }) {
+  const { t, i18n } = useTranslation();
   const [data, setData] = useState<LearningData>();
   const [goal, setGoal] = useState<LearningData["goal"]>({
     exam_date: null,
@@ -51,37 +53,37 @@ export function Dashboard({
     <section className="dashboard">
       <div className="page-heading">
         <div>
-          <p className="eyebrow">A little practice. A clearer answer.</p>
-          <h2>Your learning dashboard</h2>
+          <p className="eyebrow">{t('ui.s477b55a438')}</p>
+          <h2>{t('ui.s63e208aef0')}</h2>
           <p className="muted">{exam.name}</p>
         </div>
-        <span className="local-badge">● Private workspace</span>
+        <span className="local-badge">{t('ui.sa234b6fcea')}</span>
       </div>
       <ErrorNotice error={error} />
       {!data || !p ? (
-        <p>Loading your learning journey…</p>
+        <p>{t('ui.s59c125724a')}</p>
       ) : (
         <>
           <div className="hero-panel">
             <div>
-              <span className="eyebrow">Your next step</span>
+              <span className="eyebrow">{t('ui.sd6c92918d6')}</span>
               <h3>
                 {!p.eligible_questions
-                  ? "Start with a question worth exploring."
+                  ? t('ui.s40ad0466c6')
                   : !data.goal.exam_date
-                    ? "Give your preparation a destination."
+                    ? t('ui.s56e617c552')
                     : p.overdue
-                      ? "Ready for your next chapter?"
+                      ? t('ui.sd93f6263de')
                       : p.remaining === 0
-                        ? "Your practice target is complete."
-                        : `${p.daily_questions} answer${p.daily_questions === 1 ? "" : "s"} today. One step closer.`}
+                        ? t('ui.sdc848e7a26')
+                        : t('dynamic.daily', { count: p.daily_questions })}
               </h3>
               <p>
                 {p.overdue
-                  ? "Your exam date has passed. Update it to make a new plan."
+                  ? t('ui.sb301b73b63')
                   : p.daily_questions
-                    ? `About ${p.daily_sessions} session${p.daily_sessions === 1 ? "" : "s"} today. ${p.remaining} answers remain across ${p.study_days} days, including today and exam day.`
-                    : "Set an exam date below, explore your topics, and build confidence through practice."}
+                    ? t('dynamic.workload', { sessions: p.daily_sessions, answers: p.remaining, days: p.study_days })
+                    : t('ui.s74838d2bb7')}
               </p>
               <button
                 className="primary"
@@ -97,27 +99,27 @@ export function Dashboard({
                 }
               >
                 {p.eligible_questions
-                  ? "Start today’s practice →"
-                  : "Add PDFs & prepare practice →"}
+                  ? t('ui.sff50ea771f')
+                  : t('ui.s2c1f04278e')}
               </button>
             </div>
             <div className="hero-orbit" aria-hidden="true">
-              <span>C</span>
+              <span>{t('ui.s6b23c0d5f3')}</span>
             </div>
           </div>
           <div className="stat-grid">
             <article>
-              <small>Until your exam</small>
+              <small>{t('ui.s3bf9a717cf')}</small>
               <strong>
                 {p.days_left === null
                   ? "—"
                   : p.overdue
-                    ? "Passed"
-                    : `${p.days_left} days`}
+                    ? t('ui.s436fe71bb9')
+                    : t('dynamic.days', { count: p.days_left })}
               </strong>
             </article>
             <article>
-              <small>Practice target</small>
+              <small>{t('ui.sf40a7617c9')}</small>
               <strong>
                 {p.completed}
                 <em> / {p.total}</em>
@@ -125,36 +127,32 @@ export function Dashboard({
               <progress
                 value={p.completed}
                 max={p.total || 1}
-                aria-label="Practice target completion"
+                aria-label={t('ui.sd3f0292690')}
               />
             </article>
             <article>
-              <small>Current streak</small>
+              <small>{t('ui.sf1758c2815')}</small>
               <strong>
-                {data.streak} <em>days</em>
+                {data.streak} <em>{t('ui.sab51004e9d')}</em>
               </strong>
-              <small>Assessed answers on consecutive days</small>
+              <small>{t('ui.s517c158703')}</small>
             </article>
             <article>
-              <small>Answered today</small>
+              <small>{t('ui.sc7bd532335')}</small>
               <strong>{data.today_answers}</strong>
               <small>
                 {
                   data.topics.filter((t) => t.mastery_state === "exam_ready")
                     .length
-                }{" "}
-                of {data.topics.length} topics exam ready
-              </small>
+                }{" "} {t('ui.s28391d3bc6')} {data.topics.length} {t('ui.s7fa89947ae')} </small>
             </article>
           </div>
           <div className="dashboard-columns">
             <article>
-              <p className="eyebrow">Make room for learning</p>
-              <h3>Your exam countdown</h3>
+              <p className="eyebrow">{t('ui.s0fc9c48c17')}</p>
+              <h3>{t('ui.s477cb6f776')}</h3>
               <form onSubmit={save}>
-                <label>
-                  Exam date
-                  <input
+                <label> {t('ui.s03cff67c1b')} <input
                     type="date"
                     value={goal.exam_date || ""}
                     onChange={(e) => {
@@ -164,9 +162,7 @@ export function Dashboard({
                   />
                 </label>
                 <div className="field-row">
-                  <label>
-                    Answers per question
-                    <input
+                  <label> {t('ui.s68867baa1a')} <input
                       type="number"
                       min="1"
                       max="10"
@@ -180,9 +176,7 @@ export function Dashboard({
                       }
                     />
                   </label>
-                  <label>
-                    Questions per session
-                    <input
+                  <label> {t('ui.s06d46679e7')} <input
                       type="number"
                       min="1"
                       max="100"
@@ -198,34 +192,27 @@ export function Dashboard({
                   </label>
                 </div>
                 <button className="primary" disabled={busy}>
-                  {busy ? "Saving…" : "Save learning plan"}
+                  {busy ? t('ui.s23e39291d6') : t('ui.s3ec6d4a587')}
                 </button>
                 {saved && (
                   <span role="status" className="success">
-                    {" "}
-                    Plan saved
-                  </span>
+                    {" "} {t('ui.sbf83b12675')} </span>
                 )}
               </form>
-              <p className="muted">
-                Each enabled, accepted question gets your chosen number of
-                assessed answers. Previous answers count, up to that target per
-                question. The remaining workload is spread evenly across the
-                days left. This estimates practice volume, not mastery.
-              </p>
+              <p className="muted"> {t('ui.se56daba219')} </p>
             </article>
             <article>
-              <p className="eyebrow">Keep showing up</p>
-              <h3>Your last two weeks</h3>
+              <p className="eyebrow">{t('ui.s7a6a196366')}</p>
+              <h3>{t('ui.s1dd706cd4e')}</h3>
               <div
                 className="activity-chart"
-                aria-label="Answers over the last fourteen days"
+                aria-label={t('ui.sf7ba3dd51f')}
               >
                 {data.activity.map((d) => (
                   <div
                     key={d.date}
                     className="activity-column"
-                    title={`${d.date}: ${d.answers} assessed answers`}
+                    title={t('dynamic.activity', { date: d.date, count: d.answers })}
                   >
                     <span>{d.answers || ""}</span>
                     <div
@@ -238,54 +225,46 @@ export function Dashboard({
                 ))}
               </div>
               <p>
-                {data.assessed_answers} assessed answers so far. Every
-                explanation is a chance to find what needs another look.
-              </p>
-              <button onClick={() => navigate("Progress")}>
-                Explore your progress →
-              </button>
+                {data.assessed_answers} {t('ui.sac66b1edc3')} </p>
+              <button onClick={() => navigate("Progress")}> {t('ui.s76990f53ea')} </button>
             </article>
           </div>
           {!!p.schedule.length && (
             <article>
               <div className="page-heading">
                 <div>
-                  <p className="eyebrow">A manageable rhythm</p>
-                  <h3>Upcoming practice</h3>
+                  <p className="eyebrow">{t('ui.sce6a6d8912')}</p>
+                  <h3>{t('ui.s8c2497667e')}</h3>
                 </div>
-                <span className="muted">{p.remaining} answers remaining</span>
+                <span className="muted">{p.remaining} {t('ui.s1c1e0be859')}</span>
               </div>
               <div className="schedule-strip">
                 {p.schedule.map((d, i) => (
-                  <div key={d.date} className={i === 0 ? "today" : ""}>
+                  <div key={d.date} className={i === 0 ? 'today' : ""}>
                     <small>
                       {i === 0
-                        ? "Today"
+                        ? t('ui.s2b065c7c9c')
                         : new Date(`${d.date}T12:00:00`).toLocaleDateString(
-                            undefined,
+                            i18n.resolvedLanguage,
                             { month: "short", day: "numeric" },
                           )}
                     </small>
                     <strong>{d.questions}</strong>
-                    <small>answers · {d.sessions} sessions</small>
+                    <small>{t('ui.sc4e722d09e')} {d.sessions} {t('ui.s1225ae6c1a')}</small>
                   </div>
                 ))}
               </div>
               {p.study_days > 14 && (
-                <p className="muted">
-                  Showing the next 14 of {p.study_days} study days.
-                </p>
+                <p className="muted"> {t('ui.sa245b95954')} {p.study_days} {t('ui.s9bcabfec1a')} </p>
               )}
             </article>
           )}
           <div className="page-heading">
             <div>
-              <p className="eyebrow">See how it connects</p>
-              <h3>Your topics</h3>
+              <p className="eyebrow">{t('ui.sfb9d3345ae')}</p>
+              <h3>{t('ui.s04f8dad9e7')}</h3>
             </div>
-            <button onClick={() => navigate("Questions")}>
-              Open question library →
-            </button>
+            <button onClick={() => navigate("Questions")}> {t('ui.sd70e316799')} </button>
           </div>
           <LearningMap
             topics={data.topics}

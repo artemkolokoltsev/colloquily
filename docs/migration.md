@@ -1,14 +1,14 @@
-# Desktop migration
+# Desktop architecture
 
-Repository inspection: `meditech_rag/app.py` combines Jinja rendering, Flask sessions/authentication, upload handling, and orchestration. Most domain work already lives in `services`: exam-scoped SQLite repositories, immutable raw workspaces, durable page-checkpoint ingestion, accepted-only FAISS indexes, question pools, grounded evaluation, persisted timed exam runs, coverage and five-day plans. Preserve these modules and their tests.
+Colloquily has a single application: React in Tauri, backed by a loopback FastAPI sidecar.
 
-The current model configuration is **qwen2.5:1.5b** for structured tasks, **phi3:mini** for oral answers, and **embeddinggemma:latest** for exam embeddings (not just phi3). Existing exams can override these settings. Data already supports COLLOQUILY_DATA_DIR. Legacy Flask uses admin/admin; the new local API needs no login but must reject foreign browser origins and use a desktop launch token.
+- `frontend/`: desktop screens, localization, typed API client.
+- `backend/api/`, `backend/services/`: API and workflow adapters.
+- `backend/core/`: exam-scoped ingestion, PDFium parsing, SQLite, FAISS retrieval, evaluation.
+- `tests/core/`, `backend/tests/`, `tests/frontend/`: isolated regression suites.
+- `scripts/`: build, notices, verification; `scripts/developer/`: supported development checks.
+- `data/`: ignored personal workspace, never bundled.
 
-Implementation order:
-1. Add a FastAPI service adapter and typed API, retaining core imports and database schema. Add OS data paths; preserve repository data for browser development.
-2. Build React workflows for exams, material processing/review, questions, assistant, practice/mocks, results, plans and settings. Poll durable ingestion jobs and background operation status.
-3. Add Tauri v2 lifecycle and PyInstaller packaging. Use one loopback sidecar, readiness checks, startup errors and shutdown.
-4. Add explicit model setup with real Ollama pull progress; retain configured task models and embeddings.
-5. Verify existing tests, API smoke tests, TypeScript/Vite and native compilation. Keep legacy Flask files until parity is manually verified; document native build/signing status honestly.
+The Flask interface, global-index RAG engine, obsolete benchmark pipelines, Docker packaging and old installer were removed. Current PDF and document-import regressions remain; route coverage targets FastAPI and pagination/source-page coverage targets the React utilities.
 
-Do not delete existing user work or move live SQLite files automatically. For migration, stop the old app and copy the whole data directory (including any WAL files), or use COLLOQUILY_DATA_DIR. Keep a backup.
+Existing database migrations and saved-setting normalization remain because they protect user data, not because a second application is supported. Inference uses locally installed Ollama or LM Studio. The packaged API requires a launch token and rejects foreign browser origins.

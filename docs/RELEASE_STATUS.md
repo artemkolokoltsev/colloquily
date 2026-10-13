@@ -11,9 +11,11 @@
 
 ## Verified commands
 
-- Backend/API: 23 tests passed.
-- Retained domain suite: 75 tests passed.
-- Frontend: translation parity and production build passed.
+- Backend/API: 28 tests passed, including PDFium text, image, rendering, and concurrent-import regressions.
+- Current domain suite: 65 tests passed. Obsolete Flask/global-index tests were replaced or removed with the obsolete features; desktop pagination/source-page coverage has 4 passing tests.
+- Frontend: translation parity, component utility tests, TypeScript and production build passed.
+- Frozen Intel macOS sidecar: rebuilt and self-tested against PDF/Markdown import, SQLite, FAISS, API access and packaged prompts. Removed dependencies are excluded; its collected runtime notices include PDFium native notices.
+- Runtime dependency audit: no known vulnerabilities found in the collected Python inventory; production JavaScript audit found zero vulnerabilities.
 - Rust: `cargo check --locked` passed with Rust 1.90.
 - JavaScript dependencies: `npm audit --audit-level=high` found zero vulnerabilities.
 
@@ -23,6 +25,6 @@
 - Apple Silicon, Intel macOS, and Windows clean-machine installation tests remain outstanding.
 - The updater public key is a deliberate placeholder. Tauri signing, Apple Developer ID/notarization, and Windows Authenticode secrets are not configured.
 - GitHub Actions and release publishing have not run; there is no release URL or downloadable asset yet.
-- The full model-backed PDF→FAISS→generation→practice→update acceptance matrix still requires native runners, installed Ollama models, and signed artifacts.
-- Full translation of every feature screen is incomplete; the first-run shell, navigation, exam creation, settings, update/backup UI, progress primitives, and structured errors are localized, while several domain screens still contain English copy.
+- Real local Ollama PDF→FAISS→generation→practice→backup/restore→restart smoke passed using synthetic data. Signed updates and the cross-platform acceptance matrix remain outstanding.
+- Feature screen catalogs are checked for German/English key and interpolation parity. Generated study content and original course passages are not translated retroactively.
 - Third-party license inventory/approval for frozen native dependencies remains a release blocker.

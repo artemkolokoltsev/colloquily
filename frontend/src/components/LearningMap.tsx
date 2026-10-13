@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { LearningTopic } from "../types";
 export function LearningMap({
   topics,
@@ -8,12 +9,13 @@ export function LearningMap({
   selected: string;
   onSelect: (name: string) => void;
 }) {
+  const { t: tr } = useTranslation();
   return (
     <div className="learning-map">
       <div className="map-root">
-        <span className="brand-mini">C</span>
-        <strong>Your knowledge map</strong>
-        <small>Select a topic to explore its questions</small>
+        <span className="brand-mini">{tr('ui.s6b23c0d5f3')}</span>
+        <strong>{tr('ui.scbbacdb84b')}</strong>
+        <small>{tr('ui.sb68e9b41d7')}</small>
       </div>
       <div className="map-branches">
         {topics.map((t) => (
@@ -40,21 +42,14 @@ export function LearningMap({
               {t.mastery_state.replaceAll("_", " ")}
             </span>
             <small>
-              {t.practised}/{t.questions} questions practised · {t.attempts}{" "}
-              answers
-            </small>
+              {t.practised}/{t.questions} {tr('ui.sb77d660174')} {t.attempts}{" "} {tr('ui.s677fe21b65')} </small>
           </button>
         ))}
       </div>
       {!topics.length && (
-        <p className="empty-state">
-          Import or generate questions to grow your topic map.
-        </p>
+        <p className="empty-state"> {tr('ui.s5c8a74fe01')} </p>
       )}
-      <p className="map-caption">
-        Branches group questions by topic. Rings show average assessed scores;
-        they are not a guarantee of exam readiness.
-      </p>
+      <p className="map-caption"> {tr('ui.s6510c73809')} </p>
     </div>
   );
 }

@@ -20,6 +20,17 @@ from services.progress import subject_progress
 from services.exam_packs import generate_exam_pack, list_exam_pack_sections, review_exam_pack_section
 
 router = APIRouter(prefix="/api")
+from backend.models.api import LanguageInput
+
+@router.get('/preferences', response_model=Record)
+def preferences():
+    from backend.services.preferences import load_preferences
+    return load_preferences()
+
+@router.patch('/preferences', response_model=Record)
+def change_preferences(body: LanguageInput):
+    from backend.services.preferences import save_preferences
+    return save_preferences(body.language)
 MAX_SOURCE_BYTES = 100 * 1024 * 1024
 
 def _copy_limited(upload: UploadFile, destination: Path, limit: int = MAX_SOURCE_BYTES) -> None:
@@ -82,8 +93,7 @@ def update_exam(ident: int, body: ExamInput):
 @router.delete("/exams/{ident}", response_model=Record)
 def delete_exam(ident: int):
     flow.exam(ident)
-    if len(db.list_subjects()) <= 1:
-        raise ValueError("The final exam cannot be deleted")
+    create_backup()
     db.delete_subject(ident)
     clear_subject_index_cache()
     return {"deleted": True, "raw_workspace_preserved": True}
@@ -279,8 +289,10 @@ def settings():
 @router.patch("/settings", response_model=Record)
 def update_settings(body: SettingsInput):
     values = runtime_settings.load_runtime_settings() | body.values
+    from backend.services.models import require_loopback
+    require_loopback(str(values.get('OLLAMA_URL', config.OLLAMA_URL)))
+    require_loopback(str(values.get('LMSTUDIO_BASE_URL', config.LMSTUDIO_BASE_URL)))
     # Keep downloads explicit; desktop inference must never silently fetch model weights.
-    values["ST_ALLOW_DOWNLOAD"] = False
     result = runtime_settings.save_runtime_settings_from_form(values)
     clear_subject_index_cache()
     return result
@@ -356,6 +368,46 @@ def correct(ident: int, attempt_id: int, body: CorrectionInput):
 def backup_workspace():
     return create_backup()
 
+@router.get('/system/activity', response_model=Record)
+def workspace_activity():
+    from backend.services.maintenance import activity
+    return activity()
+
+@router.get('/system/storage', response_model=Record)
+def workspace_storage():
+    return {'free_bytes': shutil.disk_usage(config.DATA_DIR).free}
+
+@router.post('/system/update/begin', response_model=Record)
+def reserve_update():
+    from backend.services.maintenance import gate
+    result = create_backup()
+    gate.update_pending = True
+    return result
+
+@router.post('/system/update/cancel', response_model=Record)
+def cancel_update():
+    from backend.services.maintenance import gate
+    gate.update_pending = False
+    return {'cancelled': True}
+
+@router.post('/practice/{ident}/finish', response_model=Record)
+def finish_practice(ident: int):
+    flow.run(ident)
+    from contextlib import closing
+    with closing(db._connect()) as database:
+        database.execute("UPDATE exam_sessions SET status='completed', deadline_at=NULL WHERE exam_run_id=? AND status NOT IN ('completed','expired')", (ident,))
+        database.execute("UPDATE exam_runs SET status='completed' WHERE id=?", (ident,))
+        database.commit()
+    return flow.run(ident)
+
+@router.get('/backups/{filename}')
+def download_backup(filename: str):
+    root = Path(config.DATA_DIR).resolve() / 'backups' / 'exports'
+    path = (root / filename).resolve()
+    if not path.is_relative_to(root) or not path.is_file() or path.suffix != '.colloquily-backup':
+        raise HTTPException(404, 'Backup not found')
+    return FileResponse(path, filename=path.name, media_type='application/zip')
+
 
 @router.post("/backups/inspect", response_model=Record)
 def inspect_workspace_backup(file: UploadFile = File(...)):
@@ -377,7 +429,13 @@ def restore_workspace_backup(file: UploadFile = File(...), confirmed: bool = Fal
     with incoming.open("wb") as output:
         shutil.copyfileobj(file.file, output)
     try:
-        return restore_backup(incoming, confirmed=confirmed)
+        result = restore_backup(incoming, confirmed=confirmed)
+        db.init_db(seed_admin=False)
+        runtime_settings.initialize_runtime_settings()
+        from backend.services.preferences import load_preferences
+        load_preferences()
+        clear_subject_index_cache()
+        return result
     finally:
         incoming.unlink(missing_ok=True)
 

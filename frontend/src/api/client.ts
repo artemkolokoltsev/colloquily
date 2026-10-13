@@ -38,7 +38,7 @@ export async function api<T>(
       .json()
       .catch(() => ({ detail: response.statusText }));
     const code = error.error?.code;
-    const translated = code && i18n.exists(`errors.${code}`) ? i18n.t(`errors.${code}`) : undefined;
+    const translated = code && i18n.exists(`errors.${code}`) ? i18n.t(`errors.${code}`, { defaultValue: i18n.t('errors.unknown') }) : undefined;
     throw new Error(translated || error.error?.message || (typeof error.detail === "string" ? error.detail : JSON.stringify(error.detail)));
   }
   return response.json();
@@ -66,4 +66,13 @@ export async function sourceBlob(exam: number, filename: string) {
   );
   if (!response.ok) throw new Error("Unable to open source");
   return URL.createObjectURL(await response.blob());
+}
+
+export async function downloadBackup(filename: string) {
+  const response = await fetch(`${base}/api/backups/${encodeURIComponent(filename)}`, { headers: token ? { 'X-Colloquily-Token': token } : {} });
+  if (!response.ok) throw new Error(i18n.t('errors.unknown'));
+  const url = URL.createObjectURL(await response.blob());
+  const anchor = document.createElement('a');
+  anchor.href = url; anchor.download = filename; anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }

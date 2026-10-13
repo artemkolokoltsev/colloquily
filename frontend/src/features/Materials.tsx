@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { api, operation } from "../api/client";
 import { ErrorNotice, Progress, Sources } from "../components/Common";
@@ -29,6 +30,7 @@ export function Materials({
   onPractice: () => void;
   onSetup: () => void;
 }) {
+  const { t } = useTranslation();
   const [preparation, setPreparation] = useState<{
     job: Job | null;
     questions: number;
@@ -77,16 +79,11 @@ export function Materials({
   );
   return (
     <section>
-      <p className="eyebrow">Your exam → Your materials → Your practice</p>
-      <h2>Add your lecture PDFs</h2>
-      <p>
-        Upload your notes, then let Colloquily prepare questions from them. You
-        can leave this page while preparation runs.
-      </p>
+      <p className="eyebrow">{t('ui.sac2cb8bf2e')}</p>
+      <h2>{t('ui.s969acea333')}</h2>
+      <p> {t('ui.s4c217f0366')} </p>
       <ErrorNotice error={error} />
-      <label>
-        Choose PDFs or notes
-        <input
+      <label> {t('ui.s9098f1f65b')} <input
           disabled={busy || preparing || processing}
           type="file"
           multiple
@@ -107,58 +104,51 @@ export function Materials({
         ))}
       </ul>
       {data && !data.raw.length && (
-        <p>No material yet. Add your lecture notes above.</p>
+        <p>{t('ui.s579041d84b')}</p>
       )}
       <article className="preparation-card">
         <h3>
           {preparing
-            ? "Getting your practice ready…"
+            ? t('ui.s86565c9c89')
             : preparation?.questions
-              ? "You have questions to practise"
-              : "Ready when you are"}
+              ? t('ui.s40b3761cb8')
+              : t('ui.s34ef570432')}
         </h3>
-        <p>
-          We’ll read your files, check the study text, and prepare your first
-          questions. Unclear passages stay out of practice.
-        </p>
+        <p> {t('ui.s0650bb8705')} </p>
         <button
           className="primary"
           disabled={busy || preparing || processing || !data?.raw.length}
           onClick={() => act(() => api(`/exams/${exam}/prepare`, "POST"))}
         >
           {preparation?.job?.status === "failed"
-            ? "Try preparation again"
-            : "Prepare my practice"}
+            ? t('ui.s8c029bc7ca')
+            : t('ui.s80a7b9c840')}
         </button>
         {!!preparation?.questions && (
-          <button className="primary" onClick={onPractice}>
-            Start practising →
-          </button>
+          <button className="primary" onClick={onPractice}> {t('ui.sc69f851732')} </button>
         )}
         <Progress job={preparation?.job || null} />
         {preparation?.job?.status === "failed" && (
           <>
             <ErrorNotice
-              error={preparation.job.error || "Preparation stopped. Try again."}
+              error={preparation.job.error || t('ui.sab42b805f9')}
             />
-            <button onClick={onSetup}>Check AI setup</button>
+            <button onClick={onSetup}>{t('ui.s7932a732e4')}</button>
           </>
         )}
       </article>
       <details>
-        <summary>Advanced tools · processing & source review</summary>
-        <p className="muted">
-          Optional controls for inspecting passages or troubleshooting a file.
-        </p>
+        <summary>{t('ui.sc933415600')}</summary>
+        <p className="muted"> {t('ui.s29f1fc0e10')} </p>
         <div className="toolbar">
           <select
-            aria-label="Processing mode"
+            aria-label={t('ui.s25aaa653a5')}
             value={mode}
             onChange={(e) => setMode(e.target.value)}
           >
-            <option value="fast">Fast processing</option>
-            <option value="deep">Deep processing</option>
-            <option value="deterministic">Deterministic (no LLM)</option>
+            <option value="fast">{t('ui.s5d28dddc38')}</option>
+            <option value="deep">{t('ui.s938c8b62b7')}</option>
+            <option value="deterministic">{t('ui.s29aa06dc22')}</option>
           </select>
           <button
             disabled={
@@ -168,25 +158,19 @@ export function Materials({
             onClick={() =>
               act(() => api(`/exams/${exam}/process`, "POST", { mode }))
             }
-          >
-            Process materials
-          </button>
+          > {t('ui.s9ba15dba5c')} </button>
           <button
             disabled={busy || preparing || processing}
             onClick={() =>
               act(() => api(`/exams/${exam}/process/retry`, "POST"))
             }
-          >
-            Resume processing
-          </button>
+          > {t('ui.s2c4517af49')} </button>
           <button
             disabled={busy || preparing || processing}
             onClick={() =>
               act(() => operation(`/exams/${exam}/index`, {}, setJob))
             }
-          >
-            Build accepted-evidence index
-          </button>
+          > {t('ui.s0c123f1916')} </button>
         </div>
         {data?.processing && (
           <div role="status">
@@ -198,8 +182,8 @@ export function Materials({
           </div>
         )}
         <Progress job={job} />
-        <h3>Evidence review</h3>
-        {!units.length && <p>Process materials to see reviewable evidence.</p>}
+        <h3>{t('ui.sbcb9c2e713')}</h3>
+        {!units.length && <p>{t('ui.s6adfed4d6a')}</p>}
         {units.map((unit) => (
           <article key={unit.id}>
             <strong>
@@ -207,7 +191,7 @@ export function Materials({
             </strong>
             <span>{unit.review_status}</span>
             <textarea
-              aria-label="Evidence text"
+              aria-label={t('ui.sef57bb58eb')}
               defaultValue={unit.content}
               key={`${unit.id}:${unit.content}`}
               onBlur={(e) => {

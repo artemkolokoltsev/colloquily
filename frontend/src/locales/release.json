@@ -1,0 +1,40 @@
+{
+  "en": {
+    "restore": "Restore workspace",
+    "selectBackup": "Choose a Colloquily backup",
+    "preview": "Backup from {{date}} · {{count}} files · schema {{schema}}",
+    "confirmRestore": "Replace this workspace? A safety backup will be kept. Finish all practice and processing first.",
+    "restored": "Workspace restored. Reloading…",
+    "busy": "Finish active practice and background jobs before continuing.",
+    "download": "Download backup",
+    "notes": "Release notes",
+    "unavailable": "Updates are unavailable in browser mode or until release signing is configured.",
+    "welcome": "Welcome to Colloquily",
+    "privacy": "Your materials, answers, and feedback stay on this computer. Ollama runs the AI locally. Internet access is used for explicit model downloads and application update checks.",
+    "continue": "Create your first exam",
+    "cancel": "Cancel",
+    "reviewFallback": "Starter questions await review in the question library. Accept only questions that match your material.",
+    "deletePreview": "Delete this exam and its practice records? A complete backup is created first. Original source files remain on disk.",
+    "clearCache": "Clear regenerable caches",
+    "cacheConfirm": "Clear extracted-page and render caches? Documents, model weights, questions, and answers are preserved."
+  },
+  "de": {
+    "restore": "Arbeitsbereich wiederherstellen",
+    "selectBackup": "Colloquily-Sicherung auswählen",
+    "preview": "Sicherung vom {{date}} · {{count}} Dateien · Schema {{schema}}",
+    "confirmRestore": "Diesen Arbeitsbereich ersetzen? Eine Sicherheitskopie bleibt erhalten. Beende zuerst alle Übungen und Verarbeitungen.",
+    "restored": "Arbeitsbereich wiederhergestellt. Wird neu geladen…",
+    "busy": "Beende laufende Übungen und Hintergrundaufgaben, bevor du fortfährst.",
+    "download": "Sicherung herunterladen",
+    "notes": "Versionshinweise",
+    "unavailable": "Updates sind im Browsermodus oder ohne konfigurierte Versionssignierung nicht verfügbar.",
+    "welcome": "Willkommen bei Colloquily",
+    "privacy": "Deine Materialien, Antworten und Bewertungen bleiben auf diesem Computer. Ollama führt die KI lokal aus. Internetzugriff erfolgt für ausdrücklich gewählte Modelldownloads und die Suche nach Programmupdates.",
+    "continue": "Erste Prüfung erstellen",
+    "cancel": "Abbrechen",
+    "reviewFallback": "Einstiegsfragen warten in der Fragenbibliothek auf Prüfung. Akzeptiere nur Fragen, die zu deinen Materialien passen.",
+    "deletePreview": "Diese Prüfung und ihre Übungsdaten löschen? Zuerst wird eine vollständige Sicherung erstellt. Originalquellen bleiben auf der Festplatte.",
+    "clearCache": "Wiederherstellbare Zwischenspeicher leeren",
+    "cacheConfirm": "Extrahierte Seiten und Darstellungscaches leeren? Dokumente, Modellgewichte, Fragen und Antworten bleiben erhalten."
+  }
+}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { sourceBlob } from "../api/client";
 import type { Evaluation, Job, Source } from "../types";
 import { useTranslation } from "react-i18next";
+import { sourcePage } from './sourcePage';
 export function ErrorNotice({ error }: { error: string }) {
   return error ? (
     <p role="alert" className="error">
@@ -50,7 +51,7 @@ export function EvaluationView({ value }: { value: Evaluation | null }) {
   return (
     <article>
       <h3>{t("common.answerFeedback")} {value.score != null && `· ${value.score}/5`}</h3>
-      {["correct", "missing", "incorrect"].map((key) => (
+      {(["correct", "missing", "incorrect"] as const).map((key) => (
         <div key={key}>
           <h4>{t(`common.${key}`)}</h4>
           <ul>
@@ -79,7 +80,7 @@ export function Sources({
   const [error, setError] = useState("");
   useEffect(
     () => () => {
-      if (url) URL.revokeObjectURL(url);
+      if (url) URL.revokeObjectURL(url.split('#')[0]);
     },
     [url],
   );
@@ -97,7 +98,10 @@ export function Sources({
             <button
               onClick={() => {
                 sourceBlob(exam, s.relative_path || s.doc_name!)
-                  .then(setUrl)
+                  .then((blobUrl) => {
+                    const page = sourcePage(s);
+                    setUrl(page ? `${blobUrl}#page=${page}` : blobUrl);
+                  })
                   .catch((e) => setError(String(e)));
               }}
             >

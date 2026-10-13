@@ -23,6 +23,13 @@ jobs:
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      COLLOQUILY_CODESIGN_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@v4
       - name: Require release credentials
@@ -32,16 +39,38 @@ jobs:
         run: |
           test -n "$TAURI_SIGNING_PRIVATE_KEY"
           test -n "$UPDATER_PUBLIC_KEY"
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            test -n "$APPLE_CERTIFICATE"
+            test -n "$APPLE_SIGNING_IDENTITY"
+            test -n "$APPLE_ID"
+            test -n "$APPLE_PASSWORD"
+            test -n "$APPLE_TEAM_ID"
+          fi
           node scripts/configure_release_key.mjs "$UPDATER_PUBLIC_KEY"
       - uses: actions/setup-python@v5
         with: { python-version: "3.11", cache: pip }
+      - name: Configure Windows Authenticode
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: ./scripts/configure_windows_signing.ps1
       - uses: actions/setup-node@v4
         with: { node-version: "22", cache: npm }
       - uses: dtolnay/rust-toolchain@1.90.0
+      - name: Import Developer ID before signing Python libraries
+        if: runner.os == 'macOS'
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
       - run: python -m pip install -r backend/requirements.txt
       - run: npm ci
       - run: npm test
       - run: npm run test:api
+      - run: python scripts/test_core.py
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run build:sidecar
       - run: python scripts/smoke_sidecar.py
       - uses: tauri-apps/tauri-action@v0
@@ -55,4 +84,10 @@ jobs:
           updaterJsonPreferNsis: true
           assetNamePattern: "Colloquily_[version]_[arch][setup][ext]"
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - run: python scripts/checksums.py src-tauri/target/${{ matrix.target }}/release/bundle ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-${{ matrix.target }}
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/
+          if-no-files-found: error
 

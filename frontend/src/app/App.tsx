@@ -23,7 +23,8 @@ const advancedPages = [
   "Advanced settings",
 ];
 export default function App() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const [welcomed, setWelcomed] = useState(() => localStorage.getItem('colloquily.welcomed') === 'true');
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [exams, setExams] = useState<Exam[]>([]);
@@ -50,6 +51,9 @@ export default function App() {
     setError("");
     try {
       await connect();
+      const preferences = await api<{language?: string}>('/preferences');
+      if (preferences.language) await i18n.changeLanguage(preferences.language);
+      else await api('/preferences', 'PATCH', { language: i18n.resolvedLanguage || 'en' });
       const existing = await refresh();
       if (!existing.length) setPage("Exams");
       else if (existing.length === 1 && existing[0].slug === "imported-exam") {
@@ -77,9 +81,11 @@ export default function App() {
     setBusy(true);
     setError("");
     try {
+      await api('/preferences', 'PATCH', { language: i18n.resolvedLanguage || 'en' });
       const exam = await api<Exam>("/exams", "POST", {
         name,
         exam_date: examDate || null,
+        language: i18n.resolvedLanguage || 'en',
       });
       await refresh();
       setSelected(exam.id);
@@ -166,6 +172,12 @@ export default function App() {
       </aside>
       <main>
         <ErrorNotice error={error} />
+        {!welcomed && !exams.length && <section>
+          <h2>{t('release.welcome')}</h2>
+          <label>{t('settings.language')}<select value={i18n.resolvedLanguage || 'en'} onChange={event => void i18n.changeLanguage(event.target.value)}><option value="de">Deutsch</option><option value="en">English</option></select></label>
+          <p>{t('release.privacy')}</p>
+          <button onClick={() => { localStorage.setItem('colloquily.welcomed', 'true'); setWelcomed(true); }}>{t('release.continue')}</button>
+        </section>}
         {aiSetup && page !== "Local AI" && (
           <div className="setup-notice">
             {t("setup.notice")}{" "}
@@ -240,6 +252,7 @@ export default function App() {
             }}
           />
         )}
+        {page === 'Advanced settings' && <Settings exam={selected} />}
         {selected > 0 && (
           <div key={`${page}:${selected}`}>
             {page === "Dashboard" && (
@@ -274,7 +287,6 @@ export default function App() {
             )}{" "}
             {page === "Progress" && <ProgressPage exam={selected} />}{" "}
             {page === "Study plan" && <StudyPlan exam={selected} />}{" "}
-            {page === "Advanced settings" && <Settings exam={selected} />}
           </div>
         )}
       </main>

@@ -2,7 +2,7 @@
 def run():
     import json
     import numpy as np
-    import fitz
+    from services.synthetic_pdf import synthetic_pdf
     from pathlib import Path
     from fastapi.testclient import TestClient
     from backend.main import app
@@ -24,11 +24,7 @@ def run():
         raw = workspace_for(exam).folder('raw')
         content = 'A network protocol defines message structure and the actions used by devices to exchange information.'
         (raw / 'notes.md').write_text('# Networks\n\n' + content, encoding='utf-8')
-        doc = fitz.open()
-        page = doc.new_page()
-        page.insert_text((72, 72), content)
-        doc.save(raw / 'notes.pdf')
-        doc.close()
+        synthetic_pdf([[(72, 72, content)]], raw / 'notes.pdf')
         result = process_subject(exam['id'], mode='deterministic')
         assert not result['failed'], result
         index = SubjectIndex(exam['id'], embedder=Embedder())
