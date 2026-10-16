@@ -19,8 +19,10 @@ Prepared after the published 0.1.0 RC4 preview. No new release has been publishe
 
 ## Release gates
 
-Final real-model quality/coverage acceptance and fresh Windows/Apple Silicon
-native CI/hardware checks remain outstanding. See [the verification report](LEARNING_QUALITY_PATCH.md).
+Windows x64, Intel macOS and Apple Silicon native CI builds pass, including
+packaged-backend and license/source checks. Final real-model quality/coverage
+acceptance and clean-machine GUI installation checks remain outstanding.
+See [the verification report](LEARNING_QUALITY_PATCH.md).
 The local Intel macOS build is for validation, not a signed production installer.
 Signing/notarization and updater credentials remain separate release requirements.
 

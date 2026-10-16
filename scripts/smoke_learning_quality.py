@@ -69,6 +69,7 @@ with TestClient(app) as client, patch('backend.services.models.OllamaProvider.pu
     assert response.status_code == 201, response.text
     prepared = wait(client, client.post(f'/api/exams/{ident}/prepare'))
     questions = client.get(f'/api/exams/{ident}/questions').json()
+    review_units = client.get(f'/api/exams/{ident}/review').json()
     from services.subject_workspace import workspace_for
     from services.database import get_subject
     reports = workspace_for(get_subject(ident)).folder('reports')
@@ -80,7 +81,8 @@ with TestClient(app) as client, patch('backend.services.models.OllamaProvider.pu
     report_path = root / 'output' / 'learning-quality-smoke.json'
     report_path.parent.mkdir(exist_ok=True)
     report_path.write_text(json.dumps({'workspace': str(data), 'preparation': prepared, 'coverage': coverage,
-                                      'questions': questions, 'validation_audit': audit, 'acceptance_passed': False},
+                                      'questions': questions, 'evidence_units': review_units,
+                                      'validation_audit': audit, 'acceptance_passed': False},
                                      ensure_ascii=False, indent=2), encoding='utf-8')
     assert prepared['status'] == 'completed', {'job': prepared, 'validation_audit': audit}
     assert len(questions) >= 4, {'job':prepared, 'questions':questions}
@@ -88,7 +90,7 @@ with TestClient(app) as client, patch('backend.services.models.OllamaProvider.pu
     assert all('this passage' not in q['question_text'].lower() for q in questions)
     assert all(q['review_status'] == 'accepted' for q in questions)
     assert client.get(f'/api/exams/{other["id"]}/questions').json() == []
-    units = {unit['id']: unit for unit in client.get(f'/api/exams/{ident}/review').json()}
+    units = {unit['id']: unit for unit in review_units}
     assert len({units[eid]['document_id'] for question in questions for eid in question['evidence_ids']}) == 2
     for question in questions:
         assert set(question['evidence_ids']).issubset(units)
@@ -105,7 +107,7 @@ with TestClient(app) as client, patch('backend.services.models.OllamaProvider.pu
     saved = client.get(f'/api/practice/{run["id"]}').json()
     assert saved['status'] == 'completed'
     assert all(attempt['evaluation']['status'] == 'skipped' for attempt in saved['sessions'][0]['attempts'])
-    report = {'workspace':str(data), 'preparation_status':prepared['status'], 'preparation_result':prepared.get('result'), 'preparation_error':prepared.get('error'), 'coverage':coverage, 'task_models':setup.get('result', {}).get('task_models'), 'questions':questions, 'skip_session':saved['status'], 'acceptance_passed':True}
+    report = {'workspace':str(data), 'preparation_status':prepared['status'], 'preparation_result':prepared.get('result'), 'preparation_error':prepared.get('error'), 'coverage':coverage, 'task_models':setup.get('result', {}).get('task_models'), 'questions':questions, 'evidence_units':review_units, 'validation_audit':audit, 'skip_session':saved['status'], 'acceptance_passed':True}
     (root / 'output').mkdir(exist_ok=True)
     (root / 'output' / 'learning-quality-smoke.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
     print(json.dumps({'synthetic_questions_for_review': [

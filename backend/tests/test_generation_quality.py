@@ -169,6 +169,13 @@ class GenerationQualityTests(unittest.TestCase):
         self.assertIn('embedding_semantic_duplicate', self.audit()[-1]['reasons'])
         self.assertEqual(len(list_questions(self.subject['id'])), 1)
 
+    def test_interrogative_boilerplate_cannot_hide_a_duplicate_learning_prompt(self):
+        source = 'Message passing updates a node representation by aggregating information from neighboring nodes.'
+        payload = dict(self.payload, question_text='What mechanism does the message passing update in graph neural networks?',
+                       evidence_ids=[1], expected_core_points=[{'text': source, 'source_quote': source, 'evidence_ids': [1]}])
+        existing = [{'question_text': 'What is the mechanism of message passing in graph neural networks?'}]
+        self.assertIn('duplicate', question_quality_problems(payload, {1: {'content': source}}, existing))
+
     def test_reprocessing_preserves_citation_ids_and_review_decisions(self):
         question = generate_grounded_questions(self.subject, 1, llm_client=self.client())[0]
         review_question(question['id'], 'accepted')

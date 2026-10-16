@@ -62,6 +62,13 @@ class PreparationTests(unittest.TestCase):
         self.generate.assert_not_called()
         self.review.assert_not_called()
 
+    def test_stale_historical_sources_do_not_satisfy_current_coverage(self):
+        stale = [{'id': number, 'evidence_ids': [9, 999], 'review_status': 'accepted'} for number in (1, 2)]
+        self.available.side_effect = [stale, [{'id': 12}]]
+        prepare_exam(7, Mock())
+        self.generate.assert_called_once()
+        self.assertEqual(self.generate.call_args.args[1], 2)
+
     def test_invalid_generation_reports_limitation_without_fallback(self):
         self.generate.side_effect = ValueError('Invalid evidence')
         with self.assertRaisesRegex(ValueError, 'quality requirements'):

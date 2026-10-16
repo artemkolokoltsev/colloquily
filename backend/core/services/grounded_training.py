@@ -108,9 +108,9 @@ def question_quality_problems(payload: dict, evidence: dict, existing: list[dict
             a, b = concept_terms(left), concept_terms(right)
             if a and b and len(a & b) / min(len(a), len(b)) >= .8:
                 reasons.append('comparison_of_same_concept_and_example')
-    terms = _semantic_terms(text)
+    terms = _question_terms(text)
     for question in existing:
-        other = _semantic_terms(question['question_text'])
+        other = _question_terms(question['question_text'])
         if SequenceMatcher(None, text.casefold(), question['question_text'].casefold()).ratio() > .9 or len(terms & other) / max(1, len(terms | other)) > .8:
             reasons.append('duplicate')
             break
@@ -129,6 +129,13 @@ def _supported_term_ratio(claim: str, source: str) -> float:
         return {aliases.get(token, token.removesuffix('s') if len(token) > 4 else token) for token in tokens if token not in stop and len(token) > 1}
     expected, available = terms(claim), terms(source)
     return sum(any(SequenceMatcher(None, word, actual).ratio() >= .86 for actual in available) for word in expected) / max(1, len(expected))
+
+
+def _question_terms(text: str) -> set[str]:
+    # Interrogative boilerplate must not hide near-identical learning prompts.
+    # Keep this separate from answer-grading terms and retain content/negation.
+    stop = set('what which how why when where who does do did is are was were the a an of in on at to for by with and or explain describe define was wie warum wann wo wer welcher welche welches ist sind der die das ein eine eines im am an auf zu zur zum mit und oder erklären beschreiben definieren'.split())
+    return _semantic_terms(text) - stop
 
 
 class EvidenceClaim(BaseModel):

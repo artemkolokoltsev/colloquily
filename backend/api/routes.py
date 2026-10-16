@@ -300,7 +300,7 @@ def begin(ident: int):
 @router.post("/sessions/{ident}/answer", response_model=Job, status_code=202)
 def answer(ident: int, body: AnswerInput):
     flow.session(ident)
-    return jobs.submit(f"answer:{ident}", "Saving and evaluating answer", lambda _: flow.submit(ident, body.answer, body.response_duration_seconds))
+    return jobs.submit(f"answer:{ident}", "Saving and evaluating answer", lambda _: flow.submit(ident, body.answer, body.response_duration_seconds, expected_question_id=body.question_id))
 
 @router.post("/sessions/{ident}/skip", response_model=Record)
 def skip(ident: int, body: SkipInput):

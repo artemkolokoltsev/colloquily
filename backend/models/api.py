@@ -56,6 +56,7 @@ class RunInput(BaseModel):
 class AnswerInput(BaseModel):
     answer: str = Field(min_length=1, max_length=100000)
     response_duration_seconds: int = Field(default=0, ge=0)
+    question_id: int | None = Field(default=None, ge=1)
 
 class SkipInput(BaseModel):
     question_id: int = Field(ge=1)

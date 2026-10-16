@@ -4,10 +4,16 @@ Development checkout: **0.1.1 patch in progress, not release-approved**. See
 [UX/learning-quality changes and verification](LEARNING_QUALITY_PATCH.md).
 The published RC4 installers below are unchanged; they do not contain this patch.
 
-Latest local verification (2026-10-16): 56 backend, 65 domain and 4 frontend
+Latest local verification (2026-10-16): 64 backend, 65 domain and 4 frontend
 tests pass, along with translation parity and the TypeScript/Vite production
 build. The native artifact workflow now runs the domain regressions on every
 supported target, including Skip and evidence-history preservation.
+
+The [0.1.1 native build matrix](https://github.com/artemkolokoltsev/colloquily/actions/runs/38906920356)
+passed Windows x64, Intel macOS and Apple Silicon macOS. It produced all three
+installer archives and three matching license/source archives. These are CI
+artifacts, not a newly published GitHub Release. Real-model quality acceptance
+remains open; no new tag or public release has been created.
 
 ## Historical v0.1.0 RC4 verification
 

@@ -1,4 +1,5 @@
 import os
+import json
 import tempfile
 import time
 import unittest
@@ -17,6 +18,41 @@ from fastapi import UploadFile
 from io import BytesIO
 
 class ArchitectureTests(unittest.TestCase):
+    def test_delayed_answer_after_skip_cannot_grade_the_next_question(self):
+        fixture = Path(__file__).resolve().parents[2] / 'tests/core/fixtures/question_pool.json'
+        questions = json.loads(fixture.read_text(encoding='utf-8'))
+        questions[0]['concept_id'] = 'behaviorism-definition'
+        questions.append({**questions[0], 'id': 'TEST002', 'concept_id': 'reinforcement-effect',
+                          'question': 'How does reinforcement affect observable behavior?',
+                          'expected_answer_points': ['Reinforcement changes the likelihood of observed behavior.']})
+        with TestClient(app) as client:
+            ident = client.post('/api/exams', json={'name': 'Delayed answer regression'}).json()['id']
+            imported = client.post(f'/api/exams/{ident}/questions/import', files={'file': ('pool.json', json.dumps(questions).encode(), 'application/json')})
+            self.assertEqual(imported.status_code, 200, imported.text)
+            run = client.post('/api/practice', json={'subject_ids': [ident], 'mode': 'random_practice', 'question_count': 2}).json()
+            session = client.post(f'/api/sessions/{run["sessions"][0]["id"]}/begin').json()
+            first = session['current_question_id']
+            with patch('backend.services.workflows.evaluate') as evaluate:
+                session = client.post(f'/api/sessions/{session["id"]}/skip', json={'question_id': first}).json()['session']
+                self.assertEqual(session['status'], 'answering')
+                second = session['current_question_id']
+                self.assertNotEqual(first, second)
+                response = client.post(f'/api/sessions/{session["id"]}/answer', json={'question_id': first, 'answer': 'A delayed answer to the skipped question.'})
+                self.assertEqual(response.status_code, 202, response.text)
+                job = response.json()
+                for _ in range(100):
+                    job = client.get(f'/api/jobs/{job["id"]}').json()
+                    if job['status'] not in {'queued', 'running'}:
+                        break
+                    time.sleep(.02)
+                self.assertEqual(job['status'], 'completed', job)
+                self.assertEqual(job['result']['session']['current_question_id'], second)
+                self.assertIsNone(job['result']['evaluation'])
+                evaluate.assert_not_called()
+            saved = client.get(f'/api/practice/{run["id"]}').json()
+            self.assertEqual(len(saved['sessions'][0]['attempts']), 1)
+            self.assertEqual(saved['sessions'][0]['attempts'][0]['evaluation']['status'], 'skipped')
+
     def test_skip_is_synchronous_non_ai_and_idempotent(self):
         fixture = Path(__file__).resolve().parents[2] / 'tests/core/fixtures/question_pool.json'
         with TestClient(app) as client:

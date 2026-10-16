@@ -34,12 +34,15 @@ Use the corresponding architecture suffix and `.exe` on Windows. This verifies l
 
 An unsigned Intel macOS debug `.app` was built and launched with disposable data. Its bundled React UI successfully fetched health, exams, and model status from its automatically launched sidecar. Quitting the application produced a clean Uvicorn shutdown and closed its loopback listener. The separate sidecar lifecycle test also passed token/Origin checks and shutdown on parent EOF. Apple Silicon and Windows artifacts have not been executed on this host.
 
-The 0.1.1 source checks comprise 57 backend/API tests, 65 domain regressions and
+The 0.1.1 source checks comprise 64 backend/API tests, 65 domain regressions and
 four frontend utility tests, plus translation parity and a TypeScript production
 build. The native artifact matrix runs the domain suite on every OS, including
 Skip and evidence-history preservation. Browser verification and real-model
 acceptance details are recorded in [the patch report](LEARNING_QUALITY_PATCH.md).
 Native installer builds do not replace clean-machine GUI acceptance.
+
+Unsigned RC tags also run synthetic local-model acceptance in an isolated runner.
+Publication depends on that job and every native target, not packaging alone.
 
 ## Release blockers
 

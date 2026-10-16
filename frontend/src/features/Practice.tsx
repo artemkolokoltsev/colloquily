@@ -97,7 +97,8 @@ export function Practice({
     setFeedback(null);
   }
   async function submit(skip = false) {
-    if (!session || submitting.current) return;
+    if (!session?.current_question || submitting.current) return;
+    const questionId = session.current_question.id;
     submitting.current = true;
     transitionVersion.current += 1;
     setJob(null);
@@ -107,21 +108,20 @@ export function Practice({
         ? await api<{ session: Session; evaluation: null }>(
             `/sessions/${session.id}/skip`,
             "POST",
-            { question_id: session.current_question?.id },
+            { question_id: questionId },
           )
         : await operation<{
             session: Session;
             evaluation: Evaluation | null;
           }>(
-            `/sessions/${session.id}/${skip ? "skip" : "answer"}`,
-            skip
-              ? {}
-              : {
-                  answer,
-                  response_duration_seconds: Math.floor(
-                    (Date.now() - started) / 1000,
-                  ),
-                },
+            `/sessions/${session.id}/answer`,
+            {
+              answer,
+              question_id: questionId,
+              response_duration_seconds: Math.floor(
+                (Date.now() - started) / 1000,
+              ),
+            },
             setJob,
           );
       setSession(result.session);

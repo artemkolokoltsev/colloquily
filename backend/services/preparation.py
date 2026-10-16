@@ -50,13 +50,15 @@ def prepare_exam(ident, progress):
         time.sleep(.5)
     if job['status'] != 'completed':
         raise ValueError('Some files could not be read. Check the file details below and try again. ' + (job.get('error_text') or ''))
-    if not training.accepted_evidence_map(ident):
+    current_evidence = training.accepted_evidence_map(ident)
+    if not current_evidence:
         raise ValueError('We could not find clear study text in these files. Try a text-based PDF or check the passages under Advanced tools. Scanned PDFs may need text recognition first.')
     progress(message='Organising your study material…')
     flow.build_index(ident)
     disabled_pools = {p['id'] for p in list_question_pools(ident) if not p['enabled']}
     existing = training.list_questions(ident)
-    batches = evidence_batches(training.accepted_evidence_map(ident).values())
+    batches = evidence_batches(current_evidence.values())
+    current_ids = set(current_evidence)
     failures = []
     total = len(batches)
     processed = generated = 0
@@ -64,7 +66,7 @@ def prepare_exam(ident, progress):
     rejected_total = 0
     for evidence in batches:
         evidence_ids = {unit['id'] for unit in evidence}
-        covered = [q for q in existing if q.get('review_status') == 'accepted' and q.get('enabled', True) and q.get('question_pool_id') not in disabled_pools and evidence_ids.intersection(q.get('evidence_ids', []))]
+        covered = [q for q in existing if q.get('review_status') == 'accepted' and q.get('enabled', True) and q.get('question_pool_id') not in disabled_pools and training.question_has_current_evidence(q, current_ids) and evidence_ids.intersection(q.get('evidence_ids', []))]
         target = min(6, max(2, sum(len(unit['content'].split()) for unit in evidence) // 100))
         needed = max(0, target - len(covered))
         entry = {'document_id': evidence[0].get('document_id'), 'topic_id': evidence[0].get('topic_id'),
