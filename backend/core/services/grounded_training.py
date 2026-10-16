@@ -255,6 +255,17 @@ def _generate_grounded_questions(subject: dict, count: int = 5, *, llm_client=No
     for retry in range(2):
         prompt = question_generation_prompt(subject['name'], evidence, max(1, min(10, count - len(created))))
         prompt += '\nGenerate conceptual questions, never quote a passage or ask to explain this text. Concise factual answer points only. Omit slide counters, labels, objectives and boilerplate. Vary definitions, comparisons, applications and reasoning only when supported. Fewer questions are better than filler. Avoid these existing questions: ' + json.dumps([q['question_text'] for q in existing], ensure_ascii=False)
+        # Give small models concrete, uncovered learning targets instead of
+        # asking them to invent distinctions from an entire paragraph. These
+        # are source facts for the model, never templated fallback questions.
+        rubrics = [point['text'] for question in existing for point in question.get('expected_core_points', [])]
+        facts = [{'evidence_id': unit['id'], 'fact': sentence.strip()} for unit in evidence
+                 for sentence in re.split(r'(?<=[.!?])\s+', unit['content'])
+                 if len(sentence.split()) >= 6 and not any(_supported_term_ratio(sentence, rubric) >= .8 for rubric in rubrics)]
+        if facts:
+            targets = facts[:max(1, count - len(created))]
+            prompt += '\nLEARNING TARGETS (one question per target, in this order): ' + json.dumps(targets, ensure_ascii=False)
+            prompt += '\nAsk directly about each target concept or mechanism. The answer should explain that target fact. Use the target sentence exactly as source_quote. Do not compare it with a different concept or introduce a new application.'
         if retry:
             prompt += '\nFix these validation failures: ' + json.dumps([item['reasons'] for item in audit[audit_start:]], ensure_ascii=False)
             used_quotes = ' '.join(point.get('source_quote', '') for question in existing for point in question.get('expected_core_points', []))
