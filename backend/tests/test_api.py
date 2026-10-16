@@ -18,6 +18,14 @@ from fastapi import UploadFile
 from io import BytesIO
 
 class ArchitectureTests(unittest.TestCase):
+    def test_answer_jobs_are_deduplicated_per_question_not_across_questions(self):
+        from backend.api.routes import answer
+        from backend.models.api import AnswerInput
+        with patch('backend.api.routes.flow.session'), patch('backend.api.routes.jobs.submit') as submit:
+            answer(7, AnswerInput(answer='First answer', question_id=1))
+            answer(7, AnswerInput(answer='Next answer', question_id=2))
+        self.assertNotEqual(submit.call_args_list[0].args[0], submit.call_args_list[1].args[0])
+
     def test_delayed_answer_after_skip_cannot_grade_the_next_question(self):
         fixture = Path(__file__).resolve().parents[2] / 'tests/core/fixtures/question_pool.json'
         questions = json.loads(fixture.read_text(encoding='utf-8'))
