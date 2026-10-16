@@ -27,12 +27,14 @@ class GenerationQualityTests(unittest.TestCase):
         process_subject(self.subject['id'], mode='deterministic')
         self.evidence = next(iter(accepted_evidence_map(self.subject['id'])))
         self.payload = {'question_text':'How does packet switching transmit messages through a network?', 'question_type':'explanation', 'difficulty':'medium', 'expected_duration_seconds':60, 'expected_core_points':[{'text':'Messages are divided into packets forwarded individually by routers.', 'source_quote':'Packet switching divides messages into packets. Routers forward individual packets through shared network links.', 'evidence_ids':[self.evidence]}], 'evidence_ids':[self.evidence], 'quality_score':.95}
+        self.prompts = []
 
     def client(self, verdict=None):
         owner = self
         class Client:
             model_name = 'synthetic-test-double'
             def generate(self, prompt, **kwargs):
+                owner.prompts.append(prompt)
                 if kwargs['response_schema']['title'] == 'QuestionValidation':
                     return json.dumps(verdict or {'clear':True, 'relevant':True, 'supported':True, 'duplicate':False})
                 return json.dumps({'questions':[owner.payload]})
@@ -54,6 +56,8 @@ class GenerationQualityTests(unittest.TestCase):
         self.assertEqual(question['evidence_ids'], [self.evidence])
         self.assertEqual(question['expected_core_points'][0]['evidence_ids'], [self.evidence])
         self.assertEqual(self.audit()[0]['sources'][0]['path'], 'packets.md')
+        self.assertIn('LEARNING TARGETS (one question per target', self.prompts[0])
+        self.assertIn('Packet switching divides messages into packets.', self.prompts[0])
         review_question(question['id'], 'rejected')
         with self.assertRaises(ValueError):
             generate_grounded_questions(self.subject, 1, llm_client=self.client())

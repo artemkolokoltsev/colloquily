@@ -8,7 +8,7 @@ mistakes: check generated questions and feedback against the cited passages.
 
 1. Download the installer matching your computer from [Releases](https://github.com/artemkolokoltsev/colloquily/releases), plus its license bundle. See [installation](INSTALLATION.md) for preview-build warnings.
 2. Open Colloquily and select English or German. You can change language in Settings without restarting.
-3. Install and start [Ollama](https://ollama.com/download). Open **AI setup**, check the local connection, and explicitly download the required models. Downloads can be large; keep sufficient free storage.
+3. Install and start [Ollama](https://ollama.com/download). In 0.1.1, Colloquily checks local memory and disk space, reuses suitable installed models, and prepares missing models for the selected exam automatically. Progress offers cancellation and retry. Existing explicit exam model settings are preserved; advanced changes remain under **AI setup**. The older 0.1.0 RC4 preview requires explicit model downloads there. Downloads can be large; keep sufficient free storage.
 4. Check the model status before starting AI-powered practice. You can organize exams and materials without a running model.
 
 No Python, Node.js, Docker or terminal is required for the desktop application.
@@ -18,10 +18,19 @@ weights are not included with Colloquily.
 ## Prepare an exam
 
 1. Create an exam, name it, choose its language, and optionally set its date.
+   Use the exam picker to search and switch exams. Materials and practice history
+   belong to the selected exam; switching does not delete another exam's work.
 2. Import your own lecture PDFs or Markdown notes under **Materials**. Original documents are kept in that exam's local workspace.
 3. Choose **Prepare my practice**. Colloquily extracts study text, creates evidence and prepares questions. Keep the app open while processing.
 4. If extraction is uncertain or preparation fails, inspect the material and source-review tools. Poor-quality or unreviewed evidence is excluded from grounded retrieval. Scanned PDFs without extractable text may require a searchable/OCR version prepared separately.
 5. Check generated questions, expected points and sources. Review, disable or edit questionable items before practising. Question-pool imports and reported exam questions are available as additional inputs.
+
+In 0.1.1, preparation covers every eligible document/topic batch. A weak model may
+produce fewer valid questions than requested: the app retains those results and
+shows incomplete coverage rather than inserting filler. Choose **Generate
+questions for uncovered topics** to continue. Check each material's **Ready**,
+**Needs review** or **Unusable** passages, page counts and extraction issues.
+Reprocessing preserves manual review decisions and existing study history.
 
 ## Practise and review
 
@@ -30,6 +39,10 @@ own words. Feedback identifies supported, missing and incorrect points and
 includes source passages. Open the original source to verify the assessment;
 PDF references can jump to a cited page. Scores are learning aids, not an
 official university grade.
+
+In 0.1.1, **Skip** advances without calling AI, grading your answer or revealing a
+model answer. The attempt is saved as skipped, not correct. Skipping the final
+question completes the session; repeated clicks do not skip an extra question.
 
 The Dashboard and study plan show due practice and progress. A full colloquium
 uses three selected exams; individual mock sessions remain exam-scoped. Finish

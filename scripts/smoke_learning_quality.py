@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--lightweight', action='store_true', help='Exercise the limited-hardware policy tier using an installed lightweight model.')
+parser.add_argument('--model', help='Use this explicitly selected, already installed local model for all AI tasks in the synthetic exam.')
 options = parser.parse_args()
 if options.lightweight:
     os.environ['COLLOQUILY_MEDIUM_MODEL_RAM_GB'] = '64'
@@ -53,6 +54,12 @@ with TestClient(app) as client, patch('backend.services.models.OllamaProvider.pu
     exam = client.post('/api/exams', json={'name':'Synthetic graph learning', 'language':'en'}).json()
     other = client.post('/api/exams', json={'name':'Synthetic isolated exam', 'language':'de'}).json()
     ident = exam['id']
+    if options.model:
+        from services.local_models import TASKS
+        response = client.patch(f'/api/exams/{ident}/models', json={
+            'task_models': {task: options.model for task in TASKS},
+            'embedding_model': 'embeddinggemma:latest'})
+        assert response.status_code == 200, response.text
     setup = wait(client, client.post(f'/api/exams/{ident}/models/prepare'))
     assert setup['status'] == 'completed', setup
     pdf = synthetic_pdf([[(50,35,'Synthetic learning handout'), (50,80,title), (50,120,text), (290,805,str(number))] for number, (title, text) in enumerate(topics[:2], 1)])
@@ -60,15 +67,19 @@ with TestClient(app) as client, patch('backend.services.models.OllamaProvider.pu
     assert response.status_code == 201, response.text
     prepared = wait(client, client.post(f'/api/exams/{ident}/prepare'))
     questions = client.get(f'/api/exams/{ident}/questions').json()
+    from services.subject_workspace import workspace_for
+    from services.database import get_subject
+    coverage = json.loads((workspace_for(get_subject(ident)).folder('reports') / 'question-coverage.json').read_text(encoding='utf-8'))
     # Keep failure evidence too, and never mistake saved partial results from a
     # failed job for a passing release acceptance run.
     report_path = root / 'output' / 'learning-quality-smoke.json'
     report_path.parent.mkdir(exist_ok=True)
-    report_path.write_text(json.dumps({'workspace': str(data), 'preparation': prepared,
+    report_path.write_text(json.dumps({'workspace': str(data), 'preparation': prepared, 'coverage': coverage,
                                       'questions': questions, 'acceptance_passed': False},
                                      ensure_ascii=False, indent=2), encoding='utf-8')
     assert prepared['status'] == 'completed', prepared
     assert len(questions) >= 4, {'job':prepared, 'questions':questions}
+    assert len(coverage) == 3 and all(entry['covered'] + entry['generated'] >= 1 for entry in coverage), coverage
     assert all('this passage' not in q['question_text'].lower() for q in questions)
     assert all(q['review_status'] == 'accepted' for q in questions)
     assert client.get(f'/api/exams/{other["id"]}/questions').json() == []
@@ -89,7 +100,7 @@ with TestClient(app) as client, patch('backend.services.models.OllamaProvider.pu
     saved = client.get(f'/api/practice/{run["id"]}').json()
     assert saved['status'] == 'completed'
     assert all(attempt['evaluation']['status'] == 'skipped' for attempt in saved['sessions'][0]['attempts'])
-    report = {'workspace':str(data), 'preparation_status':prepared['status'], 'preparation_result':prepared.get('result'), 'preparation_error':prepared.get('error'), 'questions':questions, 'skip_session':saved['status'], 'acceptance_passed':True}
+    report = {'workspace':str(data), 'preparation_status':prepared['status'], 'preparation_result':prepared.get('result'), 'preparation_error':prepared.get('error'), 'coverage':coverage, 'task_models':setup.get('result', {}).get('task_models'), 'questions':questions, 'skip_session':saved['status'], 'acceptance_passed':True}
     (root / 'output').mkdir(exist_ok=True)
     (root / 'output' / 'learning-quality-smoke.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
     print(json.dumps({'questions':len(questions), 'documents':2, 'skip_session':saved['status'], 'preparation_status':prepared['status']}, indent=2), flush=True)
