@@ -60,6 +60,29 @@ class GenerationQualityTests(unittest.TestCase):
         self.assertEqual(list_questions(self.subject['id']), [])
         self.assertTrue(all('invalid_generation_schema' in item['reasons'] for item in self.audit()))
 
+    def test_multiple_questions_use_bounded_single_candidate_requests(self):
+        import copy
+        import numpy as np
+        first = copy.deepcopy(self.payload)
+        second = copy.deepcopy(first)
+        second['question_text'] = 'What do routers forward through shared network links?'
+        second['expected_core_points'] = [{'text': 'Routers forward individual packets through shared network links.',
+                                          'source_quote': 'Routers forward individual packets through shared network links.',
+                                          'evidence_ids': [self.evidence]}]
+        prompts = []
+        class SequentialClient:
+            def generate(self, prompt, **kwargs):
+                if kwargs['response_schema']['title'] == 'QuestionValidation':
+                    return json.dumps({'clear': True, 'relevant': True, 'supported': True, 'duplicate': False})
+                prompts.append(prompt)
+                return json.dumps({'questions': [(first, second)[min(len(prompts) - 1, 1)]]})
+        with patch('services.grounded_training.subject_embedder') as embedder:
+            embedder.return_value.embed.return_value = np.array([[1., 0.], [0., 1.]])
+            questions = generate_grounded_questions(self.subject, 2, llm_client=SequentialClient())
+        self.assertEqual(len(questions), 2)
+        self.assertEqual(len(prompts), 2)
+        self.assertTrue(all('between one and 1 meaningful' in prompt for prompt in prompts))
+
     def test_validated_question_preserves_exact_source_and_review_decision(self):
         question = generate_grounded_questions(self.subject, 1, llm_client=self.client())[0]
         self.assertEqual(question['evidence_ids'], [self.evidence])

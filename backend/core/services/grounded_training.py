@@ -49,7 +49,7 @@ class QuestionBatch(BaseModel):
     # An accepted evidence batch must yield a candidate for independent checks,
     # not a syntactically successful no-op. This does not approve the candidate:
     # every grounding/duplicate/clarity gate still runs and may reject it.
-    questions: list[GeneratedQuestion] = Field(min_length=1)
+    questions: list[GeneratedQuestion] = Field(min_length=1, max_length=1)
 
 
 class QuestionValidation(BaseModel):
@@ -255,8 +255,10 @@ def _generate_grounded_questions(subject: dict, count: int = 5, *, llm_client=No
     audit_path = workspace.folder('reports') / 'question-validation.json'
     audit = json.loads(audit_path.read_text(encoding='utf-8')) if audit_path.exists() else []
     audit_start = len(audit)
-    for retry in range(2):
-        prompt = question_generation_prompt(subject['name'], evidence, max(1, min(10, count - len(created))))
+    # A single bounded candidate keeps CPU-only requests within normal timeout
+    # limits. Larger requests are assembled incrementally, never padded.
+    for retry in range(max(2, count * 2)):
+        prompt = question_generation_prompt(subject['name'], evidence, 1)
         prompt += '\nGenerate conceptual questions, never quote a passage or ask to explain this text. Concise factual answer points only. Omit slide counters, labels, objectives and boilerplate. Vary definitions, comparisons, applications and reasoning only when supported. Fewer questions are better than filler. Avoid these existing questions: ' + json.dumps([q['question_text'] for q in existing], ensure_ascii=False)
         # Give small models concrete, uncovered learning targets instead of
         # asking them to invent distinctions from an entire paragraph. These
@@ -266,7 +268,7 @@ def _generate_grounded_questions(subject: dict, count: int = 5, *, llm_client=No
                  for sentence in re.split(r'(?<=[.!?])\s+', unit['content'])
                  if len(sentence.split()) >= 6 and not any(_supported_term_ratio(sentence, rubric) >= .8 for rubric in rubrics)]
         if facts:
-            targets = facts[:max(1, count - len(created))]
+            targets = facts[:1]
             prompt += '\nLEARNING TARGETS (one question per target, in this order): ' + json.dumps(targets, ensure_ascii=False)
             prompt += '\nAsk directly about each target concept or mechanism. The answer should explain that target fact. Use the target sentence exactly as source_quote. Do not compare it with a different concept or introduce a new application.'
         if retry:
