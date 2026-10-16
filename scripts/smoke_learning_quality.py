@@ -103,4 +103,8 @@ with TestClient(app) as client, patch('backend.services.models.OllamaProvider.pu
     report = {'workspace':str(data), 'preparation_status':prepared['status'], 'preparation_result':prepared.get('result'), 'preparation_error':prepared.get('error'), 'coverage':coverage, 'task_models':setup.get('result', {}).get('task_models'), 'questions':questions, 'skip_session':saved['status'], 'acceptance_passed':True}
     (root / 'output').mkdir(exist_ok=True)
     (root / 'output' / 'learning-quality-smoke.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+    print(json.dumps({'synthetic_questions_for_review': [
+        {'question': question['question_text'], 'points': question['expected_core_points'],
+         'evidence_ids': question['evidence_ids']} for question in questions]},
+        ensure_ascii=False, indent=2), flush=True)
     print(json.dumps({'questions':len(questions), 'documents':2, 'skip_session':saved['status'], 'preparation_status':prepared['status']}, indent=2), flush=True)
