@@ -1,5 +1,6 @@
 name: Real local-model learning acceptance
 on:
+  workflow_call:
   workflow_dispatch:
   pull_request:
     paths:
@@ -15,6 +16,8 @@ jobs:
   synthetic-learning:
     runs-on: macos-14
     timeout-minutes: 40
+    env:
+      OLLAMA_NO_CLOUD: 'true'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7

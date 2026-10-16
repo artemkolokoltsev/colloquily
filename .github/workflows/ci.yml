@@ -5,6 +5,9 @@ on:
     branches: [main, release-v0.1.0]
 permissions:
   contents: read
+concurrency:
+  group: verify-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   verify:
     runs-on: macos-14
