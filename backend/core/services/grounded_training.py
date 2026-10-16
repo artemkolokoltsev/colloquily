@@ -235,6 +235,11 @@ def question_generation_prompt(subject_name: str, evidence: list[dict], count: i
     ) + '\nFor every answer point include source_quote: an exact, short, verbatim quote from its cited evidence. Copy ONE complete supporting sentence, not the whole paragraph, and preserve its wording exactly. The answer must faithfully paraphrase that quote. Do not treat an exam or document title as a factual claim. No outside facts or extrapolation. Keep answer points close to the terminology and language of the source, so support is verifiable. Prefer a standalone single-concept question for each distinct fact. Do not mention "the evidence", "the text" or "the passage" in the question. Do not invent a comparison: if asking a difference, the rubric must explicitly explain BOTH sides and their distinction using source facts. Do not add a domain or application qualifier unless the source and rubric both explain that exact application.'
 
 
+def _recent_question_context(existing: list[dict]) -> list[str]:
+    """Bound the model hint, not the complete deterministic/embedding checks."""
+    return [question['question_text'][:240] for question in existing[-12:]]
+
+
 def generate_grounded_questions(subject: dict, count: int = 5, *, llm_client=None, evidence_units=None, progress=None, activate_validated=False) -> list[dict]:
     # Serialise creation and its audit together, including separate API jobs.
     # This local desktop has a single inference service, so this also avoids
@@ -255,11 +260,12 @@ def _generate_grounded_questions(subject: dict, count: int = 5, *, llm_client=No
     audit_path = workspace.folder('reports') / 'question-validation.json'
     audit = json.loads(audit_path.read_text(encoding='utf-8')) if audit_path.exists() else []
     audit_start = len(audit)
+    attempted_targets = set()
     # A single bounded candidate keeps CPU-only requests within normal timeout
     # limits. Larger requests are assembled incrementally, never padded.
     for retry in range(max(2, count * 2)):
         prompt = question_generation_prompt(subject['name'], evidence, 1)
-        prompt += '\nGenerate conceptual questions, never quote a passage or ask to explain this text. Concise factual answer points only. Omit slide counters, labels, objectives and boilerplate. Vary definitions, comparisons, applications and reasoning only when supported. Fewer questions are better than filler. Avoid these existing questions: ' + json.dumps([q['question_text'] for q in existing], ensure_ascii=False)
+        prompt += '\nGenerate a direct conceptual question, never quote a passage or ask to explain this text. Concise factual answer points only. Omit slide counters, labels, objectives and boilerplate. Avoid these existing questions: ' + json.dumps(_recent_question_context(existing), ensure_ascii=False)
         # Give small models concrete, uncovered learning targets instead of
         # asking them to invent distinctions from an entire paragraph. These
         # are source facts for the model, never templated fallback questions.
@@ -268,17 +274,13 @@ def _generate_grounded_questions(subject: dict, count: int = 5, *, llm_client=No
                  for sentence in re.split(r'(?<=[.!?])\s+', unit['content'])
                  if len(sentence.split()) >= 6 and not any(_supported_term_ratio(sentence, rubric) >= .8 for rubric in rubrics)]
         if facts:
-            targets = facts[:1]
+            untried = [fact for fact in facts if (fact['evidence_id'], fact['fact']) not in attempted_targets]
+            targets = (untried or facts)[:1]
+            attempted_targets.update((fact['evidence_id'], fact['fact']) for fact in targets)
             prompt += '\nLEARNING TARGETS (one question per target, in this order): ' + json.dumps(targets, ensure_ascii=False)
             prompt += '\nAsk directly about each target concept or mechanism. The answer should explain that target fact. Use the target sentence exactly as source_quote. Do not compare it with a different concept or introduce a new application.'
         if retry:
-            prompt += '\nFix these validation failures: ' + json.dumps([item['reasons'] for item in audit[audit_start:]], ensure_ascii=False)
-            used_quotes = ' '.join(point.get('source_quote', '') for question in existing for point in question.get('expected_core_points', []))
-            remaining = [{'evidence_id': unit['id'], 'fact': sentence.strip()} for unit in evidence
-                         for sentence in re.split(r'(?<=[.!?])\s+', unit['content'])
-                         if len(sentence.split()) >= 6 and sentence.strip() not in used_quotes]
-            prompt += '\nFocus on different facts not already asked. Select only from these facts, write a short conceptual question, and use ONE exact supporting sentence per answer point: ' + json.dumps(remaining, ensure_ascii=False)
-            prompt += '\nThis retry should use simple definition or mechanism questions about individual facts, not comparisons. Return only questions with complete, directly supported answers.'
+            prompt += '\nUse only the learning target above. Ask a simple definition or mechanism question, not a comparison. Use ONE exact supporting sentence per answer point. Return only a candidate with a complete, directly supported answer.'
         try:
             batch = _validated_generation(client, QuestionBatch, prompt)
         except ValueError as exc:
@@ -311,7 +313,7 @@ def _generate_grounded_questions(subject: dict, count: int = 5, *, llm_client=No
                     'duplicate=true for the same learning objective as an existing question even if paraphrased. '
                     'Return clear,relevant,supported,duplicate booleans and reasons.\n' + json.dumps({
                         'candidate': payload, 'evidence': [{'id': unit['id'], 'content': unit['content']} for unit in evidence],
-                        'existing_questions': [q['question_text'] for q in existing]}, ensure_ascii=False))
+                        'existing_questions': _recent_question_context(existing)}, ensure_ascii=False))
                     reasons = [key for key in ('clear', 'relevant', 'supported') if not getattr(verdict, key)]
                     if verdict.duplicate:
                         reasons.append('semantic_duplicate')

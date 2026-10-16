@@ -7,7 +7,7 @@ import backend
 import config
 from services.database import init_db, create_subject
 from services.quality_pipeline import process_subject, deterministic_cleanup, _paragraph_units
-from services.grounded_training import generate_grounded_questions, question_quality_problems, question_generation_prompt
+from services.grounded_training import generate_grounded_questions, question_quality_problems, question_generation_prompt, _recent_question_context
 from services.training_repository import accepted_evidence_map, list_questions, review_question
 from services.knowledge_repository import review_unit, list_review_units
 from services.subject_workspace import workspace_for
@@ -82,6 +82,30 @@ class GenerationQualityTests(unittest.TestCase):
         self.assertEqual(len(questions), 2)
         self.assertEqual(len(prompts), 2)
         self.assertTrue(all('between one and 1 meaningful' in prompt for prompt in prompts))
+
+    def test_model_duplicate_hint_is_bounded_without_mutating_full_history(self):
+        existing = [{'question_text': f'Question {number}: ' + 'detail ' * 100} for number in range(100)]
+        context = _recent_question_context(existing)
+        self.assertEqual(len(context), 12)
+        self.assertTrue(all(len(text) <= 240 for text in context))
+        self.assertEqual(len(existing), 100)
+        self.assertGreater(len(existing[-1]['question_text']), 240)
+
+    def test_rejected_candidate_moves_to_another_source_fact(self):
+        owner = self
+        prompts = []
+        class RetryClient:
+            def generate(self, prompt, **kwargs):
+                if kwargs['response_schema']['title'] == 'QuestionValidation':
+                    return json.dumps({'clear': True, 'relevant': True, 'supported': True, 'duplicate': False})
+                prompts.append(prompt)
+                payload = dict(owner.payload)
+                if len(prompts) == 1:
+                    payload['question_text'] = 'How would you explain this passage in your own words?'
+                return json.dumps({'questions': [payload]})
+        self.assertEqual(len(generate_grounded_questions(self.subject, 1, llm_client=RetryClient())), 1)
+        targets = [json.loads(prompt.split('LEARNING TARGETS (one question per target, in this order): ')[1].split('\n')[0]) for prompt in prompts]
+        self.assertNotEqual(targets[0][0]['fact'], targets[1][0]['fact'])
 
     def test_validated_question_preserves_exact_source_and_review_decision(self):
         question = generate_grounded_questions(self.subject, 1, llm_client=self.client())[0]
