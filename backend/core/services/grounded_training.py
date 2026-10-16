@@ -265,7 +265,10 @@ def _generate_grounded_questions(subject: dict, count: int = 5, *, llm_client=No
     # limits. Larger requests are assembled incrementally, never padded.
     for retry in range(max(2, count * 2)):
         prompt = question_generation_prompt(subject['name'], evidence, 1)
-        prompt += '\nGenerate a direct conceptual question, never quote a passage or ask to explain this text. Concise factual answer points only. Omit slide counters, labels, objectives and boilerplate. Avoid these existing questions: ' + json.dumps(_recent_question_context(existing), ensure_ascii=False)
+        # Negative examples prime small models to copy another document's
+        # question. Keep generation source-only; global duplicate checks below
+        # still inspect the full history, separately from this model input.
+        prompt += '\nGenerate a direct conceptual question using only this evidence and its learning target. Never quote a passage or ask to explain this text. Concise factual answer points only. Omit slide counters, labels, objectives and boilerplate. Do not introduce concepts from other study material.'
         # Give small models concrete, uncovered learning targets instead of
         # asking them to invent distinctions from an entire paragraph. These
         # are source facts for the model, never templated fallback questions.

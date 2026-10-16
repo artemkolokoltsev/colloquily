@@ -82,6 +82,7 @@ class GenerationQualityTests(unittest.TestCase):
         self.assertEqual(len(questions), 2)
         self.assertEqual(len(prompts), 2)
         self.assertTrue(all('between one and 1 meaningful' in prompt for prompt in prompts))
+        self.assertNotIn(first['question_text'], prompts[1])
 
     def test_model_duplicate_hint_is_bounded_without_mutating_full_history(self):
         existing = [{'question_text': f'Question {number}: ' + 'detail ' * 100} for number in range(100)]
