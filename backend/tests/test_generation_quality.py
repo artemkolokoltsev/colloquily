@@ -51,6 +51,15 @@ class GenerationQualityTests(unittest.TestCase):
         self.assertIn('BOTH sides', prompt)
         self.assertIn('single-concept question', prompt)
 
+    def test_empty_candidate_batch_is_not_a_successful_generation(self):
+        class EmptyClient:
+            def generate(self, *_args, **_kwargs):
+                return '{"questions": []}'
+        with self.assertRaisesRegex(ValueError, 'did not produce any valid questions'):
+            generate_grounded_questions(self.subject, 1, llm_client=EmptyClient())
+        self.assertEqual(list_questions(self.subject['id']), [])
+        self.assertTrue(all('invalid_generation_schema' in item['reasons'] for item in self.audit()))
+
     def test_validated_question_preserves_exact_source_and_review_decision(self):
         question = generate_grounded_questions(self.subject, 1, llm_client=self.client())[0]
         self.assertEqual(question['evidence_ids'], [self.evidence])

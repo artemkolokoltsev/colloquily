@@ -46,7 +46,10 @@ class GeneratedQuestion(BaseModel):
 
 
 class QuestionBatch(BaseModel):
-    questions: list[GeneratedQuestion]
+    # An accepted evidence batch must yield a candidate for independent checks,
+    # not a syntactically successful no-op. This does not approve the candidate:
+    # every grounding/duplicate/clarity gate still runs and may reject it.
+    questions: list[GeneratedQuestion] = Field(min_length=1)
 
 
 class QuestionValidation(BaseModel):
