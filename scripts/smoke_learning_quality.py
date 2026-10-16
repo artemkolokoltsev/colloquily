@@ -37,7 +37,9 @@ topics = [
 def wait(client, response):
     assert response.status_code == 202, response.text
     job = response.json()
-    deadline = time.monotonic() + 1200
+    # Hosted Apple Silicon runners have no usable GPU in this check. Keep the
+    # normal per-request timeout, but allow several serial CPU generations.
+    deadline = time.monotonic() + 1800
     previous = None
     while job['status'] in {'queued', 'running'}:
         assert time.monotonic() < deadline, job
