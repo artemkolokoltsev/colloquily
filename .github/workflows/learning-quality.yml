@@ -1,0 +1,51 @@
+name: Real local-model learning acceptance
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'scripts/smoke_learning_quality.py'
+      - '.github/workflows/learning-quality.yml'
+permissions:
+  contents: read
+concurrency:
+  group: learning-quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic-learning:
+    runs-on: macos-14
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install -r backend/requirements.txt
+      - name: Install local inference runtime
+        run: brew install ollama
+      - name: Start local inference (synthetic data only)
+        shell: bash
+        run: |
+          ollama serve > "$RUNNER_TEMP/ollama-learning.log" 2>&1 &
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:11434/api/version; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: Download separate test models (not installer contents)
+        run: |
+          ollama pull qwen3:4b
+          ollama pull embeddinggemma:latest
+      - name: Check multi-document grounding, topic coverage and Skip
+        run: python scripts/smoke_learning_quality.py --model qwen3:4b
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: synthetic-learning-acceptance
+          path: |
+            output/learning-quality-smoke.json
+            ${{ runner.temp }}/ollama-learning.log
+          if-no-files-found: warn
