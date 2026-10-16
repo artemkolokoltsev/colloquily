@@ -229,7 +229,7 @@ def question_generation_prompt(subject_name: str, evidence: list[dict], count: i
     return render_prompt(
         "training", "question_generation", exam='the supplied course evidence', count=count,
         evidence=json.dumps(sources, ensure_ascii=False),
-    ) + '\nFor every answer point include source_quote: an exact, short, verbatim quote from its cited evidence. The answer must faithfully paraphrase that quote. Do not treat an exam or document title as a factual claim. No outside facts or extrapolation. Keep answer points close to the terminology and language of the source, so support is verifiable.'
+    ) + '\nFor every answer point include source_quote: an exact, short, verbatim quote from its cited evidence. Copy ONE complete supporting sentence, not the whole paragraph, and preserve its wording exactly. The answer must faithfully paraphrase that quote. Do not treat an exam or document title as a factual claim. No outside facts or extrapolation. Keep answer points close to the terminology and language of the source, so support is verifiable. Prefer a standalone single-concept question for each distinct fact. Do not mention "the evidence", "the text" or "the passage" in the question. Do not invent a comparison: if asking a difference, the rubric must explicitly explain BOTH sides and their distinction using source facts. Do not add a domain or application qualifier unless the source and rubric both explain that exact application.'
 
 
 def generate_grounded_questions(subject: dict, count: int = 5, *, llm_client=None, evidence_units=None, progress=None, activate_validated=False) -> list[dict]:
@@ -262,6 +262,7 @@ def _generate_grounded_questions(subject: dict, count: int = 5, *, llm_client=No
                          for sentence in re.split(r'(?<=[.!?])\s+', unit['content'])
                          if len(sentence.split()) >= 6 and sentence.strip() not in used_quotes]
             prompt += '\nFocus on different facts not already asked. Select only from these facts, write a short conceptual question, and use ONE exact supporting sentence per answer point: ' + json.dumps(remaining, ensure_ascii=False)
+            prompt += '\nThis retry should use simple definition or mechanism questions about individual facts, not comparisons. Return only questions with complete, directly supported answers.'
         try:
             batch = _validated_generation(client, QuestionBatch, prompt)
         except ValueError as exc:

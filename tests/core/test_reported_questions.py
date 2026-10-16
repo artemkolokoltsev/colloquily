@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from contextlib import closing
 from datetime import datetime
 from unittest.mock import patch
 
@@ -65,7 +66,7 @@ class ReportedQuestionsTest(unittest.TestCase):
 
     def accepted_evidence(self) -> dict:
         now = datetime.now().isoformat(timespec="seconds")
-        with _connect() as connection:
+        with closing(_connect()) as connection:
             document = connection.execute(
                 """
                 INSERT INTO documents (

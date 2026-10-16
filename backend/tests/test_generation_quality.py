@@ -7,7 +7,7 @@ import backend
 import config
 from services.database import init_db, create_subject
 from services.quality_pipeline import process_subject, deterministic_cleanup, _paragraph_units
-from services.grounded_training import generate_grounded_questions, question_quality_problems
+from services.grounded_training import generate_grounded_questions, question_quality_problems, question_generation_prompt
 from services.training_repository import accepted_evidence_map, list_questions, review_question
 from services.knowledge_repository import review_unit, list_review_units
 from services.subject_workspace import workspace_for
@@ -40,6 +40,14 @@ class GenerationQualityTests(unittest.TestCase):
 
     def audit(self):
         return json.loads((workspace_for(self.subject).folder('reports') / 'question-validation.json').read_text(encoding='utf-8'))
+
+    def test_generation_prompt_keeps_titles_out_of_facts_and_demands_complete_comparisons(self):
+        prompt = question_generation_prompt('Misleading invented course title',
+                                             list(accepted_evidence_map(self.subject['id']).values()), 2)
+        self.assertNotIn('Misleading invented course title', prompt)
+        self.assertIn('ONE complete supporting sentence', prompt)
+        self.assertIn('BOTH sides', prompt)
+        self.assertIn('single-concept question', prompt)
 
     def test_validated_question_preserves_exact_source_and_review_decision(self):
         question = generate_grounded_questions(self.subject, 1, llm_client=self.client())[0]

@@ -445,7 +445,7 @@ class SubjectQualityPipelineTest(unittest.TestCase):
     def test_batch_approval_enforces_confidence_and_quality_report_traceability(self) -> None:
         subject, _ = self._accepted_subject()
         unit = list_review_units(subject["id"])[0]
-        with _connect() as connection:
+        with closing(_connect()) as connection:
             connection.execute(
                 "UPDATE knowledge_units SET review_status = 'needs_review', confidence = 0.95 WHERE id = ?",
                 (unit["id"],),
@@ -454,7 +454,7 @@ class SubjectQualityPipelineTest(unittest.TestCase):
         self.assertEqual(batch_accept_high_confidence(subject["id"], [unit["id"]]), 1)
         report = document_quality_report(unit["document_id"])
         self.assertEqual(report["units"][0]["source_location"], "lines 1-1")
-        with _connect() as connection:
+        with closing(_connect()) as connection:
             connection.execute(
                 "UPDATE knowledge_units SET review_status = 'needs_review', confidence = 0.5 WHERE id = ?",
                 (unit["id"],),
