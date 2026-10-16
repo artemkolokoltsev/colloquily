@@ -54,6 +54,8 @@ class FakeLLM:
 
     def generate(self, prompt: str, **_kwargs) -> str:
         self.calls += 1
+        if (_kwargs.get('response_schema') or {}).get('title') == 'QuestionValidation':
+            return json.dumps({'clear': True, 'relevant': True, 'supported': True, 'duplicate': False, 'reasons': []})
         return self.response_factory(prompt)
 
 
@@ -315,7 +317,7 @@ class SubjectQualityPipelineTest(unittest.TestCase):
                         "difficulty": "medium",
                         "expected_duration_seconds": 60,
                         "expected_core_points": [
-                            {"text": "Connect reinforcement with observable behavior.", "evidence_ids": [evidence_id], "priority": "must_know"}
+                            {"text": "Reinforcement affects observable behavior through environmental consequences.", "source_quote":"Behaviorism explains observable learning behavior through reinforcement and environmental consequences.", "evidence_ids": [evidence_id], "priority": "must_know"}
                         ],
                         "optional_details": [],
                         "evidence_ids": [evidence_id],

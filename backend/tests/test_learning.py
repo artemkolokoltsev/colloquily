@@ -11,8 +11,8 @@ class LearningPlanTests(unittest.TestCase):
     def overview(self, deadline, attempts=(), questions=None, pools=()):
         goal = {'exam_date': deadline, 'repetitions': 3, 'questions_per_session': 2}
         if questions is None:
-            questions = [{'id': i, 'topic_name': 'Networks', 'review_status': 'accepted', 'enabled': True} for i in (1, 2)]
-        with patch('backend.services.learning.list_question_pools', return_value=list(pools)), patch('backend.services.learning._connect') as connect, patch('backend.services.learning.list_questions', return_value=questions), patch('backend.services.learning._attempt_rows', return_value=list(attempts)):
+            questions = [{'id': i, 'question_pool_id':1, 'topic_name': 'Networks', 'review_status': 'accepted', 'enabled': True} for i in (1, 2)]
+        with patch('backend.services.learning.accepted_evidence_map', return_value={}), patch('backend.services.learning.list_question_pools', return_value=list(pools)), patch('backend.services.learning._connect') as connect, patch('backend.services.learning.list_questions', return_value=questions), patch('backend.services.learning._attempt_rows', return_value=list(attempts)):
             connect.return_value.execute.return_value.fetchone.return_value = [json.dumps(goal)]
             return learning_overview(1, 1, today=date(2026, 9, 20))
 

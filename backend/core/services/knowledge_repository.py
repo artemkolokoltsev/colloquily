@@ -55,6 +55,7 @@ def list_documents(subject_id: int) -> list[dict]:
                 SUM(CASE WHEN ku.review_status = 'needs_review' THEN 1 ELSE 0 END) AS review_count,
                 SUM(CASE WHEN ku.review_status = 'quarantined' THEN 1 ELSE 0 END) AS quarantined_count
             FROM documents d LEFT JOIN knowledge_units ku ON ku.document_id = d.id
+                AND ku.quality_problems_json NOT LIKE '%"superseded_extraction"%'
             WHERE d.subject_id = ? GROUP BY d.id ORDER BY d.relative_path
             """,
             (subject_id,),
@@ -144,7 +145,7 @@ def normalize_subject_topics(subject_id: int) -> dict:
             """
             UPDATE topics SET evidence_count = (
                 SELECT COUNT(*) FROM knowledge_units ku
-                WHERE ku.topic_id = topics.id AND ku.review_status = 'accepted'
+                WHERE ku.topic_id = topics.id AND ku.review_status = 'accepted' AND ku.enabled_for_retrieval=1
             ) WHERE subject_id = ?
             """,
             (subject_id,),
@@ -160,7 +161,12 @@ def normalize_subject_topics(subject_id: int) -> dict:
 
 def prepare_document_units(document_id: int, *, force: bool = False) -> None:
     with closing(_connect()) as connection:
-        connection.execute("DELETE FROM knowledge_units WHERE document_id = ? AND manually_authoritative = 0", (document_id,))
+        # Preserve reviewed decisions and historical citation IDs across retries.
+        connection.execute('UPDATE knowledge_units SET manually_authoritative=1 WHERE document_id=? AND id IN (SELECT knowledge_unit_id FROM review_events)', (document_id,))
+        previous = connection.execute('SELECT id, quality_problems_json FROM knowledge_units WHERE document_id=? AND manually_authoritative=0', (document_id,)).fetchall()
+        for row in previous:
+            problems = sorted(set(json.loads(row['quality_problems_json'] or '[]')) | {'superseded_extraction'})
+            connection.execute('UPDATE knowledge_units SET enabled_for_retrieval=0, quality_problems_json=? WHERE id=?', (json.dumps(problems), row['id']))
         if force:
             connection.execute("DELETE FROM processing_checkpoints WHERE document_id = ?", (document_id,))
         connection.commit()
@@ -202,12 +208,19 @@ def insert_knowledge_units(subject_id: int, document_id: int, units: list[dict])
                 topic_id = int(topic_row["id"])
             cursor = connection.execute(
                 """
-                INSERT OR IGNORE INTO knowledge_units (
+                INSERT INTO knowledge_units (
                     subject_id, document_id, topic_id, raw_content, content, content_type,
                     source_location, source_start, source_end, source_hash, quality_score,
                     confidence, quality_problems_json, source_support, review_status,
                     enabled_for_retrieval, manually_authoritative, created_at, updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                ON CONFLICT(document_id, source_location, source_hash) DO UPDATE SET
+                    topic_id=excluded.topic_id, content=excluded.content,
+                    content_type=excluded.content_type, quality_score=excluded.quality_score,
+                    confidence=excluded.confidence, quality_problems_json=excluded.quality_problems_json,
+                    source_support=excluded.source_support, review_status=excluded.review_status,
+                    enabled_for_retrieval=excluded.enabled_for_retrieval, updated_at=excluded.updated_at
+                WHERE knowledge_units.manually_authoritative=0
                 """,
                 (
                     subject_id, document_id, topic_id, unit["raw_content"], unit["cleaned_content"], unit["content_type"],
@@ -282,7 +295,7 @@ def finalize_document(document_id: int) -> dict:
         counts = {
             row["review_status"]: row["count"]
             for row in connection.execute(
-                "SELECT review_status, COUNT(*) AS count FROM knowledge_units WHERE document_id = ? GROUP BY review_status",
+                "SELECT review_status, COUNT(*) AS count FROM knowledge_units WHERE document_id = ? AND quality_problems_json NOT LIKE '%\"superseded_extraction\"%' GROUP BY review_status",
                 (document_id,),
             ).fetchall()
         }
@@ -300,7 +313,7 @@ def finalize_document(document_id: int) -> dict:
             """
             UPDATE topics SET evidence_count = (
                 SELECT COUNT(*) FROM knowledge_units ku
-                WHERE ku.topic_id = topics.id AND ku.review_status = 'accepted'
+                WHERE ku.topic_id = topics.id AND ku.review_status = 'accepted' AND ku.enabled_for_retrieval=1
             ) WHERE subject_id = (SELECT subject_id FROM documents WHERE id = ?)
             """,
             (document_id,),
@@ -337,7 +350,7 @@ def list_review_units(
     query = """
         SELECT ku.*, d.relative_path, d.title AS document_title
         FROM knowledge_units ku JOIN documents d ON d.id = ku.document_id
-        WHERE ku.subject_id = ?
+        WHERE ku.subject_id = ? AND ku.quality_problems_json NOT LIKE '%"superseded_extraction"%'
     """
     params: list[object] = [subject_id]
     if suspicious_only:
@@ -375,7 +388,7 @@ def batch_accept_high_confidence(subject_id: int, unit_ids: list[int], user_id: 
             continue
         if unit["confidence"] < 0.9:
             raise ValueError("Batch approval is restricted to confidence >= 0.90")
-        if set(unit["quality_problems"]) & {"meaningless_fragment", "corrupted_table", "broken_formula", "source_traceability_failure"}:
+        if set(unit["quality_problems"]) & {"meaningless_fragment", "corrupted_table", "broken_formula", "source_traceability_failure", "possible_diagram_or_broken_reading_order", "heading_without_explanation", "low_information_fragment"}:
             raise ValueError("Suspicious extraction problems require individual review")
         review_unit(unit["id"], "accepted", user_id=user_id, subject_id=subject_id)
         accepted += 1
@@ -388,7 +401,7 @@ def document_quality_report(document_id: int) -> dict:
         if not document:
             raise ValueError("Document not found")
         units = connection.execute(
-            "SELECT * FROM knowledge_units WHERE document_id = ? ORDER BY source_start, id", (document_id,)
+            "SELECT * FROM knowledge_units WHERE document_id = ? AND quality_problems_json NOT LIKE '%\"superseded_extraction\"%' ORDER BY source_start, id", (document_id,)
         ).fetchall()
         issue_counts: dict[str, int] = {}
         unit_rows = []
@@ -441,7 +454,7 @@ def review_unit(
         new_content = row["content"] if content is None else content.strip()
         if status == "accepted" and not new_content:
             raise ValueError("Accepted knowledge cannot be empty")
-        manual = int(content is not None or status == "accepted")
+        manual = 1  # All explicit review actions, including rejection, survive reprocessing.
         connection.execute(
             """
             UPDATE knowledge_units SET content = ?, review_status = ?, enabled_for_retrieval = ?,

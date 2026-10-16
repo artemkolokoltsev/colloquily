@@ -45,6 +45,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run test:api
+      - run: python scripts/test_core.py
       - run: npm run build
       - run: npm run build:sidecar
       - run: python scripts/smoke_sidecar.py

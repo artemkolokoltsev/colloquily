@@ -387,5 +387,7 @@ def select_practice_questions(
             "SELECT question_id FROM attempts WHERE user_id=? AND subject_id=? ORDER BY id DESC LIMIT ?",
             (user_id, subject_id, max(10, count * 2)),
         ).fetchall()}
-    from services.training_repository import _decode_question
-    return balanced_sample([_decode_question(row) for row in rows], max(1, count), recent_ids=recent)
+    from services.training_repository import _decode_question, accepted_evidence_map, question_has_current_evidence
+    evidence = set(accepted_evidence_map(subject_id))
+    candidates = [_decode_question(row) for row in rows]
+    return balanced_sample([item for item in candidates if question_has_current_evidence(item, evidence)], max(1, count), recent_ids=recent)

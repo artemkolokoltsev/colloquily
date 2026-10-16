@@ -1,4 +1,17 @@
-# v0.1.0 release status
+# Release status
+
+Development checkout: **0.1.1 patch in progress, not release-approved**. See
+[UX/learning-quality changes and verification](LEARNING_QUALITY_PATCH.md).
+The published RC4 installers below are unchanged; they do not contain this patch.
+
+Latest local verification (2026-10-16): 56 backend, 65 domain and 4 frontend
+tests pass, along with translation parity and the TypeScript/Vite production
+build. The native artifact workflow now runs the domain regressions on every
+supported target, including Skip and evidence-history preservation.
+
+## Historical v0.1.0 RC4 verification
+
+The results below describe the published preview, not approval of the 0.1.1 patch.
 
 ## Implemented and locally tested
 

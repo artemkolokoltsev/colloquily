@@ -213,7 +213,7 @@ class ExamStateTest(unittest.TestCase):
         attempt = get_exam_run(run["id"])["sessions"][0]["attempts"][0]
         self.assertEqual(attempt["evaluation"]["status"], "pending")
 
-    def test_skip_advances_and_persists_a_non_graded_model_answer(self) -> None:
+    def test_skip_advances_once_without_any_model_and_completes(self) -> None:
         subject, evidence = self.create_ready_subject("Skip")
         self.add_question(subject["id"], evidence[0], "First question?", "explanation")
         self.add_question(subject["id"], evidence[0], "Second question?", "definition")
@@ -223,16 +223,23 @@ class ExamStateTest(unittest.TestCase):
         result = submit_exam_answer(
             session["id"], "[Question skipped]", 0,
             lambda *_: calls.append(True) or self.skipped_model(evidence[0]),
+            skipped=True, expected_question_id=session['current_question_id'],
         )
-        self.assertEqual(calls, [True])
+        self.assertEqual(calls, [])
         self.assertNotEqual(result["session"]["current_question_id"], session["current_question_id"])
         attempt = get_exam_run(run["id"])["sessions"][0]["attempts"][0]
         self.assertEqual(attempt["evaluation"]["status"], "skipped")
         self.assertIsNone(attempt["evaluation"]["score"])
         self.assertEqual(attempt["answer_text"], "")
-        self.assertEqual(attempt["evaluation"]["model_answer"], "Grounded model answer [E%s]" % evidence[0])
-        self.assertEqual(attempt["evaluation"]["evidence_ids"], [evidence[0]])
+        self.assertNotIn('model_answer', attempt['evaluation'])
+        self.assertEqual(attempt["evaluation"]["evidence_ids"], [])
         self.assertFalse(result["show_evaluation"])
+        repeated = submit_exam_answer(session['id'], '', 0, lambda *_: self.fail('evaluator called'), skipped=True, expected_question_id=session['current_question_id'])
+        self.assertEqual(repeated['session']['current_question_id'], result['session']['current_question_id'])
+        self.assertEqual(len(get_exam_run(run['id'])['sessions'][0]['attempts']), 1)
+        finished = submit_exam_answer(session['id'], '', 0, lambda *_: self.fail('evaluator called'), skipped=True, expected_question_id=result['session']['current_question_id'])
+        self.assertEqual(finished['session']['status'], 'completed')
+        self.assertEqual(finished['session']['evaluation']['percent_correct'], 0)
 
     def test_skipped_model_answer_uses_grounded_sources_without_grading(self) -> None:
         subject, evidence = self.create_ready_subject("Skipped sources")

@@ -7,6 +7,8 @@ import statistics
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from typing import Callable
+from threading import RLock
+from functools import wraps
 
 from services.database import _connect, get_subject
 from services.training_repository import create_attempt, get_question, list_questions
@@ -14,6 +16,18 @@ from services.training_repository import create_attempt, get_question, list_ques
 
 ACTIVE_STATUSES = {"preparing", "answering"}
 FINISHED_STATUSES = {"completed", "time_expired"}
+_transition_locks: dict[int, RLock] = {}
+_transition_guard = RLock()
+
+
+def serialized_transition(function):
+    @wraps(function)
+    def wrapped(session_id, *args, **kwargs):
+        with _transition_guard:
+            lock = _transition_locks.setdefault(session_id, RLock())
+        with lock:
+            return function(session_id, *args, **kwargs)
+    return wrapped
 
 
 def german_grade(percent_correct: float) -> float:
@@ -29,12 +43,15 @@ def _evaluation_report(evaluations: list[dict]) -> dict:
     # A timed session can finish before deferred evaluations run. Keep its
     # established provisional zero-grade behavior, while skipped attempts still
     # remain explicitly non-graded in their own persisted state.
-    percent = round(sum(scores) / (len(scores) * 5) * 100, 1) if scores else (0.0 if evaluations else None)
+    skipped_count = sum(item.get('status') == 'skipped' for item in evaluations)
+    denominator = len(scores) + skipped_count
+    percent = round(sum(scores) / (denominator * 5) * 100, 1) if denominator else (0.0 if evaluations else None)
     grade = german_grade(percent) if percent is not None else None
     return {
         "answers": len(evaluations), "average_score": round(sum(scores) / len(scores), 2) if scores else None,
         "percent_correct": percent, "german_grade": grade, "passed": grade is not None and grade <= 4.0,
         "evaluations": evaluations,
+        "skipped": skipped_count,
     }
 
 
@@ -130,8 +147,8 @@ def question_concept_key(question: dict) -> str:
 
 def eligible_mock_questions(subject_id: int) -> list[dict]:
     questions = [
-        item for item in list_questions(subject_id)
-        if item["review_status"] in {"accepted", "needs_review"}
+        item for item in list_questions(subject_id, accepted_only=True)
+        if item["review_status"] == "accepted"
         and item.get("enabled", True)
         and item.get("expected_core_points")
         and (item.get("evidence_ids") or item.get("question_pool_id"))
@@ -331,6 +348,7 @@ def _finish_session(connection, session: dict, status: str, now: datetime) -> No
         )
 
 
+@serialized_transition
 def submit_exam_answer(
     session_id: int,
     answer: str,
@@ -338,9 +356,15 @@ def submit_exam_answer(
     evaluator: Callable[[int, int, str, int], dict],
     *,
     now: datetime | None = None,
+    skipped: bool = False,
+    expected_question_id: int | None = None,
 ) -> dict:
     now = now or utc_now()
     session = get_exam_session(session_id)
+    if session and expected_question_id is not None and session['current_question_id'] != expected_question_id:
+        return {'session': session, 'evaluation': None, 'show_evaluation': False}
+    if session and expected_question_id is not None and expected_question_id in session['used_question_ids'] and session['status'] in FINISHED_STATUSES:
+        return {'session': session, 'evaluation': None, 'show_evaluation': False}
     if not session or session["status"] not in ACTIVE_STATUSES:
         raise ValueError("Exam session is not accepting answers")
     deadline = _parse(session["deadline_at"])
@@ -351,9 +375,9 @@ def submit_exam_answer(
         return {"session": get_exam_session(session_id), "evaluation": None, "show_evaluation": False}
     question_id = int(session["current_question_id"])
     immediate_feedback = session["mode"] in {"single_question", "rapid_practice"}
-    skipped = answer.strip() == "[Question skipped]"
     if skipped:
-        evaluation = evaluator(session["subject_id"], question_id, "", int(response_duration_seconds))
+        evaluation = {"status": "skipped", "score": None, "scores": {},
+                      "evidence_ids": [], "evaluation_not_applicable": True}
     elif immediate_feedback:
         evaluation = evaluator(session["subject_id"], question_id, answer.strip(), int(response_duration_seconds))
     else:
@@ -363,14 +387,10 @@ def submit_exam_answer(
             "evidence_ids": list((get_question(question_id) or {}).get("evidence_ids", [])),
             "scores": {},
         }
-    attempt_id = create_attempt(
-        session["user_id"], session["subject_id"], question_id, "" if skipped else answer,
-        response_duration_seconds, evaluation, exam_session_id=session_id,
-        parent_attempt_id=session.get("last_attempt_id"),
-    )
     used = list(dict.fromkeys(session["used_question_ids"] + [question_id]))
     current_question = get_question(question_id)
-    covered = list(dict.fromkeys(session["topics_covered"] + ([current_question["topic_id"]] if current_question.get("topic_id") else [])))
+    covered = list(dict.fromkeys(session["topics_covered"] + ([current_question["topic_id"]] if not skipped and current_question.get("topic_id") else [])))
+    skipped_topics = list(dict.fromkeys(session['topics_skipped'] + ([current_question['topic_id']] if skipped and current_question.get('topic_id') else [])))
     missing_evidence = {
         evidence_id for claim in evaluation.get("missing", []) for evidence_id in claim.get("evidence_ids", [])
     }
@@ -385,16 +405,22 @@ def submit_exam_answer(
     next_question = adaptive or next((item for item in remaining_questions if item), None)
     single_done = session["mode"] == "single_question"
     with closing(_connect()) as connection:
+        connection.execute('BEGIN IMMEDIATE')
+        # Persist the attempt and transition together: interruption cannot leave
+        # a saved skip pointing at the same current question on restart.
+        attempt_id = create_attempt(
+            session['user_id'], session['subject_id'], question_id, '' if skipped else answer,
+            response_duration_seconds, evaluation, exam_session_id=session_id,
+            parent_attempt_id=session.get('last_attempt_id'), transaction=connection)
         connection.execute(
             """
             UPDATE exam_sessions SET used_question_ids_json = ?, topics_covered_json = ?,
-                last_attempt_id = ? WHERE id = ?
+                last_attempt_id = ?, topics_skipped_json = ? WHERE id = ?
             """,
-            (json.dumps(used), json.dumps(covered), attempt_id, session_id),
+            (json.dumps(used), json.dumps(covered), attempt_id, json.dumps(skipped_topics), session_id),
         )
-        refreshed = get_exam_session(session_id)
         if single_done or not next_question:
-            _finish_session(connection, refreshed, "completed", now)
+            _finish_session(connection, session, "completed", now)
         else:
             connection.execute(
                 """
@@ -404,7 +430,7 @@ def submit_exam_answer(
                 (next_question["id"], session_id),
             )
         connection.commit()
-    show_evaluation = immediate_feedback
+    show_evaluation = immediate_feedback and not skipped
     return {"session": get_exam_session(session_id), "evaluation": evaluation if show_evaluation else None, "show_evaluation": show_evaluation}
 
 

@@ -17,6 +17,30 @@ from fastapi import UploadFile
 from io import BytesIO
 
 class ArchitectureTests(unittest.TestCase):
+    def test_skip_is_synchronous_non_ai_and_idempotent(self):
+        fixture = Path(__file__).resolve().parents[2] / 'tests/core/fixtures/question_pool.json'
+        with TestClient(app) as client:
+            ident = client.post('/api/exams', json={'name':'Skip API regression'}).json()['id']
+            client.post(f'/api/exams/{ident}/questions/import', files={'file':('pool.json', fixture.read_bytes(), 'application/json')})
+            run = client.post('/api/practice', json={'subject_ids':[ident], 'mode':'random_practice', 'question_count':3}).json()
+            session = client.post(f'/api/sessions/{run["sessions"][0]["id"]}/begin').json()
+            first = session['current_question_id']
+            with patch('backend.services.workflows.evaluate', side_effect=AssertionError('Evaluator must not run for skip')):
+                response = client.post(f'/api/sessions/{session["id"]}/skip', json={'question_id':first})
+                self.assertEqual(response.status_code, 200, response.text)
+                session = response.json()['session']
+                self.assertIsNone(response.json()['evaluation'])
+                duplicate = client.post(f'/api/sessions/{session["id"]}/skip', json={'question_id':first}).json()
+                self.assertEqual(duplicate['session']['current_question_id'], session['current_question_id'])
+                while session['status'] == 'answering':
+                    session = client.post(f'/api/sessions/{session["id"]}/skip', json={'question_id':session['current_question_id']}).json()['session']
+            saved = client.get(f'/api/practice/{run["id"]}').json()
+            attempts = saved['sessions'][0]['attempts']
+            self.assertEqual(len({attempt['question_id'] for attempt in attempts}), len(attempts))
+            self.assertEqual(saved['status'], 'completed')
+            self.assertEqual(session['evaluation']['percent_correct'], 0)
+            self.assertTrue(all(attempt['evaluation']['status'] == 'skipped' for attempt in attempts))
+
     def test_upload_limit_removes_partial_file(self):
         destination = Path(_TEMP.name) / "oversize.md"
         with self.assertRaisesRegex(ValueError, "SOURCE_TOO_LARGE"):
@@ -92,9 +116,20 @@ class ArchitectureTests(unittest.TestCase):
         with TestClient(app) as client:
             ident = client.post('/api/exams', json={'name':'Generated topic practice'}).json()['id']
             client.post(f'/api/exams/{ident}/questions/import', files={'file':('pool.json',fixture.read_bytes(),'application/json')})
+            client.post(f'/api/exams/{ident}/documents', files=[('files', ('theories.md', b'Learning theories describe how knowledge and observable behavior change through experience, reinforcement and environmental consequences.', 'text/markdown'))])
+            client.post(f'/api/exams/{ident}/process', json={'mode':'deterministic'})
+            for _ in range(100):
+                processing = client.get(f'/api/exams/{ident}/documents').json()['processing']
+                if processing['status'] not in {'queued', 'running'}:
+                    break
+                time.sleep(.02)
+            from services.training_repository import accepted_evidence_map
+            evidence_ids = list(accepted_evidence_map(ident))
+            self.assertTrue(evidence_ids)
+            import json
             # Generated questions carry a topic_id but may have no denormalized topic_name.
             with closing(_connect()) as connection:
-                connection.execute("UPDATE questions SET question_pool_id=NULL, topic_name='' WHERE subject_id=?", (ident,))
+                connection.execute("UPDATE questions SET question_pool_id=NULL, topic_name='', evidence_ids_json=? WHERE subject_id=?", (json.dumps(evidence_ids), ident))
                 connection.commit()
             questions = client.get(f'/api/exams/{ident}/questions').json()
             self.assertEqual(questions[0]['topic_name'], 'Learning Theories')
@@ -109,7 +144,7 @@ class ArchitectureTests(unittest.TestCase):
             ident = exam.json()['id']
             self.assertEqual(client.get(f'/api/exams/{ident}/learning').json()['goal']['exam_date'],'2027-06-01')
             self.assertEqual(client.post(f'/api/exams/{ident}/prepare').status_code,400)
-            self.assertEqual(client.get(f'/api/exams/{ident}/preparation').json(),{'job':None,'questions':0})
+            self.assertEqual(client.get(f'/api/exams/{ident}/preparation').json(),{'job':None,'questions':0,'coverage':[]})
             self.assertEqual(client.post('/api/exams',json={'name':'Invalid date','exam_date':'wrong'}).status_code,422)
             preflight = client.options(f'/api/exams/{ident}/learning-goal',headers={'Origin':'tauri://localhost','Access-Control-Request-Method':'PUT','Access-Control-Request-Headers':'Content-Type,X-Colloquily-Token'})
             self.assertEqual(preflight.status_code,200)

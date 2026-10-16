@@ -20,7 +20,7 @@ from services.progress import subject_progress
 from services.exam_packs import generate_exam_pack, list_exam_pack_sections, review_exam_pack_section
 
 router = APIRouter(prefix="/api")
-from backend.models.api import LanguageInput
+from backend.models.api import LanguageInput, SkipInput
 
 @router.get('/preferences', response_model=Record)
 def preferences():
@@ -58,6 +58,23 @@ def model_status():
 def pull(body: PullInput):
     return jobs.submit("model:" + body.model, "Downloading " + body.model,
         lambda progress: OllamaProvider().pull(body.model, progress))
+
+@router.get('/exams/{ident}/models/recommendation', response_model=Record)
+def model_recommendation(ident: int):
+    from backend.services.models import model_plan
+    return model_plan(flow.exam(ident))
+
+@router.post('/exams/{ident}/models/prepare', response_model=Job, status_code=202)
+def prepare_models(ident: int):
+    from backend.services.models import setup_exam
+    subject = flow.exam(ident)
+    return jobs.submit(f'ai-setup:{ident}', 'Preparing your local AI', lambda progress: setup_exam(subject, progress))
+
+@router.post('/models/cancel', response_model=Record)
+def cancel_models():
+    from backend.services.models import cancel_setup
+    cancel_setup()
+    return {'cancelling': True}
 
 @router.get("/jobs/{ident}", response_model=Job)
 def job(ident: str):
@@ -100,8 +117,14 @@ def delete_exam(ident: int):
 
 @router.get("/exams/{ident}/documents", response_model=Record)
 def documents(ident: int):
-    raw = workspace_for(flow.exam(ident)).discover_sources()
-    return {"documents": knowledge.list_documents(ident), "raw": [s["relative_path"] for s in raw],
+    import json
+    workspace = workspace_for(flow.exam(ident))
+    raw = workspace.discover_sources()
+    items = knowledge.list_documents(ident)
+    for document in items:
+        report = workspace.folder('reports') / f"document-{document['id']}-extraction.json"
+        document['extraction'] = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    return {"documents": items, "raw": [s["relative_path"] for s in raw],
         "processing": processing_jobs.latest_processing_job(ident)}
 
 @router.post("/exams/{ident}/documents", response_model=Record, status_code=201)
@@ -233,8 +256,10 @@ def review_pack(ident: int, section_id: int, body: ReviewInput):
     return {"saved": True}
 
 @router.get("/practice", response_model=list[Record])
-def runs():
-    return flow.runs()
+def runs(subject_id: int | None = None):
+    if subject_id is not None:
+        flow.exam(subject_id)
+    return flow.runs(subject_id)
 
 @router.post("/practice", response_model=Record, status_code=201)
 @router.post("/mock-exams", response_model=Record, status_code=201)
@@ -277,10 +302,10 @@ def answer(ident: int, body: AnswerInput):
     flow.session(ident)
     return jobs.submit(f"answer:{ident}", "Saving and evaluating answer", lambda _: flow.submit(ident, body.answer, body.response_duration_seconds))
 
-@router.post("/sessions/{ident}/skip", response_model=Job, status_code=202)
-def skip(ident: int):
+@router.post("/sessions/{ident}/skip", response_model=Record)
+def skip(ident: int, body: SkipInput):
     flow.session(ident)
-    return jobs.submit(f"answer:{ident}", "Skipping question", lambda _: flow.submit(ident, "[Question skipped]", 0, skipped=True))
+    return flow.submit(ident, "", 0, skipped=True, expected_question_id=body.question_id)
 
 @router.get("/settings", response_model=Record)
 def settings():
@@ -457,10 +482,13 @@ def learning_goal(ident: int, body: LearningGoalInput):
 
 @router.get("/exams/{ident}/preparation", response_model=Record)
 def preparation_status(ident: int):
-    flow.exam(ident)
+    subject = flow.exam(ident)
+    import json
+    coverage_path = workspace_for(subject).folder('reports') / 'question-coverage.json'
     from backend.services.learning import learning_overview
     return {"job": jobs.latest(f"prepare:{ident}"),
-            "questions": learning_overview(flow.local_user_id(), ident)["plan"]["eligible_questions"]}
+            "questions": learning_overview(flow.local_user_id(), ident)["plan"]["eligible_questions"],
+            "coverage": json.loads(coverage_path.read_text(encoding='utf-8')) if coverage_path.exists() else []}
 
 @router.post("/exams/{ident}/prepare", response_model=Job, status_code=202)
 def prepare(ident: int):

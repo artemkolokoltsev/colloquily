@@ -7,6 +7,10 @@ export interface Exam {
   exam_duration_minutes: number;
 }
 export interface Job {
+  phase?: string;
+  candidates?: number;
+  accepted?: number;
+  rejected?: number;
   id: string;
   status: string;
   message?: string;

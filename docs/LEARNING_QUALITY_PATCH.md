@@ -1,0 +1,147 @@
+# Colloquily 0.1.1 — UX and learning-quality patch
+
+This is the next patch after the published `v0.1.0-rc.4` preview. It does not
+change the application identifier, persistent data locations, or schema version.
+It is not a statement that a new public release has been published.
+
+## Root causes
+
+- Preparation requested only five questions, used the first 24 evidence units,
+  and fell back to generic passage-quotation starter cards when generation failed.
+- Generation checked JSON shape and exam-local citation IDs, but not whether
+  the cited content actually supported the answer. Real testing also showed that
+  the small model could incorrectly approve its own hallucinations.
+- Skip was routed through a background AI model-answer job. It was not a direct
+  session transition, and the frontend used the same asynchronous submission path.
+- Evidence review exposed internal states and IDs. PDF page furniture, standalone
+  headings, short fragments and slide structure could obscure useful content.
+- AI readiness included global default models, rather than selecting suitable
+  models for the current exam. Some exam-specific screens and practice history
+  also retained state outside the selected exam.
+
+## Changes
+
+- Searchable sidebar exam picker with active exam, optional date, practice counts,
+  create action, keyboard focus/Escape handling and exam-specific state resets.
+- Quiet system-font sidebar/toolbar, adaptive light/dark surfaces, responsive
+  sizing, focus indicators, reduced-motion and contrast accommodations. The
+  Apple design skill informed restraint, wayfinding, immediate feedback and
+  separation of student workflows from Advanced tools. References:
+  [Apple sidebars](https://developer.apple.com/design/human-interface-guidelines/sidebars),
+  [toolbars](https://developer.apple.com/design/human-interface-guidelines/toolbars),
+  [layout](https://developer.apple.com/design/human-interface-guidelines/layout).
+- Automatic, exam-scoped Ollama preparation; resource/disk recommendations,
+  installed-model reuse, preservation of explicit task/embedding settings,
+  nonblocking download progress, cancellation and retry. Ollama itself is never
+  installed automatically. Advanced local configuration remains available.
+- All-document, topic/document-scoped evidence batches rather than a five-question
+  exam cap. Preparation can be repeated to fill gaps without approving previously
+  rejected or held questions. Coverage and validation reports are written atomically
+  inside the exam's `reports/` directory.
+- No passage-quotation fallback. Structured generation must provide exact source
+  quotes for every answer point. Deterministic citation, quote, source-term,
+  numeric, clarity and copied-fragment gates precede a local-model relevance/
+  entailment check. Exact/near-text, embedding similarity and model-based semantic
+  duplicate checks include previously reviewed questions.
+- Skip is a separate synchronous API operation. It never calls an evaluator or
+  model-answer generator. A persisted ungraded skipped attempt and session
+  advance share one SQLite transaction. Expected-question IDs and serialized
+  transitions make repeat requests idempotent. Skips do not inflate the session
+  correctness percentage, and the last question completes the session.
+- Student evidence states: Ready, Needs review, Unusable. Document summaries,
+  source/page snippets, corrections, explicit review and reprocess actions are
+  separate from raw metadata. Unusable content cannot be automatically approved.
+- PDF counters/repeated edge text are filtered; nearby short PDF units are grouped
+  without crossing page boundaries; section headings inform topic grouping.
+  Broken mathematics/diagram-like fragments are retained for review rather than
+  indiscriminately discarded. Extraction-failure reports are distinct from
+  readable files/pages with no extractable text.
+
+## Model policy
+
+Default tiers use total RAM: below 12 GiB selects a lightweight 1.5B default;
+12–23 GiB permits 4B; 24 GiB or more permits 8B. Compatible installed Qwen/ Phi-3
+models fitting conservative size budgets are reused before downloading a default.
+Explicit exam task settings take precedence. Available RAM further restricts the
+installed-model size budget when it can be measured. The embedding model is retained
+when already configured. Apple Silicon unified memory and NVIDIA driver-reported
+VRAM are recorded where detectable, but GPU memory is not added to the RAM budget.
+
+Threshold overrides: `COLLOQUILY_MEDIUM_MODEL_RAM_GB` and
+`COLLOQUILY_LARGE_MODEL_RAM_GB`. Model storage discovery respects `OLLAMA_MODELS`;
+the disk estimate includes a safety reserve and is conservative for custom models.
+Model weights are not bundled; their separate upstream terms still apply.
+
+Ollama stream semantics and cached-layer resumption follow the
+[official API documentation](https://github.com/ollama/ollama/blob/main/docs/api.md).
+Inference and embeddings remain local; downloading weights can use the internet.
+
+## Verification
+
+Local results (2026-10-15): 56 backend tests, 65 domain tests and 4 frontend
+utility tests pass; translation key/interpolation parity and the TypeScript/Vite
+production build pass. Intel macOS release compilation and `.app` bundling pass.
+Frozen backend self-tests and the license inventory pass. Browser checks pass
+for exam search/switching/material isolation, light/dark appearance, German
+navigation and a 760-pixel-wide window. Synthetic PDF rendering was inspected.
+
+The full real-model quality/coverage gate is **not signed off**. An early
+`qwen2.5:1.5b` run yielded only two qualifying questions; `phi3:mini` timed out
+on CPU and was stopped, not reported as a pass. Revised retries later retained
+five candidates across two documents and completed a three-question Skip session,
+but manual review found misleading comparisons and an incomplete comparison
+rubric among those candidates. New regression gates reject comparisons between
+a category and its own example, unsupported context qualifiers and comparisons
+whose expected points omit one side, regardless of the model's classification.
+Those latest gates have automated regression coverage, but the full real-model
+benchmark has not been rerun after this last tightening. Do not count the earlier
+five-candidate run as final acceptance. No filler or new public release was published.
+
+Reprocessing now retains citation IDs for unchanged units and preserves manual
+review decisions. Superseded extraction rows are retained for history but excluded
+from active evidence. Questions whose sources no longer resolve remain stored
+with their review decisions intact, but are excluded from practice eligibility.
+
+Run the automated checks:
+
+```sh
+.venv/bin/python -m unittest discover -s backend/tests -v
+.venv/bin/python scripts/test_core.py
+npm test
+npm run build
+cargo check --locked --manifest-path src-tauri/Cargo.toml
+```
+
+Opt-in real-model check (only fresh synthetic data; refuses any model download):
+
+```sh
+.venv/bin/python scripts/smoke_learning_quality.py
+```
+
+It processes a PDF and Markdown document, checks exam isolation and citations,
+then completes a session using only Skip while asserting that no evaluator runs.
+Its benchmark requires at least four accepted questions across the documents.
+Failure must be reported, not turned into a passing result by inserting filler.
+Use `--lightweight` to explicitly test the limited-hardware recommendation tier.
+Minimum candidate count is only a smoke check; manual pedagogical review is still
+required, as the comparison failures above demonstrate. Partial coverage is
+reported separately from operation completion; useful validated results remain
+available for practice without pretending that all topics are covered.
+
+## Remaining limits / release gates
+
+- Local models remain fallible. Exact quotes and lexical guards are conservative,
+  not a formal proof of entailment. Cross-language paraphrases and mathematical
+  derivations can be rejected even when valid. Review remains available.
+- Small models may fail to cover every topic or return fewer questions than the
+  planning target. Preparation reports this explicitly and preserves valid results.
+  A stronger installed model can be selected in Advanced settings.
+- OCR, diagram interpretation and automatic reconstruction of complex mathematical
+  layouts are not implemented. Such content stays out of automatic approval.
+- The user's original 33-page presentation and 16-page script were not supplied;
+  regression tests cover a 49-unit, two-document plan, not those specific files.
+- Apple Silicon/Windows native installers and clean-machine behavior need fresh
+  CI/hardware verification for this patch. Signing/notarization and updater-key
+  requirements from the previous preview still apply.
+- Do not tag/publish 0.1.1 as release-ready until the critical quality acceptance
+  checks and native build checks have been reviewed. Existing RC4 assets are unchanged.

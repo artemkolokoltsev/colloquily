@@ -6,7 +6,7 @@ from contextlib import closing
 from datetime import date, datetime, timedelta
 
 from services.database import _connect
-from services.training_repository import list_questions
+from services.training_repository import list_questions, accepted_evidence_map, question_has_current_evidence
 from services.progress import _attempt_rows
 from services.question_pools import list_question_pools
 from services.coverage import learner_mastery
@@ -29,7 +29,8 @@ def learning_overview(user_id, subject_id, *, today=None):
     goal = json.loads(row[0]) if row else {"exam_date": None, "repetitions": 3, "questions_per_session": 10}
     questions = list_questions(subject_id)
     disabled_pools = {p['id'] for p in list_question_pools(subject_id) if not p['enabled']}
-    eligible = {q['id'] for q in questions if q['review_status'] == 'accepted' and q['enabled'] and q.get('question_pool_id') not in disabled_pools}
+    evidence = set(accepted_evidence_map(subject_id))
+    eligible = {q['id'] for q in questions if q['review_status'] == 'accepted' and q['enabled'] and q.get('question_pool_id') not in disabled_pools and question_has_current_evidence(q, evidence)}
     names = {q['id']: q.get('topic_name') or 'Unassigned' for q in questions}
     grouped = defaultdict(list)
     for q in questions:
