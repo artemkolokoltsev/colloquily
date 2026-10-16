@@ -69,15 +69,18 @@ with TestClient(app) as client, patch('backend.services.models.OllamaProvider.pu
     questions = client.get(f'/api/exams/{ident}/questions').json()
     from services.subject_workspace import workspace_for
     from services.database import get_subject
-    coverage = json.loads((workspace_for(get_subject(ident)).folder('reports') / 'question-coverage.json').read_text(encoding='utf-8'))
+    reports = workspace_for(get_subject(ident)).folder('reports')
+    coverage = json.loads((reports / 'question-coverage.json').read_text(encoding='utf-8'))
+    audit_path = reports / 'question-validation.json'
+    audit = json.loads(audit_path.read_text(encoding='utf-8')) if audit_path.exists() else []
     # Keep failure evidence too, and never mistake saved partial results from a
     # failed job for a passing release acceptance run.
     report_path = root / 'output' / 'learning-quality-smoke.json'
     report_path.parent.mkdir(exist_ok=True)
     report_path.write_text(json.dumps({'workspace': str(data), 'preparation': prepared, 'coverage': coverage,
-                                      'questions': questions, 'acceptance_passed': False},
+                                      'questions': questions, 'validation_audit': audit, 'acceptance_passed': False},
                                      ensure_ascii=False, indent=2), encoding='utf-8')
-    assert prepared['status'] == 'completed', prepared
+    assert prepared['status'] == 'completed', {'job': prepared, 'validation_audit': audit}
     assert len(questions) >= 4, {'job':prepared, 'questions':questions}
     assert len(coverage) == 3 and all(entry['covered'] + entry['generated'] >= 1 for entry in coverage), coverage
     assert all('this passage' not in q['question_text'].lower() for q in questions)
