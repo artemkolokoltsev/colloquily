@@ -88,7 +88,7 @@ def question_quality_problems(payload: dict, evidence: dict, existing: list[dict
     if not set(payload['evidence_ids']).issubset(evidence):
         reasons.append('invalid_question_citation')
     source_text = ' '.join(evidence[eid]['content'] for eid in payload['evidence_ids'] if eid in evidence)
-    if _supported_term_ratio(text, source_text) < .45:
+    if _supported_term_ratio(text, source_text) < .6:
         reasons.append('question_concept_not_in_source')
     if payload.get('question_type') == 'comparison' or re.search(r'difference|differ|unterschied|vergleichen', text, re.I):
         patterns = [r'difference between (.+?) and (.+?)\?', r'how (?:does|do) (.+?) differ from (.+?)\?',

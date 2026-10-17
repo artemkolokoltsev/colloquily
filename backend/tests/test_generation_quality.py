@@ -161,7 +161,10 @@ class GenerationQualityTests(unittest.TestCase):
     def test_embedding_semantic_duplicate_is_rejected_even_if_model_approves(self):
         import numpy as np
         generate_grounded_questions(self.subject, 1, llm_client=self.client())
-        self.payload['question_text'] = 'Why are messages divided into independent packets and forwarded by routers?'
+        self.payload['question_text'] = 'What do routers forward through shared network links?'
+        self.payload['expected_core_points'] = [{'text': 'Routers forward individual packets through shared network links.',
+                                               'source_quote': 'Routers forward individual packets through shared network links.',
+                                               'evidence_ids': [self.evidence]}]
         with patch('services.grounded_training.subject_embedder') as embedder:
             embedder.return_value.embed.return_value = np.array([[1., 0.], [.99, .01]])
             with self.assertRaises(ValueError):
@@ -175,6 +178,15 @@ class GenerationQualityTests(unittest.TestCase):
                        evidence_ids=[1], expected_core_points=[{'text': source, 'source_quote': source, 'evidence_ids': [1]}])
         existing = [{'question_text': 'What is the mechanism of message passing in graph neural networks?'}]
         self.assertIn('duplicate', question_quality_problems(payload, {1: {'content': source}}, existing))
+
+    def test_question_cannot_add_an_unexplained_model_family_to_the_source(self):
+        source = 'Message passing updates a node representation by aggregating information from neighboring nodes.'
+        evidence = {1: {'content': source + ' A graph-level readout combines node representations into a representation of the entire graph.'}}
+        payload = dict(self.payload, question_text='What does the message passing mechanism in graph neural networks do?',
+                       evidence_ids=[1], expected_core_points=[{'text': source, 'source_quote': source, 'evidence_ids': [1]}])
+        self.assertIn('question_concept_not_in_source', question_quality_problems(payload, evidence, []))
+        payload['question_text'] = 'How does message passing update a node representation?'
+        self.assertEqual(question_quality_problems(payload, evidence, []), [])
 
     def test_same_source_facts_cannot_be_repackaged_as_a_new_question(self):
         graph = 'Graph-level prediction assigns one property to an entire graph.'
