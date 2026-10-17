@@ -37,8 +37,8 @@ topics = [
 def wait(client, response):
     assert response.status_code == 202, response.text
     job = response.json()
-    # Hosted Apple Silicon runners have no usable GPU in this check. Keep the
-    # normal per-request timeout, but allow several serial CPU generations.
+    # Keep the normal per-request timeout, but allow several serial CPU
+    # generations on the standard hosted acceptance runner.
     deadline = time.monotonic() + 1800
     previous = None
     while job['status'] in {'queued', 'running'}:
