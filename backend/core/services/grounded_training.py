@@ -119,7 +119,13 @@ def question_quality_problems(payload: dict, evidence: dict, existing: list[dict
                        for previous in previous_points) for point in payload['expected_core_points']):
                 reasons.append('subsumed_answer_rubric')
         other = _question_terms(question['question_text'])
-        if SequenceMatcher(None, text.casefold(), question['question_text'].casefold()).ratio() > .9 or len(terms & other) / max(1, len(terms | other)) > .8:
+        normalized = ' '.join(re.findall(r'\w+', text.casefold()))
+        previous_normalized = ' '.join(re.findall(r'\w+', question['question_text'].casefold()))
+        shorter, longer = sorted((normalized, previous_normalized), key=len)
+        # A trailing context qualifier must not turn the same complete prompt
+        # into a new question, even when its rubric uses another source sentence.
+        qualified_repeat = len(shorter.split()) >= 5 and longer.startswith(shorter + ' ')
+        if qualified_repeat or SequenceMatcher(None, text.casefold(), question['question_text'].casefold()).ratio() > .9 or len(terms & other) / max(1, len(terms | other)) > .8:
             reasons.append('duplicate')
             break
     return sorted(set(reasons))

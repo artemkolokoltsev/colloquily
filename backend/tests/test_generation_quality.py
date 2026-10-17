@@ -179,6 +179,16 @@ class GenerationQualityTests(unittest.TestCase):
         existing = [{'question_text': 'What is the mechanism of message passing in graph neural networks?'}]
         self.assertIn('duplicate', question_quality_problems(payload, {1: {'content': source}}, existing))
 
+    def test_context_qualifier_cannot_hide_the_same_complete_question(self):
+        source = 'Message passing updates a node representation by aggregating information from neighboring nodes.'
+        payload = dict(self.payload, question_text='How does message passing update a node representation in graph neural networks?',
+                       evidence_ids=[1], expected_core_points=[{'text': source, 'source_quote': source, 'evidence_ids': [1]}])
+        previous = 'How does message passing update a node representation?'
+        evidence = {1: {'content': source}}
+        self.assertIn('duplicate', question_quality_problems(payload, evidence, [{'question_text': previous}]))
+        payload['question_text'], previous = previous, payload['question_text']
+        self.assertIn('duplicate', question_quality_problems(payload, evidence, [{'question_text': previous}]))
+
     def test_question_cannot_add_an_unexplained_model_family_to_the_source(self):
         source = 'Message passing updates a node representation by aggregating information from neighboring nodes.'
         evidence = {1: {'content': source + ' A graph-level readout combines node representations into a representation of the entire graph.'}}
