@@ -188,6 +188,19 @@ class GenerationQualityTests(unittest.TestCase):
         payload['question_text'] = 'How does message passing update a node representation?'
         self.assertEqual(question_quality_problems(payload, evidence, []), [])
 
+    def test_rubric_must_add_an_answer_not_repeat_a_leading_question(self):
+        adjacent = 'Each layer collects messages from adjacent nodes and combines them with the current node state.'
+        distant = 'Repeating layers allows information from more distant nodes to influence a representation.'
+        def point(text):
+            return {'text': text, 'source_quote': text, 'evidence_ids': [1]}
+        evidence = {1: {'content': adjacent + ' ' + distant}}
+        payload = dict(self.payload, evidence_ids=[1],
+                       question_text='How does repeating layers in message passing allow information from more distant nodes to influence a node representation?',
+                       expected_core_points=[point(distant)])
+        self.assertIn('answer_repeats_question', question_quality_problems(payload, evidence, []))
+        payload['expected_core_points'] = [point(adjacent), point(distant)]
+        self.assertNotIn('answer_repeats_question', question_quality_problems(payload, evidence, []))
+
     def test_same_source_facts_cannot_be_repackaged_as_a_new_question(self):
         graph = 'Graph-level prediction assigns one property to an entire graph.'
         node = 'Node-level prediction assigns a property to an individual node.'
