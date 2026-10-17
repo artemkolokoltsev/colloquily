@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 import config
 from services.factory import get_llm_client
-from services.training_repository import accepted_evidence_map, create_question, get_question, list_questions
+from services.training_repository import accepted_evidence_map, create_question, get_question, list_questions, question_has_current_evidence
 from services.subject_workspace import workspace_for
 from services.structured_json import parse_json_object
 from services.prompt_templates import render_prompt
@@ -60,7 +60,7 @@ class QuestionValidation(BaseModel):
     reasons: list[str] = Field(default_factory=list)
 
 
-def question_quality_problems(payload: dict, evidence: dict, existing: list[dict]) -> list[str]:
+def question_quality_problems(payload: dict, evidence: dict, existing: list[dict], *, current_evidence_ids: set[int] | None = None) -> list[str]:
     """Cheap rejection gates before independent local-model source validation."""
     text = payload['question_text'].strip()
     reasons = []
@@ -110,6 +110,12 @@ def question_quality_problems(payload: dict, evidence: dict, existing: list[dict
                 reasons.append('comparison_of_same_concept_and_example')
     terms = _question_terms(text)
     for question in existing:
+        previous_points = [point for point in (question.get('expected_core_points') or []) if isinstance(point, dict)]
+        if previous_points and question.get('review_status') != 'rejected' and question.get('enabled', True) and question_has_current_evidence(question, set(evidence) if current_evidence_ids is None else current_evidence_ids):
+            if all(any(set(point['evidence_ids']).intersection(previous.get('evidence_ids') or [])
+                       and _supported_term_ratio(point['text'], str(previous.get('text') or '')) >= .9
+                       for previous in previous_points) for point in payload['expected_core_points']):
+                reasons.append('subsumed_answer_rubric')
         other = _question_terms(question['question_text'])
         if SequenceMatcher(None, text.casefold(), question['question_text'].casefold()).ratio() > .9 or len(terms & other) / max(1, len(terms | other)) > .8:
             reasons.append('duplicate')
@@ -256,7 +262,8 @@ def generate_grounded_questions(subject: dict, count: int = 5, *, llm_client=Non
 
 
 def _generate_grounded_questions(subject: dict, count: int = 5, *, llm_client=None, evidence_units=None, progress=None, activate_validated=False) -> list[dict]:
-    evidence = list(evidence_units if evidence_units is not None else accepted_evidence_map(subject["id"]).values())
+    current_evidence = accepted_evidence_map(subject['id'])
+    evidence = list(evidence_units if evidence_units is not None else current_evidence.values())
     if not evidence:
         raise ValueError("No accepted evidence is available for question generation")
     client = llm_client or get_llm_client()
@@ -299,7 +306,7 @@ def _generate_grounded_questions(subject: dict, count: int = 5, *, llm_client=No
             continue
         for proposed in batch.questions[:max(0, count - len(created))]:
             payload = _dump(proposed)
-            reasons = question_quality_problems(payload, allowed, existing)
+            reasons = question_quality_problems(payload, allowed, existing, current_evidence_ids=set(current_evidence))
             if not reasons and existing:
                 try:
                     import numpy as np

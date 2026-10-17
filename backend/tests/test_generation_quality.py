@@ -176,6 +176,25 @@ class GenerationQualityTests(unittest.TestCase):
         existing = [{'question_text': 'What is the mechanism of message passing in graph neural networks?'}]
         self.assertIn('duplicate', question_quality_problems(payload, {1: {'content': source}}, existing))
 
+    def test_same_source_facts_cannot_be_repackaged_as_a_new_question(self):
+        graph = 'Graph-level prediction assigns one property to an entire graph.'
+        node = 'Node-level prediction assigns a property to an individual node.'
+        example = 'Link prediction can predict missing connections in a social network.'
+        def point(text):
+            return {'text': text, 'source_quote': text, 'evidence_ids': [1]}
+        existing = [{'question_text': 'What are the types of graph prediction tasks?', 'review_status': 'accepted',
+                     'evidence_ids': [1], 'expected_core_points': [point(graph), point(node)]}]
+        payload = dict(self.payload, question_text='What is the difference between graph-level prediction and node-level prediction?',
+                       question_type='comparison', evidence_ids=[1], expected_core_points=[point(graph), point(node)])
+        evidence = {1: {'content': ' '.join([graph, node, example])}}
+        self.assertIn('subsumed_answer_rubric', question_quality_problems(payload, evidence, existing))
+        existing[0]['evidence_ids'] = [1, 999]  # Historical but not currently eligible.
+        self.assertNotIn('subsumed_answer_rubric', question_quality_problems(payload, evidence, existing))
+        existing[0]['evidence_ids'] = [1]
+        payload.update(question_text='How can link prediction identify missing connections in a social network?',
+                       question_type='application', expected_core_points=[point(example)])
+        self.assertNotIn('subsumed_answer_rubric', question_quality_problems(payload, evidence, existing))
+
     def test_reprocessing_preserves_citation_ids_and_review_decisions(self):
         question = generate_grounded_questions(self.subject, 1, llm_client=self.client())[0]
         review_question(question['id'], 'accepted')
