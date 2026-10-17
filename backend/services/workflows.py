@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from services import database as db
 from services import exam_state
 from services.local_models import subject_task_llm
-from services.grounded_training import evaluate_grounded_answer, generate_skipped_model_answer
+from services.grounded_training import evaluate_grounded_answer
 from services.subject_rag import answer_subject_question, clear_subject_index_cache
 from services.subject_index import SubjectIndex
 from services.subject_workspace import workspace_for
@@ -49,11 +49,6 @@ def evaluate(subject_id, question_id, answer, duration):
         quality_llm_client=subject_task_llm(subject, "answering"))
 
 
-def skip(subject_id, question_id, _answer, _duration):
-    return generate_skipped_model_answer(subject_id, question_id,
-        llm_client=subject_task_llm(exam(subject_id), "answering"))
-
-
 def build_index(ident):
     result = SubjectIndex(ident).build()
     clear_subject_index_cache()
@@ -74,16 +69,20 @@ def source_path(ident, filename):
     return path
 
 
-def runs():
+def runs(subject_id=None):
+    query = 'SELECT id, mode, status, created_at FROM exam_runs WHERE user_id=?'
+    parameters = [local_user_id()]
+    if subject_id is not None:
+        query += ' AND EXISTS (SELECT 1 FROM exam_sessions es WHERE es.exam_run_id=exam_runs.id AND es.subject_id=?)'
+        parameters.append(subject_id)
     with closing(db._connect()) as connection:
         return [dict(row) for row in connection.execute(
-            "SELECT id, mode, status, created_at FROM exam_runs WHERE user_id=? ORDER BY id DESC LIMIT 100",
-            (local_user_id(),))]
+            query + ' ORDER BY id DESC LIMIT 100', parameters)]
 
 
-def submit(ident, answer, duration, *, skipped=False):
+def submit(ident, answer, duration, *, skipped=False, expected_question_id=None):
     from services.training_repository import accepted_evidence_map
-    result = exam_state.submit_exam_answer(ident, answer, duration, skip if skipped else evaluate)
+    result = exam_state.submit_exam_answer(ident, answer, duration, evaluate, skipped=skipped, expected_question_id=expected_question_id)
     evaluation = result.get("evaluation")
     if evaluation:
         subject_id = result["session"]["subject_id"]

@@ -34,7 +34,15 @@ Use the corresponding architecture suffix and `.exe` on Windows. This verifies l
 
 An unsigned Intel macOS debug `.app` was built and launched with disposable data. Its bundled React UI successfully fetched health, exams, and model status from its automatically launched sidecar. Quitting the application produced a clean Uvicorn shutdown and closed its loopback listener. The separate sidecar lifecycle test also passed token/Origin checks and shutdown on parent EOF. Apple Silicon and Windows artifacts have not been executed on this host.
 
-The source checks comprise 68 existing tests and five focused API tests, including a persisted practice round trip. Browser smoke testing covers exam creation, Markdown upload and processing, local Ollama indexing, and saved RAG answer/citation display. Native platform configurations beyond the development Intel Mac still need clean-machine validation.
+The 0.1.1 source checks comprise 70 backend/API tests, 65 domain regressions and
+four frontend utility tests, plus translation parity and a TypeScript production
+build. The native artifact matrix runs the domain suite on every OS, including
+Skip and evidence-history preservation. Browser verification and real-model
+acceptance details are recorded in [the patch report](LEARNING_QUALITY_PATCH.md).
+Native installer builds do not replace clean-machine GUI acceptance.
+
+Unsigned RC tags also run synthetic local-model acceptance in an isolated runner.
+Publication depends on that job and every native target, not packaging alone.
 
 ## Release blockers
 
@@ -52,7 +60,7 @@ The obsolete Flask interface, generated web assets, Docker packaging, old instal
 
 ### Learning dashboard and deadline planning
 
-The Dashboard restores the Colloquily blue/violet identity and shows exam countdown,
+The Dashboard uses restrained system-style chrome and shows exam countdown,
 practice completion, consecutive practice days, and fourteen days of activity.
 Set an exam date, answers per question (default 3), and questions per session
 (default 10). These settings persist per local learner and exam in SQLite.
@@ -76,8 +84,8 @@ The Progress page also includes topics that have not yet been practised.
 
 Create an exam with an optional date, upload lecture PDFs in Materials, then choose
 **Prepare my practice**. Preparation runs in the backend even when navigating away:
-text extraction and automatic quality checks → accepted-evidence index → five
-starter questions. Newly generated questions pass evidence/rubric validation before
+text extraction and automatic quality checks → accepted-evidence index →
+document/topic-aware question generation. Newly generated questions pass evidence/rubric validation before
 activation. Uncertain source passages and previously rejected/held questions are
 not automatically approved. Existing practice questions are reused on retries.
 Scanned PDFs without extractable text need text recognition before upload.
@@ -90,9 +98,11 @@ customisation. Local AI setup is still required once; learners can create exams 
 upload files before completing it. After an app restart, choose Prepare my practice
 again if preparation was interrupted; ingestion reuses its saved checkpoints.
 
-If the local model returns invalid question output or a request fails, preparation
-falls back to up to five extractive starter questions that require explicit review. These ask the learner to
-explain an accepted passage in their own words, with the exact passage as the
-answer rubric. They do not add model-invented facts. Source links and normal
-question validation still applies; fallback content is never silently trusted. The one-time AI screen offers a single action to
-download the required models, with individual model controls under Model details.
+If the local model returns invalid output, preparation rejects those candidates
+and reports incomplete coverage or an actionable failure. It never inserts
+extractive starter questions or passage-paraphrase filler. Validated questions
+are retained; gap generation can continue without replacing historical review.
+Local setup checks memory/disk, reuses suitable installed models, and prepares
+missing models for the selected exam with progress, cancellation and retry.
+Explicit exam model choices are preserved. Ollama itself remains a separate,
+guided installation; Colloquily never installs an executable silently.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from contextlib import closing
 from datetime import datetime
 
 import config
@@ -26,7 +27,7 @@ class ConversationHistoryTests(unittest.TestCase):
         self.user_id = get_local_user()["id"]
         self.subject = create_subject("History Test")
         now = datetime.now().isoformat(timespec="seconds")
-        with _connect() as connection:
+        with closing(_connect()) as connection:
             document = connection.execute(
                 """
                 INSERT INTO documents (
@@ -112,7 +113,7 @@ class ConversationHistoryTests(unittest.TestCase):
             review_question(question["id"], "accepted")
 
     def test_existing_ask_requests_are_backfilled(self) -> None:
-        with _connect() as connection:
+        with closing(_connect()) as connection:
             connection.execute(
                 """
                 INSERT INTO requests (

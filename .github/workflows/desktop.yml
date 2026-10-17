@@ -14,7 +14,14 @@ on:
       - 'package*.json'
 permissions:
   contents: read
+concurrency:
+  group: desktop-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  learning-acceptance:
+    if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-rc.')
+    uses: ./.github/workflows/learning-quality.yml
+
   desktop:
     strategy:
       fail-fast: false
@@ -45,6 +52,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run test:api
+      - run: python scripts/test_core.py
       - run: npm run build
       - run: npm run build:sidecar
       - run: python scripts/smoke_sidecar.py
@@ -64,7 +72,7 @@ jobs:
 
   publish-preview:
     if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-rc.')
-    needs: desktop
+    needs: [desktop, learning-acceptance]
     runs-on: ubuntu-latest
     permissions:
       contents: write

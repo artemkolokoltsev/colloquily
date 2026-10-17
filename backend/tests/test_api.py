@@ -1,4 +1,5 @@
 import os
+import json
 import tempfile
 import time
 import unittest
@@ -17,6 +18,73 @@ from fastapi import UploadFile
 from io import BytesIO
 
 class ArchitectureTests(unittest.TestCase):
+    def test_answer_jobs_are_deduplicated_per_question_not_across_questions(self):
+        from backend.api.routes import answer
+        from backend.models.api import AnswerInput
+        with patch('backend.api.routes.flow.session'), patch('backend.api.routes.jobs.submit') as submit:
+            answer(7, AnswerInput(answer='First answer', question_id=1))
+            answer(7, AnswerInput(answer='Next answer', question_id=2))
+        self.assertNotEqual(submit.call_args_list[0].args[0], submit.call_args_list[1].args[0])
+
+    def test_delayed_answer_after_skip_cannot_grade_the_next_question(self):
+        fixture = Path(__file__).resolve().parents[2] / 'tests/core/fixtures/question_pool.json'
+        questions = json.loads(fixture.read_text(encoding='utf-8'))
+        questions[0]['concept_id'] = 'behaviorism-definition'
+        questions.append({**questions[0], 'id': 'TEST002', 'concept_id': 'reinforcement-effect',
+                          'question': 'How does reinforcement affect observable behavior?',
+                          'expected_answer_points': ['Reinforcement changes the likelihood of observed behavior.']})
+        with TestClient(app) as client:
+            ident = client.post('/api/exams', json={'name': 'Delayed answer regression'}).json()['id']
+            imported = client.post(f'/api/exams/{ident}/questions/import', files={'file': ('pool.json', json.dumps(questions).encode(), 'application/json')})
+            self.assertEqual(imported.status_code, 200, imported.text)
+            run = client.post('/api/practice', json={'subject_ids': [ident], 'mode': 'random_practice', 'question_count': 2}).json()
+            session = client.post(f'/api/sessions/{run["sessions"][0]["id"]}/begin').json()
+            first = session['current_question_id']
+            with patch('backend.services.workflows.evaluate') as evaluate:
+                session = client.post(f'/api/sessions/{session["id"]}/skip', json={'question_id': first}).json()['session']
+                self.assertEqual(session['status'], 'answering')
+                second = session['current_question_id']
+                self.assertNotEqual(first, second)
+                response = client.post(f'/api/sessions/{session["id"]}/answer', json={'question_id': first, 'answer': 'A delayed answer to the skipped question.'})
+                self.assertEqual(response.status_code, 202, response.text)
+                job = response.json()
+                for _ in range(100):
+                    job = client.get(f'/api/jobs/{job["id"]}').json()
+                    if job['status'] not in {'queued', 'running'}:
+                        break
+                    time.sleep(.02)
+                self.assertEqual(job['status'], 'completed', job)
+                self.assertEqual(job['result']['session']['current_question_id'], second)
+                self.assertIsNone(job['result']['evaluation'])
+                evaluate.assert_not_called()
+            saved = client.get(f'/api/practice/{run["id"]}').json()
+            self.assertEqual(len(saved['sessions'][0]['attempts']), 1)
+            self.assertEqual(saved['sessions'][0]['attempts'][0]['evaluation']['status'], 'skipped')
+
+    def test_skip_is_synchronous_non_ai_and_idempotent(self):
+        fixture = Path(__file__).resolve().parents[2] / 'tests/core/fixtures/question_pool.json'
+        with TestClient(app) as client:
+            ident = client.post('/api/exams', json={'name':'Skip API regression'}).json()['id']
+            client.post(f'/api/exams/{ident}/questions/import', files={'file':('pool.json', fixture.read_bytes(), 'application/json')})
+            run = client.post('/api/practice', json={'subject_ids':[ident], 'mode':'random_practice', 'question_count':3}).json()
+            session = client.post(f'/api/sessions/{run["sessions"][0]["id"]}/begin').json()
+            first = session['current_question_id']
+            with patch('backend.services.workflows.evaluate', side_effect=AssertionError('Evaluator must not run for skip')):
+                response = client.post(f'/api/sessions/{session["id"]}/skip', json={'question_id':first})
+                self.assertEqual(response.status_code, 200, response.text)
+                session = response.json()['session']
+                self.assertIsNone(response.json()['evaluation'])
+                duplicate = client.post(f'/api/sessions/{session["id"]}/skip', json={'question_id':first}).json()
+                self.assertEqual(duplicate['session']['current_question_id'], session['current_question_id'])
+                while session['status'] == 'answering':
+                    session = client.post(f'/api/sessions/{session["id"]}/skip', json={'question_id':session['current_question_id']}).json()['session']
+            saved = client.get(f'/api/practice/{run["id"]}').json()
+            attempts = saved['sessions'][0]['attempts']
+            self.assertEqual(len({attempt['question_id'] for attempt in attempts}), len(attempts))
+            self.assertEqual(saved['status'], 'completed')
+            self.assertEqual(session['evaluation']['percent_correct'], 0)
+            self.assertTrue(all(attempt['evaluation']['status'] == 'skipped' for attempt in attempts))
+
     def test_upload_limit_removes_partial_file(self):
         destination = Path(_TEMP.name) / "oversize.md"
         with self.assertRaisesRegex(ValueError, "SOURCE_TOO_LARGE"):
@@ -92,9 +160,20 @@ class ArchitectureTests(unittest.TestCase):
         with TestClient(app) as client:
             ident = client.post('/api/exams', json={'name':'Generated topic practice'}).json()['id']
             client.post(f'/api/exams/{ident}/questions/import', files={'file':('pool.json',fixture.read_bytes(),'application/json')})
+            client.post(f'/api/exams/{ident}/documents', files=[('files', ('theories.md', b'Learning theories describe how knowledge and observable behavior change through experience, reinforcement and environmental consequences.', 'text/markdown'))])
+            client.post(f'/api/exams/{ident}/process', json={'mode':'deterministic'})
+            for _ in range(100):
+                processing = client.get(f'/api/exams/{ident}/documents').json()['processing']
+                if processing['status'] not in {'queued', 'running'}:
+                    break
+                time.sleep(.02)
+            from services.training_repository import accepted_evidence_map
+            evidence_ids = list(accepted_evidence_map(ident))
+            self.assertTrue(evidence_ids)
+            import json
             # Generated questions carry a topic_id but may have no denormalized topic_name.
             with closing(_connect()) as connection:
-                connection.execute("UPDATE questions SET question_pool_id=NULL, topic_name='' WHERE subject_id=?", (ident,))
+                connection.execute("UPDATE questions SET question_pool_id=NULL, topic_name='', evidence_ids_json=? WHERE subject_id=?", (json.dumps(evidence_ids), ident))
                 connection.commit()
             questions = client.get(f'/api/exams/{ident}/questions').json()
             self.assertEqual(questions[0]['topic_name'], 'Learning Theories')
@@ -109,7 +188,7 @@ class ArchitectureTests(unittest.TestCase):
             ident = exam.json()['id']
             self.assertEqual(client.get(f'/api/exams/{ident}/learning').json()['goal']['exam_date'],'2027-06-01')
             self.assertEqual(client.post(f'/api/exams/{ident}/prepare').status_code,400)
-            self.assertEqual(client.get(f'/api/exams/{ident}/preparation').json(),{'job':None,'questions':0})
+            self.assertEqual(client.get(f'/api/exams/{ident}/preparation').json(),{'job':None,'questions':0,'coverage':[]})
             self.assertEqual(client.post('/api/exams',json={'name':'Invalid date','exam_date':'wrong'}).status_code,422)
             preflight = client.options(f'/api/exams/{ident}/learning-goal',headers={'Origin':'tauri://localhost','Access-Control-Request-Method':'PUT','Access-Control-Request-Headers':'Content-Type,X-Colloquily-Token'})
             self.assertEqual(preflight.status_code,200)

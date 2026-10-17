@@ -100,7 +100,7 @@ def _repeated_pdf_edge_lines(pages: list[dict]) -> set[str]:
             key = _line_key(line)
             if key and len(key) <= 120:
                 appearances.setdefault(key, set()).add(page_number)
-    minimum = max(3, math.ceil(len(pages) * 0.35))
+    minimum = max(2 if len(pages) > 1 else 3, math.ceil(len(pages) * 0.35))
     return {line for line, page_numbers in appearances.items() if len(page_numbers) >= minimum}
 
 
@@ -111,6 +111,8 @@ def _paragraph_units(
     repeated_line_keys: set[str] | None = None,
 ) -> list[dict]:
     lines = text.splitlines()
+    nonempty = [number for number, line in enumerate(lines, 1) if line.strip()]
+    page_match = re.match(r'page (\d+),', location_prefix)
     repeated = {_line_key(line) for line in _repeated_edge_lines(text)}
     repeated.update(repeated_line_keys or set())
     units: list[dict] = []
@@ -134,6 +136,11 @@ def _paragraph_units(
         current.clear()
 
     for number, line in enumerate(lines, start=1):
+        if page_match and nonempty and number in {nonempty[0], nonempty[-1]}:
+            explicit_counter = re.fullmatch(r'\s*(?:page|seite|slide)\s+\d{1,4}\s*(?:/\s*\d{1,4})?\s*', line, re.I)
+            matching_footer = number == nonempty[-1] and line.strip() == page_match.group(1)
+            if explicit_counter or matching_footer:
+                continue
         if not line.strip():
             flush()
         else:
@@ -145,7 +152,16 @@ def _paragraph_units(
 def extract_source_units(source: dict, *, page_start: int | None = None, page_end: int | None = None) -> list[dict]:
     path: Path = source["path"]
     if source["source_type"] == "markdown":
-        return _paragraph_units(path.read_text(encoding="utf-8", errors="replace"))
+        result = _paragraph_units(path.read_text(encoding="utf-8", errors="replace"))
+        section = None
+        for item in result:
+            first_line = item['raw_content'].splitlines()[0]
+            if re.match(r'^#{1,6}\s+', first_line):
+                section = single_topic_title(re.sub(r'^#{1,6}\s+', '', first_line))
+            if section:
+                item['section_title'] = section
+        source['extraction_summary'] = {'state': 'text_extracted' if result else 'no_extractable_text', 'pages_processed': None, 'empty_pages': []}
+        return result
     parsed = parse_pdf(str(path))
     units: list[dict] = []
     selected_pages = []
@@ -157,16 +173,35 @@ def extract_source_units(source: dict, *, page_start: int | None = None, page_en
             continue
         selected_pages.append(page)
     repeated_edges = _repeated_pdf_edge_lines(selected_pages)
+    empty_pages = [int(page.get('page_number') or 0) for page in selected_pages if not (page.get('raw_text') or page.get('clean_text') or '').strip()]
+    source['extraction_summary'] = {'state': 'no_extractable_text' if len(empty_pages) == len(selected_pages) else 'text_extracted',
+                                  'pages_processed': len(selected_pages), 'pages_total': len(parsed.get('pages', [])), 'empty_pages': empty_pages}
     for page in selected_pages:
         page_number = int(page.get("page_number") or 0)
         raw = page.get("raw_text") or page.get("clean_text") or ""
-        for item in _paragraph_units(
+        page_units = _paragraph_units(
             raw,
             location_prefix=f"page {page_number}, lines",
             repeated_line_keys=repeated_edges,
-        ):
+        )
+        coherent = []
+        for item in page_units:
+            if coherent and len(coherent[-1]['raw_content'].split()) < 35 and len(item['raw_content'].split()) < 100:
+                previous = coherent[-1]
+                previous['raw_content'] += '\n' + item['raw_content']
+                previous['source_end'] = item['source_end']
+                previous['source_location'] = f"page {page_number}, lines {previous['source_start']}-{item['source_end']}"
+                previous['repeated_lines'] = sorted(set(previous['repeated_lines'] + item['repeated_lines']))
+            else:
+                coherent.append(item)
+        for item in coherent:
             item["source_start"] = page_number
             item["source_end"] = page_number
+            # Keep nearby short slide lines together, but never cross pages.
+            # Raw source text and the true PDF page remain available for review.
+            lines = [line.strip() for line in item['raw_content'].splitlines() if line.strip() and _line_key(line) not in repeated_edges]
+            if len(lines) > 1 and 2 <= len(lines[0].split()) <= 10 and not re.search(r'[.!?=∑√+]', lines[0]):
+                item['section_title'] = single_topic_title(lines[0])
             units.append(item)
     return units
 
@@ -222,6 +257,13 @@ def deterministic_cleanup(unit: dict) -> dict:
     if not complete:
         problems.append("incomplete_fragment")
         confidence -= 0.2
+    if heading:
+        problems.append('heading_without_explanation')
+    if len(words) < 8 and not re.search(r'[.!?;:]\s*$', text) and not FORMULA_PATTERN.search(text):
+        problems.append('low_information_fragment')
+    short_lines = [line for line in text.splitlines() if line.strip()]
+    if len(short_lines) >= 5 and sum(len(line.split()) <= 2 for line in short_lines) / len(short_lines) > .65:
+        problems.append('possible_diagram_or_broken_reading_order')
     if not meaningful:
         problems.append("meaningless_fragment")
         confidence = min(confidence, 0.2)
@@ -241,7 +283,7 @@ def deterministic_cleanup(unit: dict) -> dict:
         status = "needs_review"
     else:
         status = "accepted"
-    detected_topic = normalized_heading if heading else None
+    detected_topic = unit.get('section_title') or (normalized_heading if heading else None)
     result = {
         "cleaned_content": text,
         "content_type": content_type,
@@ -300,6 +342,10 @@ def apply_local_cleanup(units: list[dict], generate: Callable[[str], str], *, re
             item["recommended_status"] = original["recommended_status"]
             item["quality_problems"] = sorted(set(item.get("quality_problems", [])) | {"repeated_header_or_footer"})
             item["detected_topic"] = original.get("detected_topic")
+        if set(original.get('quality_problems', [])) & {'meaningless_fragment', 'broken_formula', 'corrupted_table', 'possible_diagram_or_broken_reading_order', 'heading_without_explanation', 'low_information_fragment'}:
+            item['recommended_status'] = original['recommended_status']
+            item['cleaned_content'] = original['cleaned_content']
+            item['quality_problems'] = sorted(set(item.get('quality_problems', [])) | set(original['quality_problems']))
         # Source provenance is immutable even if a model attempts to change it.
         item["source_support"] = original["source_support"]
         item["quality_score"] = item["extraction_confidence"]
@@ -362,6 +408,7 @@ def process_subject(
                 deterministic_cleanup(item)
                 for item in extract_source_units(source, page_start=page_start, page_end=page_end)
             ]
+            workspace.atomic_json(workspace.folder('reports') / f"document-{document['id']}-extraction.json", source.get('extraction_summary', {}))
             batches = _processing_batches(extracted, source["source_type"])
             total_batches = len(batches)
             if progress_callback:
@@ -432,6 +479,7 @@ def process_subject(
                     "failed_documents": len(summary["failed"]), "total_documents": len(sources),
                 })
         except Exception as exc:
+            workspace.atomic_json(workspace.folder('reports') / f"document-{document['id']}-extraction.json", source.get('extraction_summary', {'state': 'extraction_failed'}) | {'processing_error': str(exc)})
             summary["failed"].append({"document": source["relative_path"], "error": str(exc)})
             if progress_callback:
                 progress_callback({

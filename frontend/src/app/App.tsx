@@ -14,8 +14,24 @@ import { Settings } from "../features/Settings";
 import { Dashboard } from "../features/Dashboard";
 import { useTranslation } from "react-i18next";
 import { checkForUpdate } from "../update";
-const pages = ["Dashboard", "Materials", "Questions", "Practice", "Progress"] as const;
-const pageLabels = { Dashboard: "nav.dashboard", Materials: "nav.materials", Questions: "nav.questions", Practice: "nav.practice", Progress: "nav.progress" } as const;
+import { ExamPicker } from "../components/ExamPicker";
+import { operation } from "../api/client";
+import { Progress } from "../components/Common";
+import type { Job } from "../types";
+const pages = [
+  "Dashboard",
+  "Materials",
+  "Questions",
+  "Practice",
+  "Progress",
+] as const;
+const pageLabels = {
+  Dashboard: "nav.dashboard",
+  Materials: "nav.materials",
+  Questions: "nav.questions",
+  Practice: "nav.practice",
+  Progress: "nav.progress",
+} as const;
 const advancedPages = [
   "Reported questions",
   "Study plan",
@@ -24,7 +40,9 @@ const advancedPages = [
 ];
 export default function App() {
   const { t, i18n } = useTranslation();
-  const [welcomed, setWelcomed] = useState(() => localStorage.getItem('colloquily.welcomed') === 'true');
+  const [welcomed, setWelcomed] = useState(
+    () => localStorage.getItem("colloquily.welcomed") === "true",
+  );
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [exams, setExams] = useState<Exam[]>([]);
@@ -41,6 +59,49 @@ export default function App() {
   const [examDate, setExamDate] = useState("");
   const [aiSetup, setAiSetup] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [aiJob, setAiJob] = useState<Job | null>(null);
+  const [aiError, setAiError] = useState("");
+  const [aiRetry, setAiRetry] = useState(0);
+  function switchExam(id: number) {
+    setSelected(id);
+    setTopic("");
+    setPracticeCount(10);
+  }
+  useEffect(() => {
+    if (!ready || !selected) return;
+    let current = true;
+    setAiError("");
+    setAiJob(null);
+    void Promise.all([
+      api<{ ollama: string }>("/models/status"),
+      api<{ backend: string }>(`/exams/${selected}/models`),
+    ])
+      .then(async ([status, settings]) => {
+        if (!current) return;
+        if (settings.backend !== "ollama") {
+          setAiSetup(false);
+          return;
+        }
+        if (status.ollama !== "available") {
+          setAiSetup(true);
+          return;
+        }
+        setAiSetup(false);
+        await operation(`/exams/${selected}/models/prepare`, {}, (job) => {
+          if (current) setAiJob(job);
+        });
+        if (current) setAiSetup(false);
+      })
+      .catch((error) => {
+        if (current) {
+          setAiError(String(error));
+          setAiSetup(true);
+        }
+      });
+    return () => {
+      current = false;
+    };
+  }, [ready, selected, aiRetry]);
   async function refresh() {
     const e = await api<Exam[]>("/exams");
     setExams(e);
@@ -51,9 +112,12 @@ export default function App() {
     setError("");
     try {
       await connect();
-      const preferences = await api<{language?: string}>('/preferences');
+      const preferences = await api<{ language?: string }>("/preferences");
       if (preferences.language) await i18n.changeLanguage(preferences.language);
-      else await api('/preferences', 'PATCH', { language: i18n.resolvedLanguage || 'en' });
+      else
+        await api("/preferences", "PATCH", {
+          language: i18n.resolvedLanguage || "en",
+        });
       const existing = await refresh();
       if (!existing.length) setPage("Exams");
       else if (existing.length === 1 && existing[0].slug === "imported-exam") {
@@ -66,10 +130,6 @@ export default function App() {
       setReady(true);
       // Update checks are best-effort and never block local study.
       void checkForUpdate().catch(() => undefined);
-      const status = await api<{ ollama: string; missing: string[] }>(
-        "/models/status",
-      );
-      setAiSetup(status.ollama !== "available" || status.missing.length > 0);
     } catch (e) {
       setError(String(e));
     }
@@ -81,11 +141,13 @@ export default function App() {
     setBusy(true);
     setError("");
     try {
-      await api('/preferences', 'PATCH', { language: i18n.resolvedLanguage || 'en' });
+      await api("/preferences", "PATCH", {
+        language: i18n.resolvedLanguage || "en",
+      });
       const exam = await api<Exam>("/exams", "POST", {
         name,
         exam_date: examDate || null,
-        language: i18n.resolvedLanguage || 'en',
+        language: i18n.resolvedLanguage || "en",
       });
       await refresh();
       setSelected(exam.id);
@@ -118,22 +180,12 @@ export default function App() {
           Colloquily
         </h1>
         <p className="muted">{t("app.tagline")}</p>
-        <label>
-          {t("app.currentExam")}
-          <select
-            value={selected}
-            onChange={(e) => setSelected(Number(e.target.value))}
-          >
-            {exams.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button className="primary" onClick={() => navigate("Exams")}>
-          + {t("app.createExam")}
-        </button>
+        <ExamPicker
+          exams={exams}
+          selected={selected}
+          onSelect={switchExam}
+          onCreate={() => navigate("Exams")}
+        />
         <nav aria-label="Your learning">
           {pages.map((p) => (
             <button
@@ -161,27 +213,76 @@ export default function App() {
                 className={page === p ? "active" : ""}
                 onClick={() => navigate(p)}
               >
-                {p === "Local AI" ? t("nav.ai") : p === "Reported questions" ? t("nav.reported") : p === "Study plan" ? t("nav.plan") : t("nav.settings")}
+                {p === "Local AI"
+                  ? t("nav.ai")
+                  : p === "Reported questions"
+                    ? t("nav.reported")
+                    : p === "Study plan"
+                      ? t("nav.plan")
+                      : t("nav.settings")}
               </button>
             ))}
           </nav>
         </details>
-        <small>
-          {t("app.localPromise")}
-        </small>
+        <small>{t("app.localPromise")}</small>
       </aside>
       <main>
+        <header className="window-toolbar">
+          <strong>
+            {exams.find((exam) => exam.id === selected)?.name || "Colloquily"}
+          </strong>
+          <span>{t("app.localPromise")}</span>
+        </header>
         <ErrorNotice error={error} />
-        {!welcomed && !exams.length && <section>
-          <h2>{t('release.welcome')}</h2>
-          <label>{t('settings.language')}<select value={i18n.resolvedLanguage || 'en'} onChange={event => void i18n.changeLanguage(event.target.value)}><option value="de">Deutsch</option><option value="en">English</option></select></label>
-          <p>{t('release.privacy')}</p>
-          <button onClick={() => { localStorage.setItem('colloquily.welcomed', 'true'); setWelcomed(true); }}>{t('release.continue')}</button>
-        </section>}
+        {aiJob && ["queued", "running"].includes(aiJob.status) && (
+          <div className="setup-notice" role="status">
+            {t("ui.redesignPreparingAI")}
+            <Progress job={aiJob} />
+            <button onClick={() => void api("/models/cancel", "POST", {})}>
+              {t("ui.redesignCancel")}
+            </button>
+          </div>
+        )}
+        {aiError && (
+          <div className="setup-notice">
+            <ErrorNotice error={aiError} />
+            <button onClick={() => setAiRetry((value) => value + 1)}>
+              {t("startup.retry")}
+            </button>
+          </div>
+        )}
+        {!welcomed && !exams.length && (
+          <section>
+            <h2>{t("release.welcome")}</h2>
+            <label>
+              {t("settings.language")}
+              <select
+                value={i18n.resolvedLanguage || "en"}
+                onChange={(event) =>
+                  void i18n.changeLanguage(event.target.value)
+                }
+              >
+                <option value="de">Deutsch</option>
+                <option value="en">English</option>
+              </select>
+            </label>
+            <p>{t("release.privacy")}</p>
+            <button
+              onClick={() => {
+                localStorage.setItem("colloquily.welcomed", "true");
+                setWelcomed(true);
+              }}
+            >
+              {t("release.continue")}
+            </button>
+          </section>
+        )}
         {aiSetup && page !== "Local AI" && (
           <div className="setup-notice">
             {t("setup.notice")}{" "}
-            <button onClick={() => navigate("Local AI")}>{t("setup.action")}</button>
+            <button onClick={() => navigate("Local AI")}>
+              {t("setup.action")}
+            </button>
           </div>
         )}
         {page === "Exams" && (
@@ -205,7 +306,8 @@ export default function App() {
                 />
               </label>
               <label>
-                {t("exam.date")} <span className="muted">({t("exam.optional")})</span>
+                {t("exam.date")}{" "}
+                <span className="muted">({t("exam.optional")})</span>
                 <input
                   type="date"
                   value={examDate}
@@ -220,14 +322,11 @@ export default function App() {
               {exams.map((e) => (
                 <article key={e.id}>
                   <h3>{e.name}</h3>
-                  <p>
-                    {e.description ||
-                      t("exam.defaultDescription")}
-                  </p>
+                  <p>{e.description || t("exam.defaultDescription")}</p>
                   <p>{t("exam.minutes", { count: e.exam_duration_minutes })}</p>
                   <button
                     onClick={() => {
-                      setSelected(e.id);
+                      switchExam(e.id);
                       setPage("Materials");
                     }}
                   >
@@ -252,7 +351,9 @@ export default function App() {
             }}
           />
         )}
-        {page === 'Advanced settings' && <Settings exam={selected} />}
+        {page === "Advanced settings" && (
+          <Settings key={selected} exam={selected} />
+        )}
         {selected > 0 && (
           <div key={`${page}:${selected}`}>
             {page === "Dashboard" && (

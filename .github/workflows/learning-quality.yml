@@ -1,0 +1,66 @@
+name: Real local-model learning acceptance
+on:
+  workflow_call:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'scripts/smoke_learning_quality.py'
+      - '.github/workflows/learning-quality.yml'
+permissions:
+  contents: read
+concurrency:
+  group: learning-quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic-learning:
+    # Standard public Linux runners provide 16 GB RAM; virtual M1 runners have
+    # only 7 GB and no usable GPU, below this explicit 4B acceptance workload.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      OLLAMA_NO_CLOUD: 'true'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install -r backend/requirements.txt
+      - name: Install local inference runtime
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/ollama-runtime"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/ollama-runtime.tar.zst" \
+            https://github.com/ollama/ollama/releases/download/v0.33.0/ollama-linux-amd64.tar.zst
+          echo "72c4b9d91c317742ffd11b92e0a7fbe6353072c6354d910f1a03fd3ce40403d4  $RUNNER_TEMP/ollama-runtime.tar.zst" | sha256sum --check
+          tar --zstd --extract --file "$RUNNER_TEMP/ollama-runtime.tar.zst" --directory "$RUNNER_TEMP/ollama-runtime"
+          echo "$RUNNER_TEMP/ollama-runtime/bin" >> "$GITHUB_PATH"
+          echo "OLLAMA_MODELS=$RUNNER_TEMP/ollama-test-models" >> "$GITHUB_ENV"
+      - name: Start local inference (synthetic data only)
+        shell: bash
+        run: |
+          ollama serve > "$RUNNER_TEMP/ollama-learning.log" 2>&1 &
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:11434/api/version; then
+              ollama --version
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: Download separate test models (not installer contents)
+        run: |
+          ollama pull qwen3:4b
+          ollama pull embeddinggemma:latest
+          ollama list
+      - name: Check multi-document grounding, topic coverage and Skip
+        run: python scripts/smoke_learning_quality.py --model qwen3:4b
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: synthetic-learning-acceptance
+          path: |
+            output/learning-quality-smoke.json
+            ${{ runner.temp }}/ollama-learning.log
+          if-no-files-found: warn

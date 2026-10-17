@@ -33,7 +33,7 @@ async def lifespan(app):
     local_user_id()
     yield
 
-app = FastAPI(title="Colloquily local API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Colloquily local API", version="0.1.1", lifespan=lifespan)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "[::1]", "testserver"])
 app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"], allow_headers=["Content-Type", "X-Colloquily-Token"])
 

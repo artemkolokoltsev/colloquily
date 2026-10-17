@@ -29,6 +29,8 @@ class OllamaLLMClient:
         self.logger = logging.getLogger(__name__)
 
     def generate(self, prompt: str, *, temperature: float | None = None, response_schema: dict | None = None) -> str:
+        if 'cloud' in self.model_name.casefold():
+            raise ValueError('Only local Ollama models are supported; cloud inference is disabled.')
         start = time.perf_counter()
 
         def _call() -> str:
@@ -36,6 +38,7 @@ class OllamaLLMClient:
                 "model": self.model_name,
                 "prompt": prompt,
                 "stream": False,
+                "think": False,
                 "options": {
                     "temperature": config.LLM_TEMPERATURE if temperature is None else temperature,
                     "num_predict": self.num_predict,
@@ -69,14 +72,18 @@ class OllamaLLMClient:
                     extra={"model_name": self.model_name, "prompt_length": len(prompt), "latency_ms": latency_ms},
                 )
                 return result or "Das Modell hat keine Antwort erzeugt."
-            except requests.Timeout:
+            except requests.Timeout as exc:
                 self.logger.exception("Ollama request timeout")
+                if self.task == 'question_generation':
+                    raise requests.Timeout('The local model timed out. Validated questions were retained. Try a lighter model, close memory-heavy apps, and retry preparation.') from exc
                 return (
                     "Die lokale LLM-Antwort hat das Zeitlimit ueberschritten. "
                     "Reduzieren Sie den Seitenbereich oder erhoehen Sie OLLAMA_TIMEOUT_SECONDS in config.py."
                 )
-            except requests.RequestException:
+            except requests.RequestException as exc:
                 self.logger.exception("Ollama request failed")
+                if self.task == 'question_generation':
+                    raise requests.RequestException('Local Ollama is unavailable. Start Ollama and retry preparation; no fallback questions were inserted.') from exc
                 return "The local Ollama service is unavailable. Check that Ollama is running."
 
         return _call()

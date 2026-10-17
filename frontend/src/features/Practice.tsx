@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, operation } from "../api/client";
 import {
   ErrorNotice,
@@ -30,6 +30,8 @@ export function Practice({
   const [feedback, setFeedback] = useState<Evaluation | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
+  const transitionVersion = useRef(0);
   const [job, setJob] = useState<Job | null>(null);
   const [history, setHistory] = useState<
     { id: number; mode: string; status: string }[]
@@ -49,15 +51,19 @@ export function Practice({
   const [preparation, setPreparation] = useState(0);
   const [started, setStarted] = useState(Date.now());
   useEffect(() => {
-    api<typeof history>("/practice")
+    api<typeof history>(`/practice?subject_id=${selected}`)
       .then(setHistory)
       .catch((e) => setError(String(e)));
-  }, [run?.status]);
+  }, [run?.status, selected]);
   useEffect(() => {
     if (!session) return;
     const timer = setInterval(() => {
+      if (submitting.current) return;
+      const version = transitionVersion.current;
       api<Session>(`/sessions/${session.id}`)
         .then((s) => {
+          if (version !== transitionVersion.current || submitting.current)
+            return;
           setSession(s);
           if (["completed", "time_expired"].includes(s.status) && run)
             api<Run>(`/practice/${run.id}`)
@@ -91,43 +97,64 @@ export function Practice({
     setFeedback(null);
   }
   async function submit(skip = false) {
-    if (!session) return;
-    const result = await operation<{
-      session: Session;
-      evaluation: Evaluation | null;
-    }>(
-      `/sessions/${session.id}/${skip ? "skip" : "answer"}`,
-      skip
-        ? {}
-        : {
-            answer,
-            response_duration_seconds: Math.floor(
-              (Date.now() - started) / 1000,
-            ),
-          },
-      setJob,
-    );
-    setSession(result.session);
-    setFeedback(result.evaluation);
-    setAnswer("");
-    setStarted(Date.now());
-    if (run) setRun(await api<Run>(`/practice/${run.id}`));
+    if (!session?.current_question || submitting.current) return;
+    const questionId = session.current_question.id;
+    submitting.current = true;
+    transitionVersion.current += 1;
+    setJob(null);
+    setFeedback(null);
+    try {
+      const result = skip
+        ? await api<{ session: Session; evaluation: null }>(
+            `/sessions/${session.id}/skip`,
+            "POST",
+            { question_id: questionId },
+          )
+        : await operation<{
+            session: Session;
+            evaluation: Evaluation | null;
+          }>(
+            `/sessions/${session.id}/answer`,
+            {
+              answer,
+              question_id: questionId,
+              response_duration_seconds: Math.floor(
+                (Date.now() - started) / 1000,
+              ),
+            },
+            setJob,
+          );
+      setSession(result.session);
+      setFeedback(result.evaluation);
+      setAnswer("");
+      setStarted(Date.now());
+      if (run) setRun(await api<Run>(`/practice/${run.id}`));
+    } finally {
+      submitting.current = false;
+    }
   }
   const active = session && ["answering", "preparing"].includes(session.status);
   return (
     <section>
-      <p className="eyebrow">{t('ui.s065983d64c')}</p>
-      <h2>{t('ui.sc85302325b')}</h2>
+      <p className="eyebrow">{t("ui.s065983d64c")}</p>
+      <h2>{t("ui.sc85302325b")}</h2>
       <ErrorNotice error={error} />
       {!run ? (
         <>
-          <p> {t('ui.scb93da9e26')}{" "}
+          <p>
+            {" "}
+            {t("ui.scb93da9e26")}{" "}
             {initialTopic ||
               exams.find((e) => e.id === selected)?.name ||
-              t('ui.s76732acc88')}{" "} {t('ui.sab261a436a')} </p>
+              t("ui.s76732acc88")}{" "}
+            {t("ui.sab261a436a")}{" "}
+          </p>
           <details>
-            <summary>{t('ui.sef46ed5421')}</summary>
-            <label> {t('ui.s5e23ec6a30')} <select value={mode} onChange={(e) => setMode(e.target.value)}>
+            <summary>{t("ui.sef46ed5421")}</summary>
+            <label>
+              {" "}
+              {t("ui.s5e23ec6a30")}{" "}
+              <select value={mode} onChange={(e) => setMode(e.target.value)}>
                 {[
                   "single_question",
                   "rapid_practice",
@@ -139,13 +166,15 @@ export function Practice({
                   "full_colloquium",
                 ].map((m) => (
                   <option key={m} value={m}>
-                    {t(`dynamic.${m}`, { defaultValue: m.replaceAll('_', ' ') })}
+                    {t(`dynamic.${m}`, {
+                      defaultValue: m.replaceAll("_", " "),
+                    })}
                   </option>
                 ))}
               </select>
             </label>
             <fieldset>
-              <legend>{t('ui.s16aaf28e05')}</legend>
+              <legend>{t("ui.s16aaf28e05")}</legend>
               {exams.map((e) => (
                 <label className="inline" key={e.id}>
                   <input
@@ -163,7 +192,10 @@ export function Practice({
                 </label>
               ))}
             </fieldset>
-            <label> {t('ui.s2762dc6987')} <input
+            <label>
+              {" "}
+              {t("ui.s2762dc6987")}{" "}
+              <input
                 type="number"
                 min="0"
                 max="600"
@@ -171,7 +203,10 @@ export function Practice({
                 onChange={(e) => setPreparation(Number(e.target.value))}
               />
             </label>
-            <label> {t('ui.sb14a6e6b6a')} <input
+            <label>
+              {" "}
+              {t("ui.sb14a6e6b6a")}{" "}
+              <input
                 type="number"
                 min="15"
                 max="3600"
@@ -181,8 +216,11 @@ export function Practice({
             </label>
             {["random_practice", "oral_exam_simulation"].includes(mode) && (
               <fieldset>
-                <legend>{t('ui.sdfe98ae2f8')}</legend>
-                <label> {t('ui.s4bbde39fcd')} <input
+                <legend>{t("ui.sdfe98ae2f8")}</legend>
+                <label>
+                  {" "}
+                  {t("ui.s4bbde39fcd")}{" "}
+                  <input
                     type="number"
                     min="1"
                     max="100"
@@ -190,17 +228,26 @@ export function Practice({
                     onChange={(e) => setCount(Number(e.target.value))}
                   />
                 </label>
-                <label> {t('ui.sd512c2854e')} <input
+                <label>
+                  {" "}
+                  {t("ui.sd512c2854e")}{" "}
+                  <input
                     value={topics}
                     onChange={(e) => setTopics(e.target.value)}
                   />
                 </label>
-                <label> {t('ui.s00513010d0')} <input
+                <label>
+                  {" "}
+                  {t("ui.s00513010d0")}{" "}
+                  <input
                     value={difficulties}
                     onChange={(e) => setDifficulties(e.target.value)}
                   />
                 </label>
-                <label> {t('ui.s3972666299')} <input
+                <label>
+                  {" "}
+                  {t("ui.s3972666299")}{" "}
+                  <input
                     value={priorities}
                     onChange={(e) => setPriorities(e.target.value)}
                   />
@@ -212,13 +259,17 @@ export function Practice({
                 type="checkbox"
                 checked={showTimer}
                 onChange={(e) => setShowTimer(e.target.checked)}
-              /> {t('ui.s7af619382c')} </label>
+              />{" "}
+              {t("ui.s7af619382c")}{" "}
+            </label>
             <label className="inline">
               <input
                 type="checkbox"
                 checked={randomOrder}
                 onChange={(e) => setRandomOrder(e.target.checked)}
-              /> {t('ui.s6eab5bfe15')} </label>
+              />{" "}
+              {t("ui.s6eab5bfe15")}{" "}
+            </label>
           </details>
           <button
             className="primary"
@@ -244,11 +295,17 @@ export function Practice({
                 setSession(r.sessions[0]);
               })
             }
-          > {t('ui.s4954d147d3')} </button>
-          <h3>{t('ui.sf871f70262')}</h3>
+          >
+            {" "}
+            {t("ui.s4954d147d3")}{" "}
+          </button>
+          <h3>{t("ui.sf871f70262")}</h3>
           {history.map((r) => (
             <article key={r.id}>
-              <button onClick={() => act(() => openRun(r.id))}> {t('ui.s00d60e31a4')} {r.id} · {r.mode.replaceAll("_", " ")} · {r.status}
+              <button onClick={() => act(() => openRun(r.id))}>
+                {" "}
+                {t("ui.s00d60e31a4")} {r.id} · {r.mode.replaceAll("_", " ")} ·{" "}
+                {r.status}
               </button>
             </article>
           ))}
@@ -256,17 +313,27 @@ export function Practice({
       ) : (
         <>
           <div className="toolbar">
-            <h3> {t('ui.s00d60e31a4')} {run.id} · {run.mode.replaceAll("_", " ")}
+            <h3>
+              {" "}
+              {t("ui.s00d60e31a4")} {run.id} · {run.mode.replaceAll("_", " ")}
             </h3>
             <button
               disabled={busy}
               onClick={async () => {
-                try { await api(`/practice/${run.id}/finish`, 'POST', {}); } catch (e) { setError(String(e)); return; }
+                try {
+                  await api(`/practice/${run.id}/finish`, "POST", {});
+                } catch (e) {
+                  setError(String(e));
+                  return;
+                }
                 setRun(undefined);
                 setSession(undefined);
                 setFeedback(null);
               }}
-            > {t('ui.s5f3641135a')} </button>
+            >
+              {" "}
+              {t("ui.s5f3641135a")}{" "}
+            </button>
           </div>
           {session && (
             <article>
@@ -274,7 +341,7 @@ export function Practice({
                 {exams.find((e) => e.id === session.subject_id)?.name} ·{" "}
                 {session.status}
                 {session.countdown_visible &&
-                  ` · ${t('dynamic.remaining', { time: `${Math.floor(session.remaining_seconds / 60)}:${String(session.remaining_seconds % 60).padStart(2, '0')}` })}`}
+                  ` · ${t("dynamic.remaining", { time: `${Math.floor(session.remaining_seconds / 60)}:${String(session.remaining_seconds % 60).padStart(2, "0")}` })}`}
               </p>
               {["created", "queued", "transition", "preparing"].includes(
                 session.status,
@@ -294,16 +361,16 @@ export function Practice({
                   }
                 >
                   {session.status === "preparing"
-                    ? t('ui.s32b787c4af')
-                    : t('ui.sea2c732683')}
+                    ? t("ui.s32b787c4af")
+                    : t("ui.sea2c732683")}
                 </button>
               )}
               {active && (
                 <>
                   <h3>{session.current_question?.question_text}</h3>
                   <textarea
-                    aria-label={t('ui.sb6733159ba')}
-                    placeholder={t('ui.s3ec2097bdc')}
+                    aria-label={t("ui.sb6733159ba")}
+                    placeholder={t("ui.s3ec2097bdc")}
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                     disabled={busy || session.status === "preparing"}
@@ -313,11 +380,17 @@ export function Practice({
                       busy || !answer.trim() || session.status !== "answering"
                     }
                     onClick={() => act(() => submit())}
-                  > {t('ui.sb896ada546')} </button>
+                  >
+                    {" "}
+                    {t("ui.sb896ada546")}{" "}
+                  </button>
                   <button
                     disabled={busy || session.status !== "answering"}
                     onClick={() => act(() => submit(true))}
-                  > {t('ui.s53b3a211e4')} </button>
+                  >
+                    {" "}
+                    {t("ui.s53b3a211e4")}{" "}
+                  </button>
                   <Sources
                     exam={session.subject_id}
                     sources={session.sources || []}
@@ -325,7 +398,7 @@ export function Practice({
                 </>
               )}
               {["completed", "time_expired"].includes(session.status) && (
-                <p> {t('ui.s0a12b202b3')} </p>
+                <p> {t("ui.s0a12b202b3")} </p>
               )}
             </article>
           )}
@@ -342,12 +415,15 @@ export function Practice({
                     setSession(s);
                     setFeedback(null);
                   }}
-                > {t('ui.s25a1aa2a41')} </button>
+                >
+                  {" "}
+                  {t("ui.s25a1aa2a41")}{" "}
+                </button>
               )}
               {s.evaluation && (
                 <p>
-                  {s.evaluation.percent_correct}{t('ui.s168d73ac14')}{" "}
-                  {s.evaluation.german_grade}
+                  {s.evaluation.percent_correct}
+                  {t("ui.s168d73ac14")} {s.evaluation.german_grade}
                 </p>
               )}
               {s.attempts?.map((a) => (
@@ -372,9 +448,14 @@ export function Practice({
                 setRun(await api<Run>(`/practice/${run.id}`));
               })
             }
-          > {t('ui.s798048576d')} </button>
+          >
+            {" "}
+            {t("ui.s798048576d")}{" "}
+          </button>
           {run.overall_evaluation && (
-            <p>{t('ui.s9d532448e6')} {run.overall_evaluation.german_grade}</p>
+            <p>
+              {t("ui.s9d532448e6")} {run.overall_evaluation.german_grade}
+            </p>
           )}
         </>
       )}

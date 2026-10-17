@@ -54,6 +54,8 @@ class FakeLLM:
 
     def generate(self, prompt: str, **_kwargs) -> str:
         self.calls += 1
+        if (_kwargs.get('response_schema') or {}).get('title') == 'QuestionValidation':
+            return json.dumps({'clear': True, 'relevant': True, 'supported': True, 'duplicate': False, 'reasons': []})
         return self.response_factory(prompt)
 
 
@@ -315,7 +317,7 @@ class SubjectQualityPipelineTest(unittest.TestCase):
                         "difficulty": "medium",
                         "expected_duration_seconds": 60,
                         "expected_core_points": [
-                            {"text": "Connect reinforcement with observable behavior.", "evidence_ids": [evidence_id], "priority": "must_know"}
+                            {"text": "Reinforcement affects observable behavior through environmental consequences.", "source_quote":"Behaviorism explains observable learning behavior through reinforcement and environmental consequences.", "evidence_ids": [evidence_id], "priority": "must_know"}
                         ],
                         "optional_details": [],
                         "evidence_ids": [evidence_id],
@@ -443,7 +445,7 @@ class SubjectQualityPipelineTest(unittest.TestCase):
     def test_batch_approval_enforces_confidence_and_quality_report_traceability(self) -> None:
         subject, _ = self._accepted_subject()
         unit = list_review_units(subject["id"])[0]
-        with _connect() as connection:
+        with closing(_connect()) as connection:
             connection.execute(
                 "UPDATE knowledge_units SET review_status = 'needs_review', confidence = 0.95 WHERE id = ?",
                 (unit["id"],),
@@ -452,7 +454,7 @@ class SubjectQualityPipelineTest(unittest.TestCase):
         self.assertEqual(batch_accept_high_confidence(subject["id"], [unit["id"]]), 1)
         report = document_quality_report(unit["document_id"])
         self.assertEqual(report["units"][0]["source_location"], "lines 1-1")
-        with _connect() as connection:
+        with closing(_connect()) as connection:
             connection.execute(
                 "UPDATE knowledge_units SET review_status = 'needs_review', confidence = 0.5 WHERE id = ?",
                 (unit["id"],),

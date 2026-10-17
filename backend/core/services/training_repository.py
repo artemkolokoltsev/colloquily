@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from contextlib import closing
+from contextlib import closing, nullcontext
 from datetime import datetime
 
 from services.database import _connect
@@ -21,6 +21,7 @@ def accepted_evidence_map(subject_id: int, evidence_ids: list[int] | None = None
         placeholders = ",".join("?" for _ in evidence_ids)
         query += f" AND ku.id IN ({placeholders})"
         params.extend(evidence_ids)
+    query += ' ORDER BY d.relative_path, ku.source_start, ku.id'
     with closing(_connect()) as connection:
         rows = connection.execute(query, params).fetchall()
         return {int(row["id"]): dict(row) for row in rows}
@@ -103,7 +104,16 @@ def list_questions(subject_id: int, *, accepted_only: bool = False) -> list[dict
         query += " AND q.review_status = 'accepted' AND q.enabled = 1"
     query += " ORDER BY q.created_at DESC, q.id DESC"
     with closing(_connect()) as connection:
-        return [_decode_question(row) for row in connection.execute(query, (subject_id,)).fetchall()]
+        items = [_decode_question(row) for row in connection.execute(query, (subject_id,)).fetchall()]
+    if accepted_only:
+        evidence = set(accepted_evidence_map(subject_id))
+        items = [item for item in items if question_has_current_evidence(item, evidence)]
+    return items
+
+
+def question_has_current_evidence(question: dict, evidence: set[int]) -> bool:
+    # Explicitly imported question pools remain usable without lecture sources.
+    return bool(question.get('question_pool_id')) or bool(question.get('evidence_ids') and set(question['evidence_ids']).issubset(evidence))
 
 
 def review_question(question_id: int, status: str, *, subject_id: int | None = None) -> dict:
@@ -154,12 +164,13 @@ def create_attempt(
     *,
     exam_session_id: int | None = None,
     parent_attempt_id: int | None = None,
+    transaction=None,
 ) -> int:
     question = get_question(question_id)
     if not question or question["subject_id"] != subject_id:
         raise ValueError("Question does not belong to subject")
     now = datetime.now().isoformat(timespec="seconds")
-    with closing(_connect()) as connection:
+    with (nullcontext(transaction) if transaction is not None else closing(_connect())) as connection:
         cursor = connection.execute(
             """
             INSERT INTO attempts (
@@ -173,5 +184,6 @@ def create_attempt(
                 json.dumps(question["evidence_ids"]), json.dumps(evaluation.get("scores", {})), now,
             ),
         )
-        connection.commit()
+        if transaction is None:
+            connection.commit()
         return int(cursor.lastrowid)

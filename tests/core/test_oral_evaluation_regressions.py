@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from contextlib import closing
 from datetime import datetime
 
 import config
@@ -78,7 +79,7 @@ class ExactQuestionSourceTest(unittest.TestCase):
         init_db()
         self.subject = create_subject("Learning Technologies")
         now = datetime.now().isoformat(timespec="seconds")
-        with _connect() as connection:
+        with closing(_connect()) as connection:
             vr_doc = connection.execute(
                 """INSERT INTO documents(subject_id,title,relative_path,source_type,source_hash,processing_status,
                    quality_status,enabled_for_training,created_at,updated_at)
