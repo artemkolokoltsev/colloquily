@@ -17,21 +17,15 @@ English and German can be switched without restarting. See the [English settings
 
 ## Desktop installation
 
-The **v0.1.0-rc.4 unsigned preview** is distributed through [GitHub Releases](https://github.com/artemkolokoltsev/colloquily/releases). Download the Windows x64 EXE or the DMG matching Apple Silicon/Intel macOS, and its matching `licenses-*.zip` bundle. Verify `SHA256SUMS.txt`. See [installation](docs/INSTALLATION.md), the [user guide](docs/USER_GUIDE.md), [updates](docs/UPDATES.md), and [privacy](docs/PRIVACY.md).
+Unsigned desktop previews are distributed through [GitHub Releases](https://github.com/artemkolokoltsev/colloquily/releases). Download the Windows x64 EXE or the DMG matching Apple Silicon/Intel macOS, and its matching `licenses-*.zip` bundle. Verify `SHA256SUMS.txt`. See [installation](docs/INSTALLATION.md), the [user guide](docs/USER_GUIDE.md), [updates](docs/UPDATES.md), and [privacy](docs/PRIVACY.md).
 
 **This is a prerelease, not a signed production release.** Windows, Apple Silicon, and Intel macOS native packaging and frozen-backend checks pass in CI. Clean-machine GUI installation and complete hardware coverage remain separate checks. Apple Developer ID/notarization, Windows Authenticode, and signed automatic updates are not configured for this preview. Operating-system security may warn or block installation; do not disable security globally.
 
 A desktop release contains the React UI, Tauri application, Python runtime, FastAPI backend, and native Python dependencies. End users will not need Python, Node.js, Docker, or a terminal. Install the macOS application or Windows installer, open Colloquily, and follow **AI setup**. The backend starts and stops with the desktop application.
 
-Ollama is a separate installation for now. Install it from [Ollama](https://ollama.com/download), open it, then click **Check again** in Colloquily. Download buttons display actual Ollama download progress and failures. Model weights are not embedded in the installer or downloaded without an explicit action.
+Ollama remains a separate installation. Install it from [Ollama](https://ollama.com/download) and start it. In 0.1.1, Colloquily checks memory and disk space, reuses suitable installed models, and automatically prepares missing selected models with progress, cancellation and retry. Existing exam-specific task and embedding choices are preserved. Advanced users can change them under **AI setup**. The older 0.1.0 preview uses explicit download controls.
 
-The existing defaults are:
-
-- `qwen2.5:1.5b` for structured tasks and evaluation;
-- `phi3:mini` for oral answers;
-- `embeddinggemma:latest` for exam embeddings.
-
-Setup also checks models configured for individual exams. Retry interrupted downloads to reuse Ollama's cached layers. Keep enough free space for all models; Ollama's disk and network errors are shown in the app.
+New-exam defaults range from `qwen2.5:1.5b` on limited hardware to `qwen3:4b` or `qwen3:8b` when resources allow, with `embeddinggemma:latest` for embeddings unless already configured otherwise. Small models can fail quality or coverage checks; the app reports this instead of inserting filler questions. Model weights are not bundled and retain their separate upstream terms. Retry interrupted downloads to reuse cached layers, and keep sufficient free disk space.
 
 ## Architecture
 

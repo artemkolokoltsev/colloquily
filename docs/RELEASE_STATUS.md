@@ -1,10 +1,13 @@
 # Release status
 
-Development checkout: **0.1.1 patch in progress, not release-approved**. See
+Current candidate series: **0.1.1, unsigned preview only**. See
 [UX/learning-quality changes and verification](LEARNING_QUALITY_PATCH.md).
-The published RC4 installers below are unchanged; they do not contain this patch.
+Published versions are listed under [GitHub Releases](https://github.com/artemkolokoltsev/colloquily/releases).
+Merging code does not publish installers: an RC tag must pass real-model
+acceptance and every native build first. Signed production releases require
+separate signing/notarization and updater credentials.
 
-Latest local verification (2026-10-16): 64 backend, 65 domain and 4 frontend
+Latest local verification (2026-10-17): 67 backend, 65 domain and 4 frontend
 tests pass, along with translation parity and the TypeScript/Vite production
 build. The native artifact workflow now runs the domain regressions on every
 supported target, including Skip and evidence-history preservation.
@@ -12,8 +15,9 @@ supported target, including Skip and evidence-history preservation.
 The [0.1.1 native build matrix](https://github.com/artemkolokoltsev/colloquily/actions/runs/38906920356)
 passed Windows x64, Intel macOS and Apple Silicon macOS. It produced all three
 installer archives and three matching license/source archives. These are CI
-artifacts, not a newly published GitHub Release. Real-model quality acceptance
-remains open; no new tag or public release has been created.
+artifacts, not proof of a published GitHub Release. Current revision checks are
+tracked in [PR #3](https://github.com/artemkolokoltsev/colloquily/pull/3);
+only successful acceptance for the release revision may approve publication.
 
 ## Historical v0.1.0 RC4 verification
 

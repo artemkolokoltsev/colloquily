@@ -46,6 +46,8 @@ It is not a statement that a new public release has been published.
   numeric, clarity and copied-fragment gates precede a local-model relevance/
   entailment check. Exact/near-text, embedding similarity and model-based semantic
   duplicate checks include previously reviewed questions.
+  A new question cannot merely repackage facts already covered by another active
+  question's answer rubric; stale historical questions do not satisfy this check.
 - Generation uses source-only input and one candidate per request. Rejected
   targets rotate to another source fact, with bounded retries. Previous questions
   are not injected into generation; full-history deterministic/embedding checks
@@ -91,14 +93,18 @@ Inference and embeddings remain local; downloading weights can use the internet.
 
 ## Verification
 
-Local results (2026-10-16): 64 backend tests, 65 domain tests and 4 frontend
+Local results (2026-10-17): 67 backend tests, 65 domain tests and 4 frontend
 utility tests pass; translation key/interpolation parity and the TypeScript/Vite
 production build pass. Intel macOS release compilation and `.app` bundling pass.
 Frozen backend self-tests and the license inventory pass. Browser checks pass
 for exam search/switching/material isolation, light/dark appearance, German
 navigation and a 760-pixel-wide window. Synthetic PDF rendering was inspected.
 
-The full real-model quality/coverage gate is **not signed off**. An early
+Only a successful required real-model run for the release revision, followed by
+source review, is sign-off evidence. The following earlier failures are retained
+as diagnostic history, not passing acceptance:
+
+An early
 `qwen2.5:1.5b` run yielded only two qualifying questions; `phi3:mini` timed out
 on CPU and was stopped, not reported as a pass. Revised retries later retained
 five candidates across two documents and completed a three-question Skip session,
@@ -111,8 +117,8 @@ retained only three questions, below the four-question acceptance minimum, and
 reported partial coverage. It failed acceptance; the earlier five-candidate run
 also remains invalid as final evidence. Subsequent changes explicitly guide
 generation with uncovered source facts and complete comparison rubrics, without
-templated fallback questions or relaxed gates. Final acceptance remains pending.
-No filler or new public release was published.
+templated fallback questions or relaxed gates. Those historical runs were not
+release approval; they did not publish a new release or insert fallback filler.
 
 RC tag publication now requires both the real-model synthetic acceptance job and
 every native build to succeed. Failed quality checks cannot publish an unsigned
@@ -126,6 +132,15 @@ The regression suite verifies that this never inserts an approved fallback.
 The real-model CI workflow uses only synthetic materials and preserves its
 validation audit for diagnosis. Normal per-request timeouts remain unchanged;
 its total acceptance window permits multiple serial CPU requests.
+
+The 4B synthetic acceptance job runs on a standard 16 GB Linux runner with
+Ollama 0.33.0 installed from an official SHA-256-pinned archive in the temporary
+CI directory. Virtual 7 GB Mac runners could not finish the first 4B request
+within the unchanged application timeout and were not counted as passes.
+See [GitHub runner resources](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+and [Ollama's manual Linux installation](https://docs.ollama.com/linux).
+Inference stays on the runner's loopback interface, cloud inference is disabled,
+and all input documents are freshly generated synthetic fixtures.
 
 The native matrix now runs all domain regressions on Windows as well as macOS.
 This exposed eight fixture-cleanup errors on Windows: SQLite transaction context

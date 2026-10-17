@@ -1,6 +1,8 @@
-# Colloquily 0.1.1 — patch draft (not release-approved)
+# Colloquily 0.1.1 — candidate change notes
 
-Prepared after the published 0.1.0 RC4 preview. No new release has been published.
+Prepared after the 0.1.0 RC4 preview. This file is not proof of publication:
+published installers are listed under [GitHub Releases](https://github.com/artemkolokoltsev/colloquily/releases).
+The canonical release body is [RELEASE_NOTES.md](RELEASE_NOTES.md).
 
 ## Changes
 
@@ -19,13 +21,12 @@ Prepared after the published 0.1.0 RC4 preview. No new release has been publishe
 
 ## Release gates
 
-Windows x64, Intel macOS and Apple Silicon native CI builds pass, including
-packaged-backend and license/source checks. Final real-model quality/coverage
-acceptance and clean-machine GUI installation checks remain outstanding.
+Publication requires Windows x64, Intel macOS and Apple Silicon native builds,
+packaged-backend/license/source checks, and real-model synthetic quality/coverage
+acceptance. Clean-machine GUI installation checks remain a separate limitation.
 See [the verification report](LEARNING_QUALITY_PATCH.md).
 The local Intel macOS build is for validation, not a signed production installer.
 Signing/notarization and updater credentials remain separate release requirements.
 
-Before tagging a release, review these gates and copy the approved release notes
-to `docs/RELEASE_NOTES.md`, which the existing publishing workflow consumes.
+Before tagging a release, review the current check results and release notes.
 Do not overwrite or retag the already published RC4 assets.
