@@ -198,6 +198,15 @@ class GenerationQualityTests(unittest.TestCase):
         payload['question_text'] = 'How does message passing update a node representation?'
         self.assertEqual(question_quality_problems(payload, evidence, []), [])
 
+    def test_unfinished_allow_information_from_question_is_rejected(self):
+        source = 'Repeating layers allows information from more distant nodes to influence a representation.'
+        payload = dict(self.payload, evidence_ids=[1],
+                       question_text='What does repeating layers in message passing allow information from?',
+                       expected_core_points=[{'text': source, 'source_quote': source, 'evidence_ids': [1]}])
+        self.assertIn('incomplete_question_clause', question_quality_problems(payload, {1: {'content': source}}, []))
+        payload['question_text'] = 'How does repeating layers change which nodes can influence a representation?'
+        self.assertNotIn('incomplete_question_clause', question_quality_problems(payload, {1: {'content': source}}, []))
+
     def test_rubric_must_add_an_answer_not_repeat_a_leading_question(self):
         adjacent = 'Each layer collects messages from adjacent nodes and combines them with the current node state.'
         distant = 'Repeating layers allows information from more distant nodes to influence a representation.'

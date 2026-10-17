@@ -93,7 +93,7 @@ Inference and embeddings remain local; downloading weights can use the internet.
 
 ## Verification
 
-Local results (2026-10-17): 69 backend tests, 65 domain tests and 4 frontend
+Local results (2026-10-17): 70 backend tests, 65 domain tests and 4 frontend
 utility tests pass; translation key/interpolation parity and the TypeScript/Vite
 production build pass. Intel macOS release compilation and `.app` bundling pass.
 Frozen backend self-tests and the license inventory pass. Browser checks pass

@@ -7,7 +7,7 @@ Merging code does not publish installers: an RC tag must pass real-model
 acceptance and every native build first. Signed production releases require
 separate signing/notarization and updater credentials.
 
-Latest local verification (2026-10-17): 69 backend, 65 domain and 4 frontend
+Latest local verification (2026-10-17): 70 backend, 65 domain and 4 frontend
 tests pass, along with translation parity and the TypeScript/Vite production
 build. The native artifact workflow now runs the domain regressions on every
 supported target, including Skip and evidence-history preservation.
