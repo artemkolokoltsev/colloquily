@@ -95,6 +95,7 @@ def _parse_time(value: str | None) -> datetime | None:
 
 def learner_mastery(attempts: list[dict], *, now: datetime | None = None) -> dict:
     now = now or datetime.now(timezone.utc)
+    attempts = [a for a in attempts if (a.get('evaluation') or {}).get('status') not in {'skipped','pending','needs_review'} and (a.get('evaluation') or {}).get('score') is not None]
     if not attempts:
         return {"mastery_state": "not_practised", "practice_evidence": {"attempts": 0}, "mastery_reason": "No answered questions are recorded for this topic."}
     scores, omissions, incorrect, time_ratios, mock_scores = [], 0, 0, [], []
@@ -102,8 +103,8 @@ def learner_mastery(attempts: list[dict], *, now: datetime | None = None) -> dic
         evaluation = attempt.get("evaluation") or {}
         if evaluation.get("score") is not None:
             scores.append(float(evaluation["score"]))
-        omissions += len(evaluation.get("missing", []))
-        incorrect += len(evaluation.get("incorrect", []))
+        omissions += evaluation.get("missing_count", len(evaluation.get("missing", [])))
+        incorrect += evaluation.get("incorrect_count", len(evaluation.get("incorrect", [])))
         expected = max(1, int(attempt.get("expected_duration_seconds") or 60))
         time_ratios.append(float(attempt.get("duration_seconds") or 0) / expected)
         if attempt.get("session_mode") in {"subject_simulation", "multi_subject"} and evaluation.get("score") is not None:

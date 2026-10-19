@@ -51,3 +51,10 @@ class LearningPlanTests(unittest.TestCase):
         result = self.overview('2026-09-21', questions=[{'id':1, 'question_pool_id':9, 'enabled':True, 'review_status':'accepted'}], pools=[{'id':9,'enabled':False}])
         self.assertEqual(result['plan']['total'], 0)
         self.assertEqual(result['topics'][0]['available'], 0)
+
+    def test_today_goal_stays_completed_after_finishing_daily_allocation(self):
+        result = self.overview('2026-09-23', [self.attempt(),self.attempt(2)])
+        self.assertEqual(result['today_target'],2)
+        self.assertEqual(result['today_completed'],2)
+        self.assertEqual(result['plan']['schedule'][0]['questions'],0)
+        self.assertEqual(sum(day['questions'] for day in result['plan']['schedule']),result['plan']['remaining'])

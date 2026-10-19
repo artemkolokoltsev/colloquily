@@ -426,6 +426,9 @@ export function Practice({
                   {t("ui.s168d73ac14")} {s.evaluation.german_grade}
                 </p>
               )}
+              {s.evaluation && (
+                <p className="muted">{t("ui.sessionDenominator")}</p>
+              )}
               {s.attempts?.map((a) => (
                 <details key={a.id}>
                   <summary>{a.question_text}</summary>

@@ -32,8 +32,9 @@ def setup_exam(subject, progress):
     from services.database import update_subject
     if (subject.get('local_llm_config') or {}).get('backend') == 'lmstudio':
         return {'manual_backend': True}
-    if not _setup_lock.acquire(blocking=False):
-        raise ValueError('Local AI setup is already running. Wait for it to finish.')
+    # Serialize different exam preparations; the plan is recomputed after waiting,
+    # so a shared model downloaded by another exam is reused.
+    _setup_lock.acquire()
     try:
         _cancel.clear()
         plan = model_plan(subject)
@@ -47,12 +48,7 @@ def setup_exam(subject, progress):
             OllamaProvider().pull(model, progress, cancelled=_cancel.is_set)
         if _cancel.is_set():
             raise ValueError('Download cancelled. Retry to resume cached downloads.')
-        from services.database import get_subject
-        latest = get_subject(subject['id']) or subject
-        settings = dict(latest.get('local_llm_config') or {})
-        settings.update(backend='ollama', task_models=plan['task_models'] | settings.get('task_models', {}))
-        update_subject(subject['id'], {'local_llm_config': settings,
-            'embedding_config': latest.get('embedding_config') or {'backend': 'ollama', 'model': plan['embedding_model']}})
+        apply_plan(subject, plan)
         return plan
     finally:
         _setup_lock.release()
@@ -123,3 +119,20 @@ class OllamaProvider:
             if tracked:
                 _active_response = None
         return {"model": model, "status": "installed"}
+
+
+def apply_plan(subject, plan):
+    """Persist an installed compatible plan without downloading or starting a job."""
+    from services.database import get_subject, update_subject
+    latest = get_subject(subject['id']) or subject
+    settings = dict(latest.get('local_llm_config') or {})
+    settings.update(backend='ollama', task_models=plan['task_models'] | settings.get('task_models', {}))
+    embedding = latest.get('embedding_config') or {'backend':'ollama','model':plan['embedding_model']}
+    if settings != latest.get('local_llm_config') or embedding != latest.get('embedding_config'):
+        update_subject(subject['id'], {'local_llm_config':settings,'embedding_config':embedding})
+
+
+def pull_model(model, progress):
+    # Advanced manual downloads share the same lock as automatic preparation.
+    with _setup_lock:
+        return OllamaProvider().pull(model, progress)

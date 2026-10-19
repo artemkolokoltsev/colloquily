@@ -1,5 +1,11 @@
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
+import { lazy, Suspense } from "react";
+const PdfReader = lazy(() =>
+  import("../components/PdfReader").then((module) => ({
+    default: module.PdfReader,
+  })),
+);
 import { api, operation } from "../api/client";
 import { ErrorNotice, Progress, Sources } from "../components/Common";
 import type { Job } from "../types";
@@ -21,9 +27,13 @@ interface MaterialsData {
     title: string;
     relative_path: string;
     processing_status?: string;
+    accepted_count?: number;
+    review_count?: number;
+    created_at?: string;
     extraction?: {
       state?: string;
       pages_processed?: number;
+      pages_total?: number;
       empty_pages?: number[];
     };
   }[];
@@ -55,6 +65,8 @@ export function Materials({
       generated: number;
     }[];
   }>();
+  const [reader, setReader] = useState<MaterialsData["documents"][number]>();
+  const [advanced, setAdvanced] = useState(false);
   const [data, setData] = useState<MaterialsData>();
   const [units, setUnits] = useState<Unit[]>([]);
   const [error, setError] = useState("");
@@ -66,9 +78,11 @@ export function Materials({
   async function refresh() {
     const [d, u, p, q] = await Promise.all([
       api<MaterialsData>(`/exams/${exam}/documents`),
-      api<Unit[]>(`/exams/${exam}/review`),
+      advanced ? api<Unit[]>(`/exams/${exam}/review`) : Promise.resolve([]),
       api<{ job: Job | null; questions: number }>(`/exams/${exam}/preparation`),
-      api<{ evidence_ids?: number[] }[]>(`/exams/${exam}/questions`),
+      advanced
+        ? api<{ evidence_ids?: number[] }[]>(`/exams/${exam}/questions`)
+        : Promise.resolve([]),
     ]);
     setData(d);
     setUnits(u);
@@ -77,12 +91,15 @@ export function Materials({
   }
   useEffect(() => {
     void refresh().catch((e) => setError(String(e)));
-    const timer = setInterval(
-      () => void refresh().catch((e) => setError(String(e))),
-      2500,
-    );
+    const timer = setInterval(() => {
+      if (
+        ["queued", "running"].includes(preparation?.job?.status || "") ||
+        ["queued", "running"].includes(data?.processing?.status || "")
+      )
+        void refresh().catch((e) => setError(String(e)));
+    }, 2500);
     return () => clearInterval(timer);
-  }, [exam]);
+  }, [exam, advanced, preparation?.job?.status, data?.processing?.status]);
   async function act(work: () => Promise<unknown>) {
     setBusy(true);
     setError("");
@@ -104,9 +121,10 @@ export function Materials({
   return (
     <section>
       <p className="eyebrow">{t("ui.sac2cb8bf2e")}</p>
-      <h2>{t("ui.s969acea333")}</h2>
-      <p> {t("ui.s4c217f0366")} </p>
+      <h2>{t("nav.materials")}</h2>
+      <p>{t("ui.libraryIntro")}</p>
       <ErrorNotice error={error} />
+      {preparing && <Progress job={preparation?.job || null} />}
       <label>
         {" "}
         {t("ui.s9098f1f65b")}{" "}
@@ -120,104 +138,76 @@ export function Materials({
             if (!files?.length) return;
             const form = new FormData();
             Array.from(files).forEach((f) => form.append("files", f));
-            void act(() => api(`/exams/${exam}/documents`, "POST", form));
+            void act(async () => {
+              await api(`/exams/${exam}/documents`, "POST", form);
+              const readiness = await api<{ state: string }>(
+                `/exams/${exam}/models/readiness`,
+              );
+              if (["ready", "preparing"].includes(readiness.state))
+                await api(`/exams/${exam}/prepare`, "POST", {});
+              else
+                await api(`/exams/${exam}/process`, "POST", {
+                  mode: "deterministic",
+                });
+            });
             e.target.value = "";
           }}
         />
       </label>
-      <ul>
-        {data?.raw.map((name) => (
-          <li key={name}>{name}</li>
-        ))}
-      </ul>
+      {reader && (
+        <Suspense fallback={<p role="status">{t("ui.loadingPdf")}</p>}>
+          <PdfReader
+            key={`${exam}:${reader.id}`}
+            exam={exam}
+            document={reader}
+            close={() => setReader(undefined)}
+          />
+        </Suspense>
+      )}
       {data && !data.raw.length && <p>{t("ui.s579041d84b")}</p>}
-      <article className="preparation-card">
-        <h3>
-          {preparing
-            ? t("ui.s86565c9c89")
-            : preparation?.questions
-              ? t("ui.s40b3761cb8")
-              : t("ui.s34ef570432")}
-        </h3>
-        <p> {t("ui.s0650bb8705")} </p>
-        <button
-          className="primary"
-          disabled={busy || preparing || processing || !data?.raw.length}
-          onClick={() => act(() => api(`/exams/${exam}/prepare`, "POST"))}
-        >
-          {preparation?.job?.status === "failed"
-            ? t("ui.s8c029bc7ca")
-            : preparation?.questions
-              ? t("ui.redesignFillCoverage")
-              : t("ui.s80a7b9c840")}
-        </button>
-        {!!preparation?.questions && (
-          <button className="primary" onClick={onPractice}>
-            {" "}
-            {t("ui.sc69f851732")}{" "}
-          </button>
-        )}
-        <Progress job={preparation?.job || null} />
-        {!!preparation?.coverage?.length && (
-          <p>
-            {t("ui.redesignCoverage", {
-              complete: preparation.coverage.filter(
-                (item) => item.covered + item.generated >= item.target,
-              ).length,
-              total: preparation.coverage.length,
-            })}
-          </p>
-        )}
-        {!!preparation?.questions &&
-          preparation.coverage?.some(
-            (item) => item.covered + item.generated < item.target,
-          ) && <p role="status">{t("ui.redesignPartialCoverage")}</p>}
-        {preparation?.job?.status === "failed" && (
-          <>
-            <ErrorNotice error={preparation.job.error || t("ui.sab42b805f9")} />
-            <button onClick={onSetup}>{t("ui.s7932a732e4")}</button>
-          </>
-        )}
-      </article>
       <div className="document-grid">
         {data?.documents.map((document) => {
           const passages = units.filter(
             (unit) => unit.document_id === document.id,
           );
-          const ready = passages.filter(
-            (unit) => unit.review_status === "accepted",
-          ).length;
-          const review = passages.filter(
-            (unit) => unit.review_status === "needs_review",
-          ).length;
+          const ready = document.accepted_count || 0;
+          const review = document.review_count || 0;
           const ids = new Set(passages.map((unit) => unit.id));
           return (
             <article key={document.id}>
               <h3>{document.title}</h3>
               <span className="status-badge">
                 {t(
-                  ready
-                    ? "ui.redesignReady"
-                    : review
-                      ? "ui.redesignReview"
-                      : "ui.redesignUnusable",
+                  document.processing_status === "raw"
+                    ? processing
+                      ? "ui.processingDocument"
+                      : "ui.importedDocument"
+                    : ready
+                      ? "ui.redesignReady"
+                      : review
+                        ? "ui.redesignReview"
+                        : "ui.redesignUnusable",
                 )}
               </span>
-              <p>
-                {t("ui.redesignDocumentSummary", {
-                  pages:
-                    document.extraction?.pages_processed ??
-                    new Set(
-                      passages.map((unit) => unit.source_start).filter(Boolean),
-                    ).size,
-                  ready,
-                  review,
-                  unusable: passages.length - ready - review,
-                  questions: questions.filter((question) =>
-                    question.evidence_ids?.some((id) => ids.has(id)),
-                  ).length,
-                })}
-              </p>
+              {advanced && (
+                <p>
+                  {t("ui.redesignDocumentSummary", {
+                    pages:
+                      document.extraction?.pages_processed ??
+                      new Set(
+                        passages
+                          .map((unit) => unit.source_start)
+                          .filter(Boolean),
+                      ).size,
+                    ready,
+                    review,
+                    unusable: passages.length - ready - review,
+                    questions: questions.filter((question) =>
+                      question.evidence_ids?.some((id) => ids.has(id)),
+                    ).length,
+                  })}
+                </p>
+              )}
               {document.extraction?.state === "extraction_failed" && (
                 <p className="error">{t("ui.redesignExtractionFailed")}</p>
               )}
@@ -231,52 +221,123 @@ export function Materials({
                   })}
                 </p>
               )}
-              <button
-                onClick={() =>
-                  setReviewDocument(
-                    reviewDocument === document.id ? null : document.id,
-                  )
-                }
-                aria-expanded={reviewDocument === document.id}
-              >
-                {t("ui.redesignReviewContent")}
-              </button>
-              <button
-                disabled={busy || preparing || processing}
-                onClick={() =>
-                  void act(() =>
-                    api(`/exams/${exam}/process`, "POST", {
-                      mode: "deterministic",
-                      relative_path: document.relative_path,
-                      force: true,
-                    }),
-                  )
-                }
-              >
-                {t("ui.redesignReprocess")}
-              </button>
-              {reviewDocument === document.id &&
-                passages.map((unit) => (
-                  <StudentEvidence
-                    key={`${unit.id}:${unit.content}:${unit.review_status}`}
-                    unit={unit}
-                    exam={exam}
-                    busy={busy || preparing || processing}
-                    save={(status, content) =>
-                      act(() =>
-                        api(`/exams/${exam}/review/${unit.id}`, "PATCH", {
-                          status,
-                          content,
-                        }),
-                      )
-                    }
-                  />
-                ))}
+              {document.relative_path.toLowerCase().endsWith(".pdf") && (
+                <button className="primary" onClick={() => setReader(document)}>
+                  {t("ui.openPdf")}
+                </button>
+              )}
+              <p className="muted">
+                {document.extraction?.pages_total ??
+                  document.extraction?.pages_processed ??
+                  "—"}{" "}
+                {t("ui.pages")} ·{" "}
+                {document.created_at
+                  ? new Date(document.created_at).toLocaleDateString()
+                  : "—"}
+              </p>
+              <details>
+                <summary>{t("ui.details")}</summary>
+                <button
+                  onClick={() => {
+                    setAdvanced(true);
+                    setReviewDocument(
+                      reviewDocument === document.id ? null : document.id,
+                    );
+                  }}
+                  aria-expanded={reviewDocument === document.id}
+                >
+                  {t("ui.redesignReviewContent")}
+                </button>
+                <button
+                  disabled={busy || preparing || processing}
+                  onClick={() =>
+                    void act(() =>
+                      api(`/exams/${exam}/process`, "POST", {
+                        mode: "deterministic",
+                        relative_path: document.relative_path,
+                        force: true,
+                      }),
+                    )
+                  }
+                >
+                  {t("ui.redesignReprocess")}
+                </button>
+                {reviewDocument === document.id &&
+                  passages.map((unit) => (
+                    <StudentEvidence
+                      key={`${unit.id}:${unit.content}:${unit.review_status}`}
+                      unit={unit}
+                      exam={exam}
+                      busy={busy || preparing || processing}
+                      save={(status, content) =>
+                        act(() =>
+                          api(`/exams/${exam}/review/${unit.id}`, "PATCH", {
+                            status,
+                            content,
+                          }),
+                        )
+                      }
+                    />
+                  ))}
+              </details>
             </article>
           );
         })}
       </div>
       <details>
+        <summary>{t("ui.practicePreparation")}</summary>
+        <article className="preparation-card">
+          <h3>
+            {preparing
+              ? t("ui.s86565c9c89")
+              : preparation?.questions
+                ? t("ui.s40b3761cb8")
+                : t("ui.s34ef570432")}
+          </h3>
+          <p> {t("ui.s0650bb8705")} </p>
+          <button
+            className="primary"
+            disabled={busy || preparing || processing || !data?.raw.length}
+            onClick={() => act(() => api(`/exams/${exam}/prepare`, "POST"))}
+          >
+            {preparation?.job?.status === "failed"
+              ? t("ui.s8c029bc7ca")
+              : preparation?.questions
+                ? t("ui.redesignFillCoverage")
+                : t("ui.s80a7b9c840")}
+          </button>
+          {!!preparation?.questions && (
+            <button className="primary" onClick={onPractice}>
+              {" "}
+              {t("ui.sc69f851732")}{" "}
+            </button>
+          )}
+          <Progress job={preparation?.job || null} />
+          {!!preparation?.coverage?.length && (
+            <p>
+              {t("ui.redesignCoverage", {
+                complete: preparation.coverage.filter(
+                  (item) => item.covered + item.generated >= item.target,
+                ).length,
+                total: preparation.coverage.length,
+              })}
+            </p>
+          )}
+          {!!preparation?.questions &&
+            preparation.coverage?.some(
+              (item) => item.covered + item.generated < item.target,
+            ) && <p role="status">{t("ui.redesignPartialCoverage")}</p>}
+          {preparation?.job?.status === "failed" && (
+            <>
+              <ErrorNotice
+                error={preparation.job.error || t("ui.sab42b805f9")}
+              />
+              <button onClick={onSetup}>{t("ui.s7932a732e4")}</button>
+            </>
+          )}
+        </article>
+      </details>
+      <details onToggle={(e) => setAdvanced(e.currentTarget.open)}>
         <summary>{t("ui.sc933415600")}</summary>
         <p className="muted"> {t("ui.s29f1fc0e10")} </p>
         <div className="toolbar">

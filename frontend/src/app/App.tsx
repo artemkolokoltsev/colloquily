@@ -21,9 +21,9 @@ import type { Job } from "../types";
 const pages = [
   "Dashboard",
   "Materials",
-  "Questions",
   "Practice",
-  "Progress",
+  "Study",
+  "Advanced settings",
 ] as const;
 const pageLabels = {
   Dashboard: "nav.dashboard",
@@ -31,13 +31,10 @@ const pageLabels = {
   Questions: "nav.questions",
   Practice: "nav.practice",
   Progress: "nav.progress",
+  Study: "nav.ask",
+  "Advanced settings": "nav.settings",
 } as const;
-const advancedPages = [
-  "Reported questions",
-  "Study plan",
-  "Local AI",
-  "Advanced settings",
-];
+const advancedPages = ["Reported questions", "Study plan", "Local AI"];
 export default function App() {
   const { t, i18n } = useTranslation();
   const [welcomed, setWelcomed] = useState(
@@ -64,33 +61,50 @@ export default function App() {
   const [aiRetry, setAiRetry] = useState(0);
   function switchExam(id: number) {
     setSelected(id);
+    setAiJob(null);
+    setAiError("");
+    setAiSetup(false);
     setTopic("");
     setPracticeCount(10);
+    setAiRetry(0);
   }
   useEffect(() => {
     if (!ready || !selected) return;
     let current = true;
+    const controller = new AbortController();
     setAiError("");
+    setAiSetup(false);
     setAiJob(null);
-    void Promise.all([
-      api<{ ollama: string }>("/models/status"),
-      api<{ backend: string }>(`/exams/${selected}/models`),
-    ])
-      .then(async ([status, settings]) => {
+    void api<{ state: string }>(
+      `/exams/${selected}/models/readiness`,
+      "GET",
+      undefined,
+      controller.signal,
+    )
+      .then(async (status) => {
         if (!current) return;
-        if (settings.backend !== "ollama") {
-          setAiSetup(false);
-          return;
-        }
-        if (status.ollama !== "available") {
+        setAiSetup(false);
+        if (status.state === "ready") return;
+        if (status.state === "ollama_unavailable") {
           setAiSetup(true);
           return;
         }
-        setAiSetup(false);
-        await operation(`/exams/${selected}/models/prepare`, {}, (job) => {
-          if (current) setAiJob(job);
-        });
-        if (current) setAiSetup(false);
+        if (status.state === "insufficient_storage") {
+          setAiError(t("ui.aiStorage"));
+          return;
+        }
+        if (status.state === "failed" && aiRetry === 0) {
+          setAiError(t("ui.aiFailed"));
+          return;
+        }
+        await operation(
+          `/exams/${selected}/models/prepare`,
+          {},
+          (job) => {
+            if (current) setAiJob(job);
+          },
+          controller.signal,
+        );
       })
       .catch((error) => {
         if (current) {
@@ -100,6 +114,7 @@ export default function App() {
       });
     return () => {
       current = false;
+      controller.abort();
     };
   }, [ready, selected, aiRetry]);
   async function refresh() {
@@ -189,20 +204,26 @@ export default function App() {
         <nav aria-label="Your learning">
           {pages.map((p) => (
             <button
-              className={p === page ? "active" : ""}
+              className={
+                p === page ||
+                (p === "Practice" && page === "Questions") ||
+                (p === "Dashboard" && page === "Progress")
+                  ? "active"
+                  : ""
+              }
               key={p}
-              aria-current={p === page ? "page" : undefined}
+              aria-current={
+                p === page ||
+                (p === "Practice" && page === "Questions") ||
+                (p === "Dashboard" && page === "Progress")
+                  ? "page"
+                  : undefined
+              }
               onClick={() => navigate(p)}
             >
               {t(pageLabels[p])}
             </button>
           ))}
-          <button
-            className={page === "Study" ? "active" : ""}
-            onClick={() => navigate("Study")}
-          >
-            {t("nav.ask")}
-          </button>
         </nav>
         <details className="advanced-nav">
           <summary>{t("nav.advanced")}</summary>
@@ -345,8 +366,12 @@ export default function App() {
         )}
         {page === "Local AI" && (
           <Models
+            key={selected}
+            exam={selected}
             onReady={() => {
               setAiSetup(false);
+              setAiError("");
+              setAiRetry((value) => value + 1);
               navigate("Materials");
             }}
           />
@@ -378,6 +403,22 @@ export default function App() {
             )}{" "}
             {page === "Reported questions" && <Reported exam={selected} />}{" "}
             {page === "Study" && <Study exam={selected} />}{" "}
+            {(page === "Practice" || page === "Questions") && (
+              <div className="toolbar">
+                <button
+                  aria-pressed={page === "Practice"}
+                  onClick={() => navigate("Practice")}
+                >
+                  {t("nav.practice")}
+                </button>
+                <button
+                  aria-pressed={page === "Questions"}
+                  onClick={() => navigate("Questions")}
+                >
+                  {t("ui.manageQuestions")}
+                </button>
+              </div>
+            )}
             {page === "Practice" && (
               <Practice
                 exams={exams}
@@ -386,7 +427,14 @@ export default function App() {
                 initialCount={practiceCount}
               />
             )}{" "}
-            {page === "Progress" && <ProgressPage exam={selected} />}{" "}
+            {page === "Progress" && (
+              <>
+                <button onClick={() => navigate("Dashboard")}>
+                  {t("ui.backHome")}
+                </button>
+                <ProgressPage exam={selected} />
+              </>
+            )}{" "}
             {page === "Study plan" && <StudyPlan exam={selected} />}{" "}
           </div>
         )}

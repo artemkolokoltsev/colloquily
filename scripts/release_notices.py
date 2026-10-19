@@ -122,7 +122,15 @@ def main(target):
         name = path.rsplit('node_modules/', 1)[-1]
         if details.get('dev') and name not in {'vite', 'rollup', 'esbuild', 'typescript'}:
             continue
+        # PDF.js uses browser canvas in Vite. Its optional Node-only native
+        # canvas packages are neither imported nor copied into the desktop app.
+        if name == '@napi-rs/canvas' or name.startswith('@napi-rs/canvas-'):
+            continue
         directory = ROOT/path
+        if not (directory/'package.json').exists() and details.get('optional'):
+            # npm lockfiles include native optional packages for other OSes.
+            # They are not installed or shipped in this target's bundle.
+            continue
         manifest = json.loads((directory/'package.json').read_text(encoding='utf-8'))
         append_notices(manifest['name'], manifest['version'], manifest.get('license') or details.get('license'), directory, frontend, js_inventory)
     cargo = cargo_metadata(target)

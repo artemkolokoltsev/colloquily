@@ -6,6 +6,8 @@ import { PagedTable } from "../components/PagedTable";
 import type { Evaluation, LearningData } from "../types";
 interface ProgressData {
   attempts_count: number;
+  evaluated_count: number;
+  skipped_count: number;
   average_score: number | null;
   average_response_seconds: number | null;
   topics: {
@@ -26,11 +28,12 @@ export function ProgressPage({ exam }: { exam: number }) {
   const { t: tr } = useTranslation();
   const [learning, setLearning] = useState<LearningData>();
   const [data, setData] = useState<ProgressData>();
+  const [older, setOlder] = useState<ProgressData["recent_attempts"]>([]);
+  const [more, setMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("topics");
   const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState<number>();
-  const [correction, setCorrection] = useState("");
   const refresh = () =>
     Promise.all([
       api<ProgressData>(`/exams/${exam}/progress`).then(setData),
@@ -39,39 +42,38 @@ export function ProgressPage({ exam }: { exam: number }) {
   useEffect(() => {
     setData(undefined);
     setLearning(undefined);
-    setEditing(undefined);
     setQuery("");
     void refresh().catch((e) => setError(String(e)));
   }, [exam]);
   return (
     <section>
-      <h2>{tr('ui.s839de264eb')}</h2>
+      <h2>{tr("ui.s839de264eb")}</h2>
       <ErrorNotice error={error} />
       {!data ? (
-        <p>{tr('ui.s7e34513f0c')}</p>
+        <p>{tr("ui.s7e34513f0c")}</p>
       ) : (
         <>
           <div className="stat-grid compact-stats">
             <article>
-              <span>{tr('ui.s1e636982e8')}</span>
+              <span>{tr("ui.s1e636982e8")}</span>
               <strong>{data.attempts_count}</strong>
             </article>
             <article>
-              <span>{tr('ui.se4870be722')}</span>
+              <span>{tr("ui.se4870be722")}</span>
               <strong>
                 {data.average_score ?? "—"}
                 <small> / 5</small>
               </strong>
             </article>
             <article>
-              <span>{tr('ui.s0cfb6b5382')}</span>
+              <span>{tr("ui.s0cfb6b5382")}</span>
               <strong>
                 {data.average_response_seconds ?? "—"}
-                <small> {tr('ui.s043a718774')}</small>
+                <small> {tr("ui.s043a718774")}</small>
               </strong>
             </article>
             <article>
-              <span>{tr('ui.s659b6f396d')}</span>
+              <span>{tr("ui.s659b6f396d")}</span>
               <strong>
                 {learning?.topics.filter(
                   (t) => t.mastery_state === "exam_ready",
@@ -80,37 +82,40 @@ export function ProgressPage({ exam }: { exam: number }) {
               </strong>
             </article>
           </div>
-          <div className="toolbar" aria-label={tr('ui.sb9cf9b8b98')}>
+          <div className="toolbar" aria-label={tr("ui.sb9cf9b8b98")}>
             {[
-              ["topics", "Topic mastery"],
-              ["answers", "Recent answers"],
-              ["patterns", "Learning gaps"],
+              ["topics", "ui.topicMastery"],
+              ["answers", "ui.recentAnswers"],
+              ["patterns", "ui.learningGaps"],
             ].map(([key, label]) => (
               <button
                 key={key}
                 aria-pressed={tab === key}
-                className={tab === key ? tr('ui.s9687961165') : ""}
+                className={tab === key ? "active" : ""}
                 onClick={() => {
                   setTab(key);
                   setQuery("");
                 }}
               >
-                {label}
+                {tr(label as "ui.topicMastery")}
               </button>
             ))}
           </div>
           {tab !== "patterns" && (
-            <label className="table-search"> {tr('ui.s49c266baaa')} {tab === "topics" ? tr('ui.sf013aa4b8d') : tr('ui.s677fe21b65')}
+            <label className="table-search">
+              {" "}
+              {tr("ui.s49c266baaa")}{" "}
+              {tab === "topics" ? tr("ui.sf013aa4b8d") : tr("ui.s677fe21b65")}
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={tr('ui.s26634f572c')}
+                placeholder={tr("ui.s26634f572c")}
               />
             </label>
           )}
           {tab === "topics" && (
             <PagedTable
-              label={tr('ui.se22820fcf5')}
+              label={tr("ui.se22820fcf5")}
               resetKey={`${exam}:${query}`}
               headers={["Topic", "Mastery", "Practised", "Score"]}
               rows={(learning?.topics ?? []).filter((t) =>
@@ -121,7 +126,7 @@ export function ProgressPage({ exam }: { exam: number }) {
                   <td>
                     <strong>{t.name}</strong>
                     <details>
-                      <summary>{tr('ui.s23e4ca427c')}</summary>
+                      <summary>{tr("ui.s23e4ca427c")}</summary>
                       <p>{t.mastery_reason}</p>
                     </details>
                   </td>
@@ -147,9 +152,9 @@ export function ProgressPage({ exam }: { exam: number }) {
           )}
           {tab === "patterns" && (
             <>
-              <h3>{tr('ui.s1b5db84e99')}</h3>
+              <h3>{tr("ui.s1b5db84e99")}</h3>
               <PagedTable
-                label={tr('ui.sb910ef4678')}
+                label={tr("ui.sb910ef4678")}
                 rows={data.frequently_missing}
                 headers={["Point to revisit", "Occurrences"]}
                 renderRow={([s, n]) => (
@@ -159,9 +164,9 @@ export function ProgressPage({ exam }: { exam: number }) {
                   </tr>
                 )}
               />
-              <h3>{tr('ui.sd3e410d6fc')}</h3>
+              <h3>{tr("ui.sd3e410d6fc")}</h3>
               <PagedTable
-                label={tr('ui.sd3e410d6fc')}
+                label={tr("ui.sd3e410d6fc")}
                 rows={data.misconceptions}
                 headers={["Misconception", "Occurrences"]}
                 renderRow={([s, n]) => (
@@ -174,64 +179,82 @@ export function ProgressPage({ exam }: { exam: number }) {
             </>
           )}
           {tab === "answers" && (
-            <PagedTable
-              label={tr('ui.sc210cd034b')}
-              resetKey={`${exam}:${query}`}
-              headers={["Question & feedback", "Score"]}
-              rows={data.recent_attempts.filter((a) =>
-                a.question_text
-                  .toLowerCase()
-                  .includes(query.trim().toLowerCase()),
-              )}
-              renderRow={(a) => (
-                <tr key={a.id}>
-                  <td className="question-cell">
-                    <details key={a.id}>
+            <div className="answer-history">
+              <p>
+                {tr("ui.attemptCounts", {
+                  evaluated: data.evaluated_count,
+                  skipped: data.skipped_count,
+                })}
+              </p>
+              <div className="score-trend" aria-label={tr("ui.scoreTrend")}>
+                {[...data.recent_attempts]
+                  .reverse()
+                  .filter(
+                    (a) =>
+                      a.evaluation?.score != null &&
+                      a.evaluation.status !== "skipped",
+                  )
+                  .map((a) => (
+                    <span key={a.id} title={a.question_text}>
+                      {a.evaluation.score}/5
+                    </span>
+                  ))}
+              </div>
+              {[...data.recent_attempts, ...older]
+                .filter((a) =>
+                  a.question_text
+                    .toLowerCase()
+                    .includes(query.trim().toLowerCase()),
+                )
+                .map((a) => (
+                  <article key={a.id}>
+                    <details>
                       <summary>
-                        <span className="row-preview">{a.question_text}</span>
+                        <strong>{a.question_text}</strong> ·{" "}
+                        {a.evaluation?.status === "skipped"
+                          ? 0
+                          : (a.evaluation?.score ?? "—")}
+                        /5 ·{" "}
+                        {a.evaluation?.status === "skipped"
+                          ? tr("ui.skipped")
+                          : tr("ui.evaluated")}
                       </summary>
-                      <p>{a.question_text}</p>
-                      <p>{a.answer_text}</p>
-                      <EvaluationView value={a.evaluation} />
-                      <button
-                        onClick={() => {
-                          setEditing(a.id);
-                          setCorrection(JSON.stringify(a.evaluation, null, 2));
-                        }}
-                      > {tr('ui.s32a5e72fbf')} </button>
-                      {editing === a.id && (
+                      {a.answer_text && (
                         <>
-                          <label> {tr('ui.sf00ab044f7')} <textarea
-                              value={correction}
-                              onChange={(e) => setCorrection(e.target.value)}
-                            />
-                          </label>
-                          <button
-                            onClick={async () => {
-                              setError("");
-                              try {
-                                await api(
-                                  `/exams/${exam}/attempts/${a.id}`,
-                                  "PATCH",
-                                  {
-                                    evaluation: JSON.parse(correction),
-                                  },
-                                );
-                                setEditing(undefined);
-                                await refresh();
-                              } catch (e) {
-                                setError(String(e));
-                              }
-                            }}
-                          > {tr('ui.s16d626ca5f')} </button>
+                          <h4>{tr("ui.yourAnswer")}</h4>
+                          <p className="prose">{a.answer_text}</p>
                         </>
                       )}
+                      <EvaluationView value={a.evaluation} />
                     </details>
-                  </td>
-                  <td>{a.evaluation?.score ?? "—"} / 5</td>
-                </tr>
+                  </article>
+                ))}
+              {more && data.recent_attempts.length >= 20 && (
+                <button
+                  disabled={loadingMore}
+                  onClick={async () => {
+                    setLoadingMore(true);
+                    try {
+                      const items = [...data.recent_attempts, ...older];
+                      const result = await api<{
+                        items: ProgressData["recent_attempts"];
+                        has_more: boolean;
+                      }>(
+                        `/exams/${exam}/attempts?before=${Math.min(...items.map((item) => item.id))}`,
+                      );
+                      setOlder((previous) => [...previous, ...result.items]);
+                      setMore(result.has_more);
+                    } catch (e) {
+                      setError(String(e));
+                    } finally {
+                      setLoadingMore(false);
+                    }
+                  }}
+                >
+                  {tr("ui.olderAnswers")}
+                </button>
               )}
-            />
+            </div>
           )}
         </>
       )}

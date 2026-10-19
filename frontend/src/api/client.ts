@@ -17,6 +17,7 @@ export async function api<T>(
   path: string,
   method = "GET",
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
   const headers: Record<string, string> = {};
   headers["Accept-Language"] = i18n.resolvedLanguage || "en";
@@ -26,6 +27,7 @@ export async function api<T>(
   const response = await fetch(`${base}/api${path}`, {
     method,
     headers,
+    signal,
     body:
       body === undefined
         ? undefined
@@ -38,8 +40,17 @@ export async function api<T>(
       .json()
       .catch(() => ({ detail: response.statusText }));
     const code = error.error?.code;
-    const translated = code && i18n.exists(`errors.${code}`) ? i18n.t(`errors.${code}`, { defaultValue: i18n.t('errors.unknown') }) : undefined;
-    throw new Error(translated || error.error?.message || (typeof error.detail === "string" ? error.detail : JSON.stringify(error.detail)));
+    const translated =
+      code && i18n.exists(`errors.${code}`)
+        ? i18n.t(`errors.${code}`, { defaultValue: i18n.t("errors.unknown") })
+        : undefined;
+    throw new Error(
+      translated ||
+        error.error?.message ||
+        (typeof error.detail === "string"
+          ? error.detail
+          : JSON.stringify(error.detail)),
+    );
   }
   return response.json();
 }
@@ -47,12 +58,14 @@ export async function operation<T>(
   path: string,
   body: unknown,
   update: (job: Job) => void,
+  signal?: AbortSignal,
 ): Promise<T> {
-  let job = await api<Job>(path, "POST", body);
+  let job = await api<Job>(path, "POST", body, signal);
   update(job);
   while (job.status === "queued" || job.status === "running") {
     await new Promise((resolve) => setTimeout(resolve, 700));
-    job = await api<Job>(`/jobs/${job.id}`);
+    signal?.throwIfAborted();
+    job = await api<Job>(`/jobs/${job.id}`, "GET", undefined, signal);
     update(job);
   }
   if (job.status !== "completed")
@@ -69,10 +82,15 @@ export async function sourceBlob(exam: number, filename: string) {
 }
 
 export async function downloadBackup(filename: string) {
-  const response = await fetch(`${base}/api/backups/${encodeURIComponent(filename)}`, { headers: token ? { 'X-Colloquily-Token': token } : {} });
-  if (!response.ok) throw new Error(i18n.t('errors.unknown'));
+  const response = await fetch(
+    `${base}/api/backups/${encodeURIComponent(filename)}`,
+    { headers: token ? { "X-Colloquily-Token": token } : {} },
+  );
+  if (!response.ok) throw new Error(i18n.t("errors.unknown"));
   const url = URL.createObjectURL(await response.blob());
-  const anchor = document.createElement('a');
-  anchor.href = url; anchor.download = filename; anchor.click();
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }

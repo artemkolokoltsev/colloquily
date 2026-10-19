@@ -373,7 +373,7 @@ def select_practice_questions(
     params: list[object] = [subject_id]
     if imported_only:
         clauses.append("qp.id IS NOT NULL")
-    for column, values in (("COALESCE(NULLIF(q.topic_name, ''), t.name, 'Unassigned')", topics), ("q.difficulty", difficulties), ("q.priority", priorities)):
+    for column, values in (("COALESCE(t.name, NULLIF(q.topic_name, ''), 'Unassigned')", topics), ("q.difficulty", difficulties), ("q.priority", priorities)):
         values = [str(value) for value in (values or []) if str(value)]
         if values:
             clauses.append(f"{column} IN ({','.join('?' for _ in values)})")

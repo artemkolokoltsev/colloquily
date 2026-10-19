@@ -1,9 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { api, operation } from "../api/client";
-import { ErrorNotice, Progress } from "../components/Common";
+import { ErrorNotice, Progress, Sources } from "../components/Common";
 import { PagedTable } from "../components/PagedTable";
-import type { LearningData, Job, Question } from "../types";
+import type { LearningData, Job, Question, Source } from "../types";
 export function Questions({
   exam,
   initialTopic = "",
@@ -14,6 +14,7 @@ export function Questions({
   onPractice: (topic: string) => void;
 }) {
   const { t } = useTranslation();
+  const [topics, setTopics] = useState<{ id: number; name: string }[]>([]);
   const [topic, setTopic] = useState(initialTopic);
   const [learning, setLearning] = useState<LearningData>();
   const [status, setStatus] = useState("");
@@ -26,6 +27,9 @@ export function Questions({
   const [query, setQuery] = useState("");
   const refresh = () =>
     Promise.all([
+      api<{ id: number; name: string }[]>(`/exams/${exam}/topics`).then(
+        setTopics,
+      ),
       api<Question[]>(`/exams/${exam}/questions`).then(setItems),
       api<LearningData>(`/exams/${exam}/learning`).then(setLearning),
     ]);
@@ -110,6 +114,19 @@ export function Questions({
       <Progress job={job} />
       <details>
         <summary>{t("ui.s465e030650")}</summary>
+        <button
+          disabled={busy}
+          onClick={() =>
+            void act(() =>
+              operation(`/exams/${exam}/questions/reclassify`, {}, setJob),
+            )
+          }
+        >
+          {t("ui.reclassify")}
+        </button>
+        {job?.status === "completed" && !!job.result && (
+          <pre>{JSON.stringify(job.result, null, 2)}</pre>
+        )}
         <div className="toolbar">
           <button
             disabled={busy}
@@ -257,6 +274,37 @@ export function Questions({
                   ) : (
                     <p>{t("ui.sc67fe62b5d")}</p>
                   )}
+                  <QuestionCitations exam={exam} question={q.id} />
+                  <label>
+                    {t("ui.topicAssignment")}
+                    <select
+                      value={
+                        topics.find((topic) => topic.name === q.topic_name)
+                          ?.id ?? ""
+                      }
+                      disabled={busy}
+                      onChange={(e) =>
+                        void act(() =>
+                          api(
+                            `/exams/${exam}/questions/${q.id}/topic`,
+                            "PATCH",
+                            {
+                              topic_id: e.target.value
+                                ? Number(e.target.value)
+                                : null,
+                            },
+                          ),
+                        )
+                      }
+                    >
+                      <option value="">{t("ui.s14d33bd014")}</option>
+                      {topics.map((topic) => (
+                        <option key={topic.id} value={topic.id}>
+                          {topic.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <div className="toolbar">
                     {["accepted", "rejected", "needs_review"].map((status) => (
                       <button
@@ -309,5 +357,32 @@ export function Questions({
         )}
       />
     </section>
+  );
+}
+
+function QuestionCitations({
+  exam,
+  question,
+}: {
+  exam: number;
+  question: number;
+}) {
+  const { t } = useTranslation();
+  const [sources, setSources] = useState<Source[]>();
+  const [error, setError] = useState("");
+  return (
+    <details
+      onToggle={(event) => {
+        if (event.currentTarget.open && !sources)
+          void api<Source[]>(`/exams/${exam}/questions/${question}/sources`)
+            .then(setSources)
+            .catch((e) => setError(String(e)));
+      }}
+    >
+      <summary>{t("ui.questionSources")}</summary>
+      <ErrorNotice error={error} />
+      {sources && <Sources exam={exam} sources={sources} />}
+      {sources?.length === 0 && <p>{t("ui.noLectureSources")}</p>}
+    </details>
   );
 }

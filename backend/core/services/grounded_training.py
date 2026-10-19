@@ -353,7 +353,8 @@ def _generate_grounded_questions(subject: dict, count: int = 5, *, llm_client=No
                     reasons = ['invalid_validation_schema', str(exc)]
             if not reasons:
                 payload['review_status'] = 'accepted' if activate_validated else 'needs_review'
-                payload['topic_id'] = allowed[payload['evidence_ids'][0]].get('topic_id')
+                from services.question_topics import infer
+                payload['topic_id'] = infer(subject['id'], payload['evidence_ids'], payload['question_text'])
                 payload['source_provenance'] = json.dumps({'model': getattr(client, 'model_name', 'configured local model'), 'validation': 'schema, clarity, relevance, per-point grounding and semantic uniqueness passed', 'evidence_ids': payload['evidence_ids']})
                 try:
                     question = create_question(subject['id'], payload)

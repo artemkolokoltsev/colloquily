@@ -58,22 +58,53 @@ export function EvaluationView({ value }: { value: Evaluation | null }) {
   const { t } = useTranslation();
   if (!value) return null;
   return (
-    <article>
+    <article
+      className={`evaluation-card score-${value.status === "skipped" ? "skipped" : (value.score ?? 0) < 2 ? "low" : (value.score ?? 0) < 4 ? "partial" : "strong"}`}
+    >
+      <p className="status-label">
+        {t(
+          value.status === "skipped"
+            ? "ui.skipped"
+            : value.status === "pending"
+              ? "ui.pendingEvaluation"
+              : (value.score ?? 0) < 2
+                ? "ui.lowScore"
+                : (value.score ?? 0) < 4
+                  ? "ui.partialScore"
+                  : "ui.strongScore",
+        )}
+      </p>
       <h3>
         {t("common.answerFeedback")}{" "}
-        {value.score != null && `· ${value.score}/5`}
+        {(value.score != null || value.status === "skipped") &&
+          `· ${value.status === "skipped" ? 0 : value.score}/5`}
       </h3>
-      {(["correct", "missing", "incorrect"] as const).map((key) => (
-        <div key={key}>
-          <h4>{t(`common.${key}`)}</h4>
+      {!!value.expected_core_points?.length && (
+        <>
+          <h4>{t("ui.expectedPoints")}</h4>
           <ul>
-            {(value[key as "correct"] || []).map((item, i) => (
-              <li key={i}>{item.text || item.claim || JSON.stringify(item)}</li>
+            {value.expected_core_points?.map((point, i) => (
+              <li key={i}>{point.text}</li>
             ))}
           </ul>
-        </div>
-      ))}
-      <p className="prose">{value.better_oral_answer}</p>
+        </>
+      )}
+      {value.status !== "skipped" &&
+        (["correct", "missing", "incorrect"] as const).map((key) => (
+          <div key={key}>
+            <h4>{t(`common.${key}`)}</h4>
+            <ul>
+              {(value[key as "correct"] || [])
+                .filter((item) => item.text || item.claim)
+                .map((item, i) => (
+                  <li key={i}>{item.text || item.claim}</li>
+                ))}
+            </ul>
+          </div>
+        ))}
+      {value.status !== "skipped" && (
+        <p className="prose">{value.better_oral_answer}</p>
+      )}
       {value.subject_id && (
         <Sources exam={value.subject_id} sources={value.sources || []} />
       )}

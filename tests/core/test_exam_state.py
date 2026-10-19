@@ -229,7 +229,7 @@ class ExamStateTest(unittest.TestCase):
         self.assertNotEqual(result["session"]["current_question_id"], session["current_question_id"])
         attempt = get_exam_run(run["id"])["sessions"][0]["attempts"][0]
         self.assertEqual(attempt["evaluation"]["status"], "skipped")
-        self.assertIsNone(attempt["evaluation"]["score"])
+        self.assertEqual(attempt["evaluation"]["score"], 0)
         self.assertEqual(attempt["answer_text"], "")
         self.assertNotIn('model_answer', attempt['evaluation'])
         self.assertEqual(attempt["evaluation"]["evidence_ids"], [])

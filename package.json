@@ -1,11 +1,14 @@
 {
   "name": "colloquily",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "license": "Apache-2.0",
   "description": "Local-first, source-grounded oral exam preparation for university students",
   "homepage": "https://github.com/artemkolokoltsev/colloquily#readme",
-  "repository": { "type": "git", "url": "https://github.com/artemkolokoltsev/colloquily.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/artemkolokoltsev/colloquily.git"
+  },
   "scripts": {
     "build": "tsc -p frontend/tsconfig.json && vite build --config frontend/vite.config.ts",
     "dev": "vite --config frontend/vite.config.ts",
@@ -35,6 +38,7 @@
     "@tauri-apps/plugin-updater": "^2.13.3",
     "i18next": "^26.4.4",
     "i18next-browser-languagedetector": "^8.2.1",
+    "pdfjs-dist": "^6.4.299",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-i18next": "^17.0.16"

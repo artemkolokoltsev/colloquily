@@ -39,7 +39,7 @@ def german_grade(percent_correct: float) -> float:
 
 
 def _evaluation_report(evaluations: list[dict]) -> dict:
-    scores = [float(item["score"]) for item in evaluations if item.get("score") is not None]
+    scores = [float(item["score"]) for item in evaluations if item.get("score") is not None and item.get("status") not in {"skipped", "pending", "needs_review"}]
     # A timed session can finish before deferred evaluations run. Keep its
     # established provisional zero-grade behavior, while skipped attempts still
     # remain explicitly non-graded in their own persisted state.
@@ -102,7 +102,7 @@ def get_exam_run(run_id: int) -> dict | None:
         ]
         for session in item["sessions"]:
             attempts = connection.execute(
-                """SELECT a.*, q.question_text FROM attempts a
+                """SELECT a.*, q.question_text, q.expected_core_points_json FROM attempts a
                    JOIN questions q ON q.id=a.question_id
                    WHERE a.exam_session_id=? ORDER BY a.id""",
                 (session["id"],),
@@ -111,6 +111,9 @@ def get_exam_run(run_id: int) -> dict | None:
             for attempt in attempts:
                 decoded = dict(attempt)
                 decoded["evaluation"] = json.loads(decoded.pop("evaluation_json") or "{}")
+                if decoded['evaluation'].get('status') == 'skipped':
+                    decoded['evaluation'] = {**decoded['evaluation'], 'score':0, 'expected_core_points':decoded['evaluation'].get('expected_core_points') or json.loads(decoded.get('expected_core_points_json') or '[]')}
+                decoded["evaluation"].setdefault("expected_core_points", json.loads(decoded.get("expected_core_points_json") or "[]"))
                 session["attempts"].append(decoded)
         return item
 
@@ -374,9 +377,11 @@ def submit_exam_answer(
             connection.commit()
         return {"session": get_exam_session(session_id), "evaluation": None, "show_evaluation": False}
     question_id = int(session["current_question_id"])
+    current_question = get_question(question_id)
     immediate_feedback = session["mode"] in {"single_question", "rapid_practice"}
     if skipped:
-        evaluation = {"status": "skipped", "score": None, "scores": {},
+        evaluation = {"status": "skipped", "score": 0, "scores": {},
+                      "expected_core_points": current_question.get("expected_core_points", []),
                       "evidence_ids": [], "evaluation_not_applicable": True}
     elif immediate_feedback:
         evaluation = evaluator(session["subject_id"], question_id, answer.strip(), int(response_duration_seconds))

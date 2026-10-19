@@ -194,7 +194,13 @@ def extract_source_units(source: dict, *, page_start: int | None = None, page_en
                 previous['repeated_lines'] = sorted(set(previous['repeated_lines'] + item['repeated_lines']))
             else:
                 coherent.append(item)
+        page_lines = [line.strip() for line in raw.splitlines() if line.strip() and _line_key(line) not in repeated_edges]
+        page_topic = None
+        if page_lines and 2 <= len(page_lines[0].split()) <= 10 and not re.search(r'[.!?=∑√+]', page_lines[0]):
+            page_topic = single_topic_title(page_lines[0])
         for item in coherent:
+            if page_topic:
+                item['section_title'] = page_topic
             item["source_start"] = page_number
             item["source_end"] = page_number
             # Keep nearby short slide lines together, but never cross pages.

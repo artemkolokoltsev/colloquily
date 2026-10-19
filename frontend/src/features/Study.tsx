@@ -5,6 +5,7 @@ import { ErrorNotice, Progress, Sources } from "../components/Common";
 import type { Job, Source } from "../types";
 export function Study({ exam }: { exam: number }) {
   const { t } = useTranslation();
+  const [includeNotes, setIncludeNotes] = useState(false);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<{
     answer: string;
@@ -25,7 +26,13 @@ export function Study({ exam }: { exam: number }) {
     setBusy(true);
     setError("");
     try {
-      setAnswer(await operation(`/exams/${exam}/ask`, { question }, setJob));
+      setAnswer(
+        await operation(
+          `/exams/${exam}/ask`,
+          { question, include_notes: includeNotes },
+          setJob,
+        ),
+      );
       await refresh();
     } catch (e) {
       setError(String(e));
@@ -35,16 +42,27 @@ export function Study({ exam }: { exam: number }) {
   }
   return (
     <section>
-      <h2>{t('ui.s83b5a04df3')}</h2>
-      <p>{t('ui.sf72d3f1e58')}</p>
+      <h2>{t("nav.ask")}</h2>
+      <p>{t("ui.sf72d3f1e58")}</p>
       <ErrorNotice error={error} />
       <textarea
-        aria-label={t('ui.s94a707fa26')}
+        aria-label={t("ui.s94a707fa26")}
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
-        placeholder={t('ui.sa9ca7f3cee')}
+        placeholder={t("ui.sa9ca7f3cee")}
       />
-      <button disabled={busy || !question.trim()} onClick={ask}> {t('ui.s7e9ec7c610')} </button>
+      <label className="inline">
+        <input
+          type="checkbox"
+          checked={includeNotes}
+          onChange={(e) => setIncludeNotes(e.target.checked)}
+        />
+        {t("ui.includeNotes")}
+      </label>
+      <button disabled={busy || !question.trim()} onClick={ask}>
+        {" "}
+        {t("ui.s7e9ec7c610")}{" "}
+      </button>
       <Progress job={job} />
       {answer && (
         <article>
@@ -52,7 +70,7 @@ export function Study({ exam }: { exam: number }) {
           <Sources exam={exam} sources={answer.contexts} />
         </article>
       )}
-      <h3>{t('ui.s62db59f7ee')}</h3>
+      <h3>{t("ui.s62db59f7ee")}</h3>
       {history.map((h, i) => (
         <details key={h.id || i}>
           <summary>{h.input_text}</summary>
@@ -105,16 +123,19 @@ export function StudyPlan({ exam }: { exam: number }) {
   }
   return (
     <section>
-      <h2>{t('ui.sdaff920206')}</h2>
+      <h2>{t("ui.sdaff920206")}</h2>
       <ErrorNotice error={error} />
-      <label> {t('ui.sd5b090546f')} <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
+      <label>
+        {" "}
+        {t("ui.sd5b090546f")}{" "}
+        <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
           {[5, 4, 3, 2, 1].map((d) => (
             <option key={d}>{d}</option>
           ))}
         </select>
       </label>
       {!plan ? (
-        <p>{t('ui.sc9773eb959')}</p>
+        <p>{t("ui.sc9773eb959")}</p>
       ) : (
         <>
           <h3>{plan.focus}</h3>
@@ -124,7 +145,7 @@ export function StudyPlan({ exam }: { exam: number }) {
               <p>{r.reason}</p>
             </article>
           ))}
-          <h3>{t('ui.sa352d1efdd')}</h3>
+          <h3>{t("ui.sa352d1efdd")}</h3>
           {plan.coverage.map((c, i) => (
             <p key={i}>
               {c.topic_name} · {c.material_state}
@@ -132,13 +153,16 @@ export function StudyPlan({ exam }: { exam: number }) {
           ))}
         </>
       )}
-      <h3>{t('ui.s10dc530f8e')}</h3>
+      <h3>{t("ui.s10dc530f8e")}</h3>
       <button
         disabled={busy}
         onClick={() =>
           act(() => operation(`/exams/${exam}/exam-pack`, {}, setJob))
         }
-      > {t('ui.s7d6c2bd616')} </button>
+      >
+        {" "}
+        {t("ui.s7d6c2bd616")}{" "}
+      </button>
       <Progress job={job} />
       {pack.map((s) => (
         <article key={s.id}>

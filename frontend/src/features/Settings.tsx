@@ -20,7 +20,7 @@ export function Settings({ exam }: { exam: number }) {
   }>();
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [version, setVersion] = useState("0.1.1");
+  const [version, setVersion] = useState("0.1.2");
   const [updateVersion, setUpdateVersion] = useState("");
   const [updateProgress, setUpdateProgress] = useState<number | null>();
   const [backupFile, setBackupFile] = useState<File>();
@@ -209,92 +209,95 @@ export function Settings({ exam }: { exam: number }) {
           <progress max={100} value={updateProgress ?? undefined} />
         )}
       </fieldset>
-      {models && (
-        <fieldset>
-          <legend>{t("settings.models")}</legend>
-          {Object.entries(models.task_models).map(([task, value]) => (
-            <label key={task}>
-              {t(`dynamic.${task}`, {
-                defaultValue: task.replaceAll("_", " "),
-              })}
+      <details>
+        <summary>{t("nav.advanced")}</summary>
+        {models && (
+          <fieldset>
+            <legend>{t("settings.models")}</legend>
+            {Object.entries(models.task_models).map(([task, value]) => (
+              <label key={task}>
+                {t(`dynamic.${task}`, {
+                  defaultValue: task.replaceAll("_", " "),
+                })}
+                <input
+                  value={value}
+                  onChange={(e) =>
+                    setModels({
+                      ...models,
+                      task_models: {
+                        ...models.task_models,
+                        [task]: e.target.value,
+                      },
+                    })
+                  }
+                />
+              </label>
+            ))}
+            <label>
+              {t("settings.embedding")}
               <input
-                value={value}
+                value={models.embedding_config.model}
                 onChange={(e) =>
                   setModels({
                     ...models,
-                    task_models: {
-                      ...models.task_models,
-                      [task]: e.target.value,
-                    },
+                    embedding_config: { model: e.target.value },
                   })
                 }
               />
             </label>
-          ))}
-          <label>
-            {t("settings.embedding")}
-            <input
-              value={models.embedding_config.model}
-              onChange={(e) =>
-                setModels({
-                  ...models,
-                  embedding_config: { model: e.target.value },
-                })
-              }
-            />
-          </label>
-        </fieldset>
-      )}
-      {data?.sections.map((s) => (
-        <details key={s.section}>
-          <summary>
-            {t(`dynamic.${s.section}`, { defaultValue: s.section })}
-          </summary>
-          {s.fields
-            .filter((f) => f.key !== "ST_ALLOW_DOWNLOAD")
-            .map((f) => (
-              <label key={f.key}>
-                {f.label}
-                {f.type === "bool" ? (
-                  <input
-                    type="checkbox"
-                    checked={!!data.values[f.key]}
-                    onChange={(e) =>
-                      setData({
-                        ...data,
-                        values: { ...data.values, [f.key]: e.target.checked },
-                      })
-                    }
-                  />
-                ) : f.type === "select" ? (
-                  <select
-                    value={String(data.values[f.key])}
-                    onChange={(e) =>
-                      setData({
-                        ...data,
-                        values: { ...data.values, [f.key]: e.target.value },
-                      })
-                    }
-                  >
-                    {f.options?.map((v) => (
-                      <option key={v}>{v}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    value={String(data.values[f.key] ?? "")}
-                    onChange={(e) =>
-                      setData({
-                        ...data,
-                        values: { ...data.values, [f.key]: e.target.value },
-                      })
-                    }
-                  />
-                )}
-              </label>
-            ))}
-        </details>
-      ))}
+          </fieldset>
+        )}
+        {data?.sections.map((s) => (
+          <details key={s.section}>
+            <summary>
+              {t(`dynamic.${s.section}`, { defaultValue: s.section })}
+            </summary>
+            {s.fields
+              .filter((f) => f.key !== "ST_ALLOW_DOWNLOAD")
+              .map((f) => (
+                <label key={f.key}>
+                  {f.label}
+                  {f.type === "bool" ? (
+                    <input
+                      type="checkbox"
+                      checked={!!data.values[f.key]}
+                      onChange={(e) =>
+                        setData({
+                          ...data,
+                          values: { ...data.values, [f.key]: e.target.checked },
+                        })
+                      }
+                    />
+                  ) : f.type === "select" ? (
+                    <select
+                      value={String(data.values[f.key])}
+                      onChange={(e) =>
+                        setData({
+                          ...data,
+                          values: { ...data.values, [f.key]: e.target.value },
+                        })
+                      }
+                    >
+                      {f.options?.map((v) => (
+                        <option key={v}>{v}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={String(data.values[f.key] ?? "")}
+                      onChange={(e) =>
+                        setData({
+                          ...data,
+                          values: { ...data.values, [f.key]: e.target.value },
+                        })
+                      }
+                    />
+                  )}
+                </label>
+              ))}
+          </details>
+        ))}
+      </details>
       <button onClick={save}>{t("settings.save")}</button>
     </section>
   );

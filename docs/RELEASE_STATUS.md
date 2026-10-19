@@ -1,23 +1,17 @@
 # Release status
 
-Current candidate series: **0.1.1, unsigned preview only**. See
-[UX/learning-quality changes and verification](LEARNING_QUALITY_PATCH.md).
-Published versions are listed under [GitHub Releases](https://github.com/artemkolokoltsev/colloquily/releases).
-Merging code does not publish installers: an RC tag must pass real-model
-acceptance and every native build first. Signed production releases require
-separate signing/notarization and updater credentials.
+Current candidate: **0.1.2, unsigned preview**. Publication uses
+`v0.1.2-rc.1` and is gated by real-model learning acceptance plus Windows x64,
+Intel macOS and Apple Silicon macOS native builds on the tagged revision.
 
-Latest local verification (2026-10-17): 70 backend, 65 domain and 4 frontend
-tests pass, along with translation parity and the TypeScript/Vite production
-build. The native artifact workflow now runs the domain regressions on every
-supported target, including Skip and evidence-history preservation.
+Local verification: 84 backend/API tests, 65 core regressions and 4 frontend
+tests passed. Translation parity, TypeScript/Vite, Rust checks, the clean frozen
+backend/self-test/lifecycle smoke and unsigned Intel macOS app build passed.
+See [the implementation and migration report](RELEASE_NOTES_0.1.2.md).
 
-The [0.1.1 native build matrix](https://github.com/artemkolokoltsev/colloquily/actions/runs/38906920356)
-passed Windows x64, Intel macOS and Apple Silicon macOS. It produced all three
-installer archives and three matching license/source archives. These are CI
-artifacts, not proof of a published GitHub Release. Current revision checks are
-tracked in [PR #3](https://github.com/artemkolokoltsev/colloquily/pull/3);
-only successful acceptance for the release revision may approve publication.
+Production signing/notarization and signed updater credentials remain separate
+release gates. Published previews are listed under
+[GitHub Releases](https://github.com/artemkolokoltsev/colloquily/releases).
 
 ## Historical v0.1.0 RC4 verification
 

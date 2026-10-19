@@ -31,17 +31,11 @@ export function ExamPicker({
     void Promise.all(
       exams.map(async (exam) => {
         const data = await api<{
-          goal: { exam_date: string | null };
-          topics: { questions: number; practised: number }[];
-        }>(`/exams/${exam.id}/learning`);
-        return [
-          exam.id,
-          {
-            date: data.goal.exam_date,
-            questions: data.topics.reduce((n, topic) => n + topic.questions, 0),
-            practised: data.topics.reduce((n, topic) => n + topic.practised, 0),
-          },
-        ] as const;
+          date: string | null;
+          questions: number;
+          practised: number;
+        }>(`/exams/${exam.id}/summary`);
+        return [exam.id, data] as const;
       }),
     )
       .then((entries) => {

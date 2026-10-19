@@ -44,9 +44,12 @@ def run(ident):
 
 def evaluate(subject_id, question_id, answer, duration):
     subject = exam(subject_id)
-    return evaluate_grounded_answer(subject_id, question_id, answer, duration,
+    result = evaluate_grounded_answer(subject_id, question_id, answer, duration,
         llm_client=subject_task_llm(subject, "answer_evaluation"),
         quality_llm_client=subject_task_llm(subject, "answering"))
+    from services.training_repository import get_question
+    result['expected_core_points'] = (get_question(question_id) or {}).get('expected_core_points', [])
+    return result
 
 
 def build_index(ident):
@@ -55,8 +58,8 @@ def build_index(ident):
     return result
 
 
-def ask(ident, question):
-    result = answer_subject_question(ident, question)
+def ask(ident, question, *, include_notes=False):
+    result = answer_subject_question(ident, question, include_notes=include_notes)
     db.store_request(local_user_id(), result["request_entry"], subject_id=ident)
     return result
 

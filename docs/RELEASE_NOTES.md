@@ -1,61 +1,57 @@
-# Colloquily 0.1.1 — unsigned desktop preview
+# Colloquily 0.1.2 — unsigned desktop preview
 
-UX and learning-quality patch following the 0.1.0 previews.
-**This is a prerelease, not a signed production release.** Publishing requires
-successful real-model synthetic acceptance and all three native build jobs.
-
-## Downloads
-
-- Apple Silicon macOS 14+: `Colloquily_0.1.1_aarch64.dmg`
-- Intel macOS 14+: `Colloquily_0.1.1_x64.dmg`
-- Windows x64: `Colloquily_0.1.1_x64-setup.exe`
-- Matching `licenses-*.zip`, `LICENSE`, `NOTICE`, and `SHA256SUMS.txt`
-
-Read [installation](https://github.com/artemkolokoltsev/colloquily/blob/main/docs/INSTALLATION.md),
-the [user guide](https://github.com/artemkolokoltsev/colloquily/blob/main/docs/USER_GUIDE.md),
-and [license information](https://github.com/artemkolokoltsev/colloquily/blob/main/docs/LICENSING.md).
-Download the matching license/source bundle with your installer.
+A product UX and reliability update. **This is an unsigned prerelease.**
+Publication requires real-model learning acceptance and native builds for all
+three supported targets to pass on this release revision.
 
 ## What changed
 
-- Searchable exam picker, quieter desktop navigation, adaptive light/dark appearance,
-  English/German workflows and clearer material/source review.
-- Resource-aware local model preparation with installed-model reuse, download
-  progress/cancellation/retry and preservation of explicit exam settings.
-- All-document/topic question preparation with exact source quotes, grounded
-  answer points, comparison checks and semantic/rubric duplicate rejection.
-  No passage-quotation starter fallback or unrelated-question examples.
-- Bounded incremental generation and explicit partial coverage when the local
-  model cannot produce enough valid questions. Valid results are retained.
-- Skip advances without AI evaluation or answer feedback. Repeated submissions
-  are idempotent; delayed answers cannot grade the next question.
-- Reprocessing preserves unchanged citation IDs and manual review decisions.
-  Stale sources do not count toward active practice or current coverage.
-- Existing application identity, workspace paths and schema version are retained.
-  Backup/restore, historical questions, answers and progress remain supported.
-- Apache-2.0 project license, native/frontend/Python license inventories and
-  corresponding MPL-covered sources. PDFium replaces PyMuPDF; AGPL components
-  are rejected by the distribution checks.
+- Five primary destinations: Home, Materials, Practice, Ask and Settings.
+  Home combines progress and daily goals; the learning plan expands on demand.
+  Manage Questions is a secondary Practice view.
+- Offline PDF reader with page navigation, zoom, fit-width, text search and
+  remembered pages. Personal page notes autosave to SQLite and survive restart.
+- Notes remain separate from lecture evidence. Ask can include them on explicit
+  opt-in, with distinct student-annotation citations.
+- Clear slide headings propagate to body text; normalized topic names are reused.
+  Question classification respects exam ownership and ambiguous cases stay
+  unassigned. Manual assignment and safe background repair are available.
+- Skipped questions earn zero without invoking AI, show expected answer points,
+  and remain separate from evaluated-answer averages and topic mastery.
+  Expandable answer history supports loading older attempts.
+- Exam-scoped AI readiness reuses compatible installed models, avoids repeated
+  setup prompts and serializes downloads. Materials and Home load less data.
+- English/German labels, adaptive light/dark layouts, reduced motion and keyboard
+  navigation are retained.
+
+## Data and compatibility
+
+Schema 11 adds page-note storage and manual-topic provenance. Existing exams,
+PDFs, questions, answers, correction history, indexes and settings are preserved.
+The migration takes a validated database backup first. The application identity
+and persistent data directory are unchanged.
+
+## Downloads
+
+- Apple Silicon macOS 14+: `Colloquily_0.1.2_aarch64.dmg`
+- Intel macOS 14+: `Colloquily_0.1.2_x64.dmg`
+- Windows x64: `Colloquily_0.1.2_x64-setup.exe`
+- Matching `licenses-*.zip`, `LICENSE`, `NOTICE` and `SHA256SUMS.txt`
+
+Download the matching license/source archive alongside the installer and verify
+its SHA-256 checksum. See [installation](https://github.com/artemkolokoltsev/colloquily/blob/main/docs/INSTALLATION.md)
+and [licensing](https://github.com/artemkolokoltsev/colloquily/blob/main/docs/LICENSING.md).
 
 ## Preview limitations
 
-The installers are **not Apple Developer ID signed/notarized or Windows
-Authenticode signed**. macOS and Windows may warn or block installation. Do not
-disable operating-system security globally. Only test files obtained from this
-repository after checking their SHA-256 values, and follow your OS's normal
-per-application review controls. If policy blocks unsigned apps, wait for a
-signed release.
+Installers are not Apple Developer ID signed/notarized or Windows Authenticode
+signed. Operating systems may warn or block installation; do not disable system
+security globally. Automatic signed updates are not enabled for this preview.
 
-Automatic updates are not available for this preview; install updates manually.
-Clean-machine GUI installation and full hardware coverage are not established by
-CI alone. Back up existing workspaces before testing. Original course passages
-and previously generated study content are not translated retroactively.
+Image-only PDFs need an external OCR step. Notes are text only. Optional note
+retrieval uses bounded text matching in Ask; it does not feed automatic question
+generation. Generated study quality still depends on the local model and source
+coverage. A practice score does not guarantee exam readiness.
 
-Ollama is a separate, guided installation; Colloquily does not silently install
-executables. Missing selected model weights are prepared automatically and can
-be cancelled. Downloads require sufficient disk space and compliance with the
-model provider's terms. Inference remains local; no cloud AI fallback is used.
-Small/CPU-only models can be slow or fail coverage checks. Scanned PDFs need OCR
-prepared separately; diagram interpretation and complex formula reconstruction
-are not automatic. Review generated study content against its cited source.
-Local AI feedback can be wrong and is not an official exam assessment.
+Detailed root causes, changes and verification:
+[0.1.2 implementation report](https://github.com/artemkolokoltsev/colloquily/blob/v0.1.2-rc.1/docs/RELEASE_NOTES_0.1.2.md).

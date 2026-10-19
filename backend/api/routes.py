@@ -7,7 +7,7 @@ import config
 from backend.models.api import (Record, Exam, ExamInput, NewExamInput, ReviewInput, ProcessInput, Job, RunInput,
     AnswerInput, AskInput, GenerateInput, PullInput, Health, ModelStatus, SettingsInput, ModelsInput)
 from backend.services.jobs import jobs
-from backend.services.models import OllamaProvider
+from backend.services.models import OllamaProvider, pull_model
 from backend.services import workflows as flow
 from services import database as db, exam_state, knowledge_repository as knowledge, processing_jobs
 from services import training_repository as training, question_pools, runtime_settings
@@ -57,7 +57,7 @@ def model_status():
 @router.post("/models/pull", response_model=Job, status_code=202)
 def pull(body: PullInput):
     return jobs.submit("model:" + body.model, "Downloading " + body.model,
-        lambda progress: OllamaProvider().pull(body.model, progress))
+        lambda progress: pull_model(body.model, progress))
 
 @router.get('/exams/{ident}/models/recommendation', response_model=Record)
 def model_recommendation(ident: int):
@@ -120,10 +120,25 @@ def documents(ident: int):
     import json
     workspace = workspace_for(flow.exam(ident))
     raw = workspace.discover_sources()
+    known = {item['relative_path'] for item in knowledge.list_documents(ident)}
+    for entry in raw:
+        if entry['relative_path'] not in known:
+            knowledge.upsert_document(ident, entry)
     items = knowledge.list_documents(ident)
     for document in items:
         report = workspace.folder('reports') / f"document-{document['id']}-extraction.json"
-        document['extraction'] = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+        try:
+            document['extraction'] = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+        except (OSError, ValueError):
+            document['extraction'] = {}
+        if document['source_type'] == 'pdf' and not document['extraction'].get('pages_total'):
+            import pypdfium2 as pdfium
+            from services.pdf_runtime import PDFIUM_LOCK
+            try:
+                with PDFIUM_LOCK, pdfium.PdfDocument(str(flow.source_path(ident, document['relative_path']))) as pdf:
+                    document['extraction']['pages_total'] = len(pdf)
+            except (OSError, RuntimeError, ValueError):
+                document['extraction']['state'] = 'extraction_failed'
     return {"documents": items, "raw": [s["relative_path"] for s in raw],
         "processing": processing_jobs.latest_processing_job(ident)}
 
@@ -223,7 +238,7 @@ def import_questions(ident: int, file: UploadFile = File(...)):
 @router.post("/exams/{ident}/ask", response_model=Job, status_code=202)
 def ask(ident: int, body: AskInput):
     flow.exam(ident)
-    return jobs.submit(f"ask:{ident}", "Retrieving evidence and composing an answer", lambda _: flow.ask(ident, body.question))
+    return jobs.submit(f"ask:{ident}", "Retrieving evidence and composing an answer", lambda _: flow.ask(ident, body.question, include_notes=body.include_notes))
 
 @router.get("/exams/{ident}/history", response_model=list[Record])
 def history(ident: int):
@@ -497,3 +512,104 @@ def prepare(ident: int):
         raise ValueError("Upload your PDFs first, then prepare your practice.")
     from backend.services.preparation import prepare_exam
     return jobs.submit(f"prepare:{ident}", "Preparing your practice", lambda progress: prepare_exam(ident, progress))
+
+from pydantic import BaseModel, Field
+class PageNoteInput(BaseModel):
+    content: str = Field(max_length=100000)
+
+@router.get('/exams/{ident}/documents/{document_id}/notes')
+def page_notes(ident: int, document_id: int):
+    from backend.services.page_notes import notes
+    flow.exam(ident)
+    return notes(ident, document_id)
+
+@router.put('/exams/{ident}/documents/{document_id}/notes/{page}')
+def write_page_note(ident: int, document_id: int, page: int, body: PageNoteInput):
+    from backend.services.page_notes import save_note
+    from backend.services.page_notes import document
+    flow.exam(ident)
+    doc = document(ident, document_id)
+    path = flow.source_path(ident, doc['relative_path'])
+    import pypdfium2 as pdfium
+    from services.pdf_runtime import PDFIUM_LOCK
+    with PDFIUM_LOCK, pdfium.PdfDocument(str(path)) as pdf:
+        if not 1 <= page <= len(pdf):
+            raise ValueError('Invalid PDF page')
+    return save_note(ident, document_id, page, body.content)
+
+@router.post('/exams/{ident}/questions/reclassify', status_code=202)
+def reclassify_questions(ident: int):
+    from services.question_topics import reclassify
+    flow.exam(ident)
+    return jobs.submit(f'topics:{ident}', 'Classifying questions', lambda progress: reclassify(ident))
+
+class QuestionTopicInput(BaseModel):
+    topic_id: int | None = None
+
+@router.patch('/exams/{ident}/questions/{question_id}/topic')
+def assign_question_topic(ident: int, question_id: int, body: QuestionTopicInput):
+    from services.question_topics import assign
+    flow.exam(ident)
+    return assign(ident, question_id, body.topic_id)
+
+@router.get('/exams/{ident}/models/readiness')
+def model_readiness(ident: int):
+    from backend.services.models import model_plan
+    subject = flow.exam(ident)
+    if merged_model_config(subject)['backend'] != 'ollama':
+        return {'state':'ready', 'manual_backend':True}
+    active = jobs.latest(f'ai-setup:{ident}')
+    if active and active['status'] in {'queued','running'}:
+        return {'state':'preparing', 'job':active}
+    try:
+        plan = model_plan(subject)
+    except Exception as exc:
+        import requests
+        if isinstance(exc, requests.RequestException):
+            return {'state':'ollama_unavailable'}
+        raise
+    if not plan['missing']:
+        from backend.services.models import apply_plan
+        apply_plan(subject, plan)
+        return {'state':'ready'}
+    if not plan['disk_ok']:
+        return {'state':'insufficient_storage'}
+    if active and active['status'] == 'failed':
+        return {'state':'failed', 'job':active}
+    return {'state':'preparing'}
+
+@router.get('/exams/{ident}/topics')
+def exam_topics(ident: int):
+    flow.exam(ident)
+    from contextlib import closing
+    with closing(db._connect()) as connection:
+        return [dict(row) for row in connection.execute('SELECT id,name FROM topics WHERE subject_id=? ORDER BY name', (ident,))]
+
+@router.get('/exams/{ident}/summary')
+def exam_summary(ident: int):
+    import json
+    from contextlib import closing
+    flow.exam(ident)
+    user = flow.local_user_id()
+    with closing(db._connect()) as connection:
+        goal = connection.execute('SELECT settings_json FROM learning_goals WHERE subject_id=? AND user_id=?', (ident,user)).fetchone()
+        row = connection.execute("""SELECT COUNT(DISTINCT q.id) AS questions,
+            COUNT(DISTINCT CASE WHEN json_extract(a.evaluation_json,'$.score') IS NOT NULL
+                AND COALESCE(json_extract(a.evaluation_json,'$.status'),'evaluated') NOT IN ('skipped','pending','needs_review') THEN q.id END) AS practised
+            FROM questions q LEFT JOIN attempts a ON a.question_id=q.id AND a.user_id=? AND a.subject_id=?
+            WHERE q.subject_id=?""", (user,ident,ident)).fetchone()
+    return {**dict(row), 'date':json.loads(goal[0]).get('exam_date') if goal else None}
+
+@router.get('/exams/{ident}/attempts')
+def answer_history(ident: int, before: int | None = None):
+    from services.progress import attempt_history
+    flow.exam(ident)
+    return attempt_history(flow.local_user_id(),ident,before=before)
+
+@router.get('/exams/{ident}/questions/{question_id}/sources')
+def question_sources(ident: int, question_id: int):
+    flow.exam(ident)
+    question=training.get_question(question_id)
+    if not question or question['subject_id'] != ident:
+        raise HTTPException(404,'Question not found')
+    return list(training.accepted_evidence_map(ident,question.get('evidence_ids',[])).values())

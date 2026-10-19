@@ -15,7 +15,7 @@ import config
 
 LOGGER = logging.getLogger(__name__)
 LEGACY_SUBJECT_ID = 1
-CURRENT_SCHEMA_VERSION = 10
+CURRENT_SCHEMA_VERSION = 11
 
 
 def _connect() -> sqlite3.Connection:
@@ -163,6 +163,19 @@ def init_db(*, seed_admin: bool = True) -> None:
                 updated_at TEXT NOT NULL,
                 UNIQUE(subject_id, relative_path),
                 FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS document_page_notes (
+                document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+                page INTEGER NOT NULL CHECK(page > 0),
+                content TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(document_id, page)
+            );
+
+            CREATE TABLE IF NOT EXISTS question_topic_assignments (
+                question_id INTEGER PRIMARY KEY REFERENCES questions(id) ON DELETE CASCADE,
+                provenance TEXT NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS topics (
@@ -432,6 +445,7 @@ def init_db(*, seed_admin: bool = True) -> None:
         connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (8, ?)", (migration_time,))
         connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (9, ?)", (migration_time,))
         connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (10, ?)", (migration_time,))
+        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (11, ?)", (migration_time,))
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
             raise RuntimeError(f"Database validation failed after migration: {integrity}")
