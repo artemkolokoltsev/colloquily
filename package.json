@@ -1,6 +1,6 @@
 {
   "name": "colloquily",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "license": "Apache-2.0",
   "description": "Local-first, source-grounded oral exam preparation for university students",
@@ -19,7 +19,8 @@
     "test:api": "python -m unittest discover -s backend/tests -v",
     "test:translations": "node scripts/check_translations.mjs",
     "test": "node scripts/check_version.mjs && npm run test:translations && npm run test:frontend",
-    "test:frontend": "node --experimental-strip-types --test tests/frontend/*.test.mjs"
+    "test:frontend": "node --experimental-strip-types --test tests/frontend/*.test.mjs",
+    "test:pdf": "npm run build && node scripts/smoke_pdf_reader.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",
@@ -28,6 +29,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
     "concurrently": "^9.0.0",
+    "playwright": "^1.64.1",
     "prettier": "^3.9.8",
     "typescript": "^5.7.0",
     "vite": "^6.0.0"

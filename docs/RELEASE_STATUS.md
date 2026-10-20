@@ -1,13 +1,13 @@
 # Release status
 
-Current candidate: **0.1.2, unsigned preview**. Publication uses
-`v0.1.2-rc.1` and is gated by real-model learning acceptance plus Windows x64,
-Intel macOS and Apple Silicon macOS native builds on the tagged revision.
+Current candidate: **0.1.3, unsigned PDF-reader hotfix**. Publication uses
+`v0.1.3-rc.1` and is gated by real-model learning acceptance plus Windows x64,
+Intel macOS and Apple Silicon macOS native builds plus the production-CSP Chromium/WebKit PDF regression on the tagged revision.
 
 Local verification: 84 backend/API tests, 65 core regressions and 4 frontend
 tests passed. Translation parity, TypeScript/Vite, Rust checks, the clean frozen
 backend/self-test/lifecycle smoke and unsigned Intel macOS app build passed.
-See [the implementation and migration report](RELEASE_NOTES_0.1.2.md).
+See [the PDF hotfix report](RELEASE_NOTES_0.1.3.md) and [the original implementation and migration report](RELEASE_NOTES_0.1.2.md).
 
 Production signing/notarization and signed updater credentials remain separate
 release gates. Published previews are listed under

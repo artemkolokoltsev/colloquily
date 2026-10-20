@@ -72,12 +72,22 @@ export async function operation<T>(
     throw new Error(job.error || i18n.t("common.operationFailed"));
   return job.result as T;
 }
-export async function sourceBlob(exam: number, filename: string) {
+async function sourceResponse(exam: number, filename: string) {
   const response = await fetch(
     `${base}/api/exams/${exam}/sources/${filename.split("/").map(encodeURIComponent).join("/")}`,
     { headers: token ? { "X-Colloquily-Token": token } : {} },
   );
-  if (!response.ok) throw new Error("Unable to open source");
+  if (!response.ok) throw new Error(i18n.t("ui.pdfError"));
+  return response;
+}
+
+export async function sourceBytes(exam: number, filename: string) {
+  const response = await sourceResponse(exam, filename);
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+export async function sourceBlob(exam: number, filename: string) {
+  const response = await sourceResponse(exam, filename);
   return URL.createObjectURL(await response.blob());
 }
 

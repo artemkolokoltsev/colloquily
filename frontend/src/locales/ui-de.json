@@ -258,7 +258,7 @@
   "findNext": "Weitersuchen",
   "noMatches": "Kein passender Text gefunden.",
   "searchFound": "Treffer auf Seite {{page}}",
-  "pdfError": "Dieses PDF konnte nicht geöffnet werden. Es fehlt möglicherweise oder ist beschädigt. Importiere es erneut.",
+  "pdfError": "Dieses PDF konnte nicht geöffnet werden. Versuche es erneut. Deine Datei und Notizen wurden nicht verändert.",
   "loadingPdf": "PDF wird geöffnet…",
   "pdfPage": "PDF-Seite {{page}}",
   "pageNote": "Deine Notizen · Seite {{page}}",
@@ -299,5 +299,8 @@
   "noLectureSources": "Diese Frage hat keine verknüpften Vorlesungsquellen.",
   "sessionDenominator": "Sitzungsprozent: erreichte Punkte / 5 Punkte je bewerteter oder übersprungener Frage. Der Bewertungsdurchschnitt schließt Überspringen aus. Ausstehende Bewertungen sind vorläufig.",
   "importedDocument": "Importiert",
-  "processingDocument": "Wird verarbeitet…"
+  "processingDocument": "Wird verarbeitet…",
+  "noteLoadError": "Deine Notizen konnten nicht geladen werden. Versuche es erneut. Das PDF kannst du weiterhin lesen.",
+  "retryPdf": "PDF erneut öffnen",
+  "retryNotes": "Notizen erneut laden"
 }

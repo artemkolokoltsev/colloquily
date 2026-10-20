@@ -18,6 +18,9 @@ concurrency:
   group: desktop-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  pdf-reader:
+    uses: ./.github/workflows/pdf-reader.yml
+
   learning-acceptance:
     if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-rc.')
     uses: ./.github/workflows/learning-quality.yml
@@ -72,7 +75,7 @@ jobs:
 
   publish-preview:
     if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-rc.')
-    needs: [desktop, learning-acceptance]
+    needs: [desktop, learning-acceptance, pdf-reader]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -5,7 +5,11 @@ on:
 permissions:
   contents: write
 jobs:
+  pdf-reader:
+    uses: ./.github/workflows/pdf-reader.yml
+
   release:
+    needs: pdf-reader
     strategy:
       fail-fast: true
       matrix:

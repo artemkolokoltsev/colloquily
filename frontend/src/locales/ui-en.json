@@ -258,7 +258,7 @@
   "findNext": "Find next",
   "noMatches": "No matching text found.",
   "searchFound": "Match on page {{page}}",
-  "pdfError": "This PDF could not be opened. It may be missing or damaged. Try reimporting it.",
+  "pdfError": "We couldn’t open this PDF. Try opening it again. Your file and notes have not been changed.",
   "loadingPdf": "Opening PDF…",
   "pdfPage": "PDF page {{page}}",
   "pageNote": "Your notes · page {{page}}",
@@ -299,5 +299,8 @@
   "noLectureSources": "This question has no linked lecture sources.",
   "sessionDenominator": "Session percentage: earned points / 5 points per evaluated or skipped question. The evaluated-answer average excludes skips. Pending evaluations are provisional.",
   "importedDocument": "Imported",
-  "processingDocument": "Processing…"
+  "processingDocument": "Processing…",
+  "noteLoadError": "Your notes could not be loaded. Retry to view them. The PDF can still be read.",
+  "retryPdf": "Retry opening PDF",
+  "retryNotes": "Retry notes"
 }

@@ -6,7 +6,7 @@ import {
   type PDFDocumentProxy,
 } from "pdfjs-dist/legacy/build/pdf.mjs";
 import worker from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
-import { api, sourceBlob } from "../api/client";
+import { api, sourceBytes } from "../api/client";
 import { ErrorNotice } from "./Common";
 GlobalWorkerOptions.workerSrc = worker;
 interface Note {
@@ -34,7 +34,10 @@ export function PdfReader({
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [pdfError, setPdfError] = useState("");
+  const [noteError, setNoteError] = useState("");
+  const [pdfRetry, setPdfRetry] = useState(0);
+  const [noteRetry, setNoteRetry] = useState(0);
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchStatus, setSearchStatus] = useState("");
@@ -82,12 +85,12 @@ export function PdfReader({
   async function commit() {
     pending.current += 1;
     setSaving(true);
-    setError("");
+    setNoteError("");
     try {
       await flush();
       return true;
     } catch {
-      setError(t("ui.noteSaveError"));
+      setNoteError(t("ui.noteSaveError"));
       return false;
     } finally {
       pending.current -= 1;
@@ -95,63 +98,74 @@ export function PdfReader({
     }
   }
   useEffect(() => {
-    mounted.current = true;
     let active = true;
-    let url = "";
     let task: ReturnType<typeof getDocument> | undefined;
-    void Promise.all([
-      sourceBlob(exam, document.relative_path).then(async (value) => {
-        url = value;
-        if (!active) {
-          URL.revokeObjectURL(url);
-          return;
-        }
+    setPdf(undefined);
+    setPdfError("");
+    // The launch-token-protected backend is the only PDF transport. Giving
+    // PDF.js bytes avoids a second fetch of a blob URL (blocked by desktop CSP).
+    void sourceBytes(exam, document.relative_path)
+      .then(async (data) => {
+        if (!active) return;
         task = getDocument({
-          url,
-          cMapUrl: "/pdfjs/cmaps/",
+          data,
+          cMapUrl: new URL("/pdfjs/cmaps/", window.location.href).href,
           cMapPacked: true,
-          standardFontDataUrl: "/pdfjs/standard_fonts/",
-          wasmUrl: "/pdfjs/wasm/",
+          standardFontDataUrl: new URL(
+            "/pdfjs/standard_fonts/",
+            window.location.href,
+          ).href,
+          wasmUrl: new URL("/pdfjs/wasm/", window.location.href).href,
         });
         const doc = await task.promise;
         if (active) {
           setPdf(doc);
           setPage((p) => Math.min(p, doc.numPages));
         }
-      }),
-      api<Note[]>(`/exams/${exam}/documents/${document.id}/notes`).then(
-        (rows) => {
-          if (active) {
-            let drafts: Record<string, string> = {};
-            try {
-              drafts = JSON.parse(localStorage.getItem(draftKey) || "{}");
-            } catch {
-              /* Ignore malformed local recovery cache. */
-            }
-            setNotes({
-              ...Object.fromEntries(rows.map((n) => [n.page, n.content])),
-              ...drafts,
-            });
-            setLoaded(true);
-            for (const [number, content] of Object.entries(drafts)) {
-              dirty.current.set(Number(number), content);
-              latest.current.set(Number(number), content);
-            }
-            if (dirty.current.size) void commit();
-          }
-        },
-      ),
-    ]).catch(() => {
-      if (active) setError(t("ui.pdfError"));
-    });
+      })
+      .catch(() => {
+        if (active) setPdfError(t("ui.pdfError"));
+      });
+    return () => {
+      active = false;
+      void task?.destroy();
+    };
+  }, [exam, document.id, document.relative_path, pdfRetry]);
+
+  useEffect(() => {
+    mounted.current = true;
+    let active = true;
+    setLoaded(false);
+    setNoteError("");
+    void api<Note[]>(`/exams/${exam}/documents/${document.id}/notes`)
+      .then((rows) => {
+        if (!active) return;
+        let drafts: Record<string, string> = {};
+        try {
+          drafts = JSON.parse(localStorage.getItem(draftKey) || "{}");
+        } catch {
+          /* Ignore malformed local recovery cache. */
+        }
+        setNotes({
+          ...Object.fromEntries(rows.map((n) => [n.page, n.content])),
+          ...drafts,
+        });
+        setLoaded(true);
+        for (const [number, content] of Object.entries(drafts)) {
+          dirty.current.set(Number(number), content);
+          latest.current.set(Number(number), content);
+        }
+        if (dirty.current.size) void commit();
+      })
+      .catch(() => {
+        if (active) setNoteError(t("ui.noteLoadError"));
+      });
     return () => {
       active = false;
       mounted.current = false;
       void flush().catch(() => undefined);
-      void task?.destroy();
-      if (url) URL.revokeObjectURL(url);
     };
-  }, [exam, document.id]);
+  }, [exam, document.id, noteRetry]);
   useEffect(() => {
     const element = viewport.current;
     if (!element) return;
@@ -181,7 +195,7 @@ export function PdfReader({
       })
       .catch((e) => {
         if (active && e?.name !== "RenderingCancelledException")
-          setError(t("ui.pdfError"));
+          setPdfError(t("ui.pdfError"));
       });
     localStorage.setItem(key, String(page));
     return () => {
@@ -214,7 +228,7 @@ export function PdfReader({
       }
       setSearchStatus(t("ui.noMatches"));
     } catch {
-      setError(t("ui.pdfError"));
+      setPdfError(t("ui.pdfError"));
     } finally {
       setSearching(false);
     }
@@ -231,9 +245,11 @@ export function PdfReader({
           {t("common.closeSource")}
         </button>
       </div>
-      <ErrorNotice error={error} />
-      {error && loaded && (
-        <button onClick={() => void commit()}>{t("startup.retry")}</button>
+      <ErrorNotice error={pdfError} />
+      {pdfError && (
+        <button onClick={() => setPdfRetry((value) => value + 1)}>
+          {t("ui.retryPdf")}
+        </button>
       )}
       <div className="toolbar">
         <button
@@ -298,12 +314,22 @@ export function PdfReader({
         <button disabled={!pdf || searching}>{t("ui.findNext")}</button>
         <span role="status">{searchStatus}</span>
       </form>
-      {!pdf && !error && <p role="status">{t("ui.loadingPdf")}</p>}
+      {!pdf && !pdfError && <p role="status">{t("ui.loadingPdf")}</p>}
       <div className="reader-layout">
         <div className="pdf-canvas" ref={viewport}>
           <canvas ref={canvas} aria-label={t("ui.pdfPage", { page })} />
         </div>
         <div className="page-notes">
+          <ErrorNotice error={noteError} />
+          {noteError && (
+            <button
+              onClick={() =>
+                loaded ? void commit() : setNoteRetry((value) => value + 1)
+              }
+            >
+              {t("ui.retryNotes")}
+            </button>
+          )}
           <label>
             {t("ui.pageNote", { page })}
             <textarea
@@ -323,7 +349,7 @@ export function PdfReader({
                   drafts[page] = content;
                   localStorage.setItem(draftKey, JSON.stringify(drafts));
                 } catch {
-                  setError(t("ui.noteSaveError"));
+                  setNoteError(t("ui.noteSaveError"));
                 }
                 clearTimeout(timer.current);
                 timer.current = setTimeout(() => void commit(), 600);
