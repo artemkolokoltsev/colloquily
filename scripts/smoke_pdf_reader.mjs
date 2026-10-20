@@ -197,6 +197,41 @@ try {
         page.getByRole("button", { name: "Close source", exact: true }).click();
       await open();
       await rendered();
+      for (const width of [390, 750, 850, 1280, 1920, 2560, 3440]) {
+        await page.setViewportSize({ width, height: 1000 });
+        const layout = await page.evaluate(() => {
+          const main = document.querySelector(".shell > main");
+          const rect = main.getBoundingClientRect();
+          const sidebar = document
+            .querySelector(".shell > aside")
+            .getBoundingClientRect();
+          const section = main.querySelector("section").getBoundingClientRect();
+          const style = getComputedStyle(main);
+          return {
+            overflow: document.documentElement.scrollWidth - innerWidth,
+            leftGap: rect.left - (innerWidth > 750 ? sidebar.right : 0),
+            rightGap: innerWidth - rect.right,
+            sectionWidth: section.width,
+            contentWidth:
+              rect.width -
+              parseFloat(style.paddingLeft) -
+              parseFloat(style.paddingRight),
+          };
+        });
+        assert.ok(
+          layout.overflow <= 1,
+          `${name}: horizontal overflow at ${width}px: ${JSON.stringify(layout)}`,
+        );
+        assert.ok(
+          Math.abs(layout.leftGap - layout.rightGap) <= 1,
+          `${name}: workspace is not centered at ${width}px`,
+        );
+        assert.ok(
+          Math.abs(layout.sectionWidth - layout.contentWidth) <= 1,
+          `${name}: page does not fill workspace at ${width}px`,
+        );
+      }
+      await page.setViewportSize({ width: 1280, height: 1000 });
       assert.equal(await page.getByRole("alert").count(), 0);
       await page.locator(".page-notes textarea:not(:disabled)").waitFor();
       assert.equal(

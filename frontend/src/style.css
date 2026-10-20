@@ -977,7 +977,12 @@ select:focus-visible {
 }
 main {
   max-width: 1400px;
+  margin-inline: auto;
   padding: 2rem clamp(1.5rem, 4vw, 4rem);
+}
+.shell > main section {
+  max-width: 100%;
+  min-width: 0;
 }
 h2 {
   font-size: 1.9rem;
@@ -1126,6 +1131,11 @@ article > span,
   }
   .dashboard-columns {
     grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 750px) {
+  .shell > main {
+    padding: 1.5rem clamp(1rem, 4vw, 1.5rem);
   }
 }
 /* Shared desktop surfaces and reader layout. */

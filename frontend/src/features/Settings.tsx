@@ -20,7 +20,7 @@ export function Settings({ exam }: { exam: number }) {
   }>();
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [version, setVersion] = useState("0.1.3");
+  const [version, setVersion] = useState("0.1.4");
   const [updateVersion, setUpdateVersion] = useState("");
   const [updateProgress, setUpdateProgress] = useState<number | null>();
   const [backupFile, setBackupFile] = useState<File>();
