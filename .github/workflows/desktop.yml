@@ -1,4 +1,4 @@
-name: Build desktop artifacts (manual, unsigned)
+name: Build desktop previews (signed updates)
 on:
   workflow_dispatch:
   push:
@@ -51,6 +51,15 @@ jobs:
           node-version: '22'
           cache: npm
       - uses: dtolnay/rust-toolchain@1.90.0
+      - name: Require updater signing for published previews
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+        run: |
+          test -n "$TAURI_SIGNING_PRIVATE_KEY"
+          node scripts/configure_release_key.mjs "$UPDATER_PUBLIC_KEY"
       - run: python -m pip install -r backend/requirements.txt
       - run: npm ci
       - run: npm test
@@ -60,7 +69,15 @@ jobs:
       - run: npm run build:sidecar
       - run: python scripts/smoke_sidecar.py
       - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
-      - run: npm run tauri -- build --config src-tauri/tauri.unsigned.conf.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: Build updater-signed preview
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run tauri -- build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: Build local unsigned artifact
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: npm run tauri -- build --config src-tauri/tauri.unsigned.conf.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
       - run: python scripts/checksums.py src-tauri/target/${{ matrix.target }}/release/bundle ${{ matrix.target }}
       - uses: actions/upload-artifact@v7
         with:
@@ -77,6 +94,9 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-rc.')
     needs: [desktop, learning-acceptance, pdf-reader]
     runs-on: ubuntu-latest
+    concurrency:
+      group: colloquily-download-channel
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -89,7 +109,7 @@ jobs:
         with:
           pattern: licenses-*
           path: release-assets/licenses
-      - name: Publish unsigned release candidate with license bundles
+      - name: Publish preview with signed updates and permanent downloads
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/publish_preview.py

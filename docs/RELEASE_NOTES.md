@@ -1,46 +1,38 @@
-# Colloquily 0.1.5 — Guided setup and explained practice
+# Colloquily 0.1.6 — Focused practice and reliable updates
 
-This preview makes it easier to move from a new exam and lecture PDFs to a
-practice session, and explains what each practice mode is designed to train.
+Choose a visual practice card, explore what it trains, then start from a focused
+setup dialog. The session shows the question and your answer with minimal
+controls; feedback has its own view before you continue.
 
-## What changed
+- Eight illustrated mode cards retain learning-theory explanations and research
+  references. Session options live inside the mode dialog.
+- Previous runs are removed from Practice. An unfinished current session can
+  resume; completed progress remains available from Home.
+- The duplicate setup navigation is removed. Materials handles PDF preparation,
+  the sidebar handles navigation, and the app name/version stays at bottom right.
+- The tagline is now “Exam workspace” (localized in German).
+- Software updates check on launch, every six hours and after reconnection, with
+  visible status, progress, a manual install action and an automatic-update toggle.
+- Downloads are verified before workspace backup and installation. Automatic
+  restart waits for an idle Home screen, offers a 30-second countdown and Later,
+  and is blocked during practice, processing or unsaved Home edits. Interaction
+  resets the countdown. Install/restart failures release the workspace lock.
+- Permanent website download links track new releases without website edits.
+  The signed update feed uses immutable versioned payloads for all three platforms.
 
-- A visible setup path connects exam topic, PDF upload, local AI setup and
-  practice. Exams without prepared questions reopen on Materials, and the
-  preparation panel is visible by default.
-- Eight practice-mode cards show their learning focus. Each mode has a guide
-  with a learning goal, concrete practice instructions, timing and feedback
-  details. The guide is available before and during a run in English and German.
-- Expandable research notes cite studies on retrieval practice, self-explanation,
-  formative feedback, distributed practice and interleaving. The explanations
-  distinguish evidence for learning principles from rehearsal of an exam format.
-- The local model library offers Qwen 2.5 1.5B, Qwen 3 4B/8B and Gemma 3 4B,
-  plus suitable installed models. Download multiple candidates and select an
-  installed feedback model per exam; other task and embedding settings are kept.
-- Study answers, detailed questions, feedback and source passages render
-  Markdown, tables and LaTeX math locally. PDF notes have a rendered preview
-  and Markdown export; processed study passages can also be exported with
-  their source locations and review labels.
-- Multi-subject selection now reflects the session requirements: two or three
-  exams for Multiple subjects, exactly three for Full colloquium.
-- Browser regression checks cover formula rendering and exports, first-run
-  creation, mode guides, research-link handling, language switching and model
-  selection under the desktop security policy.
+## Installation and release status
 
-No database migration is needed. Existing documents, notes and practice history
-remain in the workspace. Automatic equation OCR is not included: check and
-correct uncertain extracted formulas against the original PDF. Model choices
-are comparison candidates, not benchmarked quality rankings. Speech is not
-assessed; practice evaluation uses submitted text.
+**Users of 0.1.5 and earlier must install this version manually once.** Those
+builds contain a placeholder updater key. After this bootstrap, subsequent
+higher-version releases can install through the corrected updater.
 
-## Downloads
+This is an OS-unsigned preview, with signed updater artifacts. Apple notarization
+and Windows Authenticode remain separate from updater verification. macOS 14+
+(Apple Silicon or Intel) and Windows x64 installers are built by CI. Internet is
+needed for update checks/downloads; exams, PDFs and answers remain local.
 
-- Apple Silicon macOS 14+: `Colloquily_0.1.5_aarch64.dmg`
-- Intel macOS 14+: `Colloquily_0.1.5_x64.dmg`
-- Windows x64: `Colloquily_0.1.5_x64-setup.exe`
-- Matching license archives, `LICENSE`, `NOTICE` and `SHA256SUMS.txt`
+Automatic updates can include previews. Disable the option under Software
+updates for manual checking. Backups precede installation, but keep your own
+independent copies of important material. Local AI still requires Ollama.
 
-This is an unsigned preview. Install the update manually; signed automatic
-updates are unavailable. Publication requires all three native builds,
-real-model learning acceptance and the production Chromium/WebKit regression
-on the tagged revision. Local AI model weights remain separate downloads.
+Website integration and permanent URLs: [DOWNLOADS.md](DOWNLOADS.md).

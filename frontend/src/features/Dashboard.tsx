@@ -55,7 +55,12 @@ export function Dashboard({
   }
   const p = data?.plan;
   return (
-    <section className="dashboard">
+    <section
+      className="dashboard"
+      data-update-blocked={
+        !data || busy || JSON.stringify(goal) !== JSON.stringify(data.goal)
+      }
+    >
       <div className="page-heading">
         <div>
           <p className="eyebrow">{t("nav.dashboard")}</p>

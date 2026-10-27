@@ -1,7 +1,10 @@
 import fs from "node:fs";
-const publicKey = process.argv[2];
-if (!publicKey || publicKey.includes("PRIVATE")) throw new Error("A public updater key is required");
+const publicKey = process.argv[2]?.trim();
+if (!publicKey) throw new Error("A public updater key is required");
+const decoded = Buffer.from(publicKey, 'base64').toString('utf8');
+const lines = decoded.trim().split(/\r?\n/);
+if (!lines[0]?.startsWith('untrusted comment: minisign public key:') || lines.length !== 2 || Buffer.from(lines[1], 'base64').length !== 42) throw new Error('Invalid updater public key');
 const path = new URL("../src-tauri/tauri.conf.json", import.meta.url);
 const config = JSON.parse(fs.readFileSync(path, "utf8"));
-config.plugins.updater.pubkey = publicKey;
-fs.writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);
+if (config.plugins.updater.pubkey !== publicKey) throw new Error('Release key differs from the committed updater key. Do not rotate it: installed apps trust the existing key.');
+console.log('Release public key matches the installed-app trust key.');

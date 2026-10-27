@@ -96,6 +96,9 @@ try {
         ),
         embedding_config: { model: "embeddinggemma:latest" },
       };
+      let practiceReady = false;
+      let practiceSession = {id: 901, subject_id: 1, status: 'created', remaining_seconds: 60, countdown_visible: true, sources: [], current_question: {id: 77, question_text: 'Explain why $E=mc^2$ relates mass and energy.'}};
+      let practiceRun = {id: 900, status: 'running', mode: 'random_practice', sessions: [practiceSession]};
       const notes = { 1: "Saved first-page note" };
       await page.route("**/api/**", async (route) => {
         const request = route.request();
@@ -130,7 +133,21 @@ try {
           }
           return json(modelSettings);
         }
-        if (path === "/practice") return json([]);
+        if (path === '/practice') {
+          if (request.method() === 'GET') return json([]);
+          practiceRun.mode = request.postDataJSON().mode;
+          return json(practiceRun);
+        }
+        if (path === '/sessions/901/begin') { practiceSession.status = 'answering'; return json(practiceSession); }
+        if (path === '/sessions/901') return json(practiceSession);
+        if (path === '/practice/900') return json(practiceRun);
+        if (path === '/practice/900/finish') { practiceSession.status = 'completed'; return json({}); }
+        if (path === '/sessions/901/answer') {
+          assert.match(request.postDataJSON().answer, /energy/);
+          practiceSession.status = 'completed';
+          practiceRun.status = 'completed';
+          return json({id: 'practice-answer-job', status: 'completed', result: {session: practiceSession, evaluation: {status:'evaluated', score:1, correct:[{text:'Mass and energy are related.'}], missing:[], incorrect:[], sources:[]}}});
+        }
         if (path === "/exams" && request.method() === "POST") {
           assert.equal(request.postDataJSON().name, "Quantum physics");
           emptyWorkspace = false;
@@ -175,7 +192,7 @@ try {
             average_score: null,
           });
         if (path.endsWith("/preparation"))
-          return json({ job: null, questions: 0 });
+          return json({ job: null, questions: practiceReady ? 3 : 0 });
         if (path === "/exams/1/documents")
           return json({
             raw: ["Lecture & Übung.pdf"],
@@ -386,7 +403,8 @@ $$
         [],
       );
       await close();
-      await page.getByRole("button", { name: /4.*Start practice/ }).click();
+      practiceReady = true;
+      await page.getByRole("navigation", { name: "Your learning" }).getByRole("button", { name: "Practice", exact: true }).click();
       await page.locator(".mode-card").first().waitFor();
       assert.equal(await page.locator(".mode-card").count(), 8);
       await page.screenshot({
@@ -428,6 +446,7 @@ $$
         "Full colloquium",
       ];
       for (const title of modeNames) {
+        await page.getByRole("button", { name: "Close mode setup" }).click();
         await page
           .locator(".mode-card")
           .filter({
@@ -446,6 +465,7 @@ $$
           "Exactly three exams with 15 minutes per subject",
         ),
       );
+      await page.getByRole("button", { name: "Close mode setup" }).click();
       await page
         .locator(".mode-card")
         .filter({ hasText: "Random practice" })
@@ -468,16 +488,38 @@ $$
         ),
       );
       await page.setViewportSize({ width: 1280, height: 1000 });
+      assert.equal(await page.getByText('Previous runs', {exact:true}).count(), 0);
+      await page.getByRole('button', {name:'Start practising', exact:true}).click();
+      await page.locator('.session-question .katex').first().waitFor();
+      assert.equal(await page.locator('aside').isVisible(), false);
+      assert.equal(await page.locator('.window-toolbar').isVisible(), false);
+      assert.equal(await page.getByRole('textbox', {name:'Your oral answer'}).count(), 1);
+      await page.getByRole('textbox', {name:'Your oral answer'}).fill('Mass is a form of energy.');
+      await page.screenshot({path:`output/playwright/practice-ambient-${name}.png`, fullPage:true});
+      await page.emulateMedia({colorScheme:'dark'});
+      await page.screenshot({path:`output/playwright/practice-ambient-dark-${name}.png`, fullPage:true});
+      await page.emulateMedia({colorScheme:'light'});
+      await page.getByRole('button', {name:'Submit answer', exact:true}).click();
+      await page.getByRole('heading', {name:'A moment to reflect', exact:true}).waitFor();
+      assert.equal(await page.locator('.session-question').count(), 0);
+      await page.getByRole('button', {name:'Continue', exact:true}).click();
+      await page.getByRole('heading', {name:'Session complete', exact:true}).waitFor();
+      await page.getByRole('button', {name:'Back to practice modes', exact:true}).click();
+      await page.locator('aside').waitFor({state:'visible'});
+      assert.equal(await page.locator('aside').isVisible(), true);
+      assert.equal(await page.locator('.mode-card').count(), 8);
       language = "de";
       await page.reload();
-      await page.getByRole("button", { name: /4.*Übung starten/ }).click();
+      await page.getByRole("navigation", { name: "Your learning" }).getByRole("button", { name: "Üben", exact: true }).click();
+      await page.locator(".mode-card").filter({ hasText: "Zufällige Übung" }).click();
       await guide
         .getByRole("heading", { name: "Zufällige Übung", exact: true })
         .waitFor();
       assert.ok((await guide.innerText()).includes("So übst du"));
       language = "en";
       await page.reload();
-      await page.getByRole("button", { name: /3.*Choose local AI/ }).click();
+      await page.locator(".advanced-nav > summary").click();
+      await page.getByRole("navigation", { name: "Advanced tools" }).getByRole("button", { name: "AI setup", exact: true }).click();
       await page.locator(".model-library article").first().waitFor();
       await page
         .locator(".model-library article")
@@ -507,10 +549,9 @@ $$
       await page
         .getByRole("button", { name: "Open PDF", exact: true })
         .waitFor();
-      assert.equal(
-        await page.locator('.setup-steps [aria-current="step"]').innerText(),
-        "2\nUpload PDFs",
-      );
+      assert.equal(await page.locator('.setup-steps').count(), 0);
+      assert.equal(await page.getByRole('navigation', {name: 'Your learning'}).getByRole('button', {name:'Materials', exact:true}).getAttribute('aria-current'), 'page');
+      assert.equal(await page.locator('.app-stamp').innerText(), 'Colloquily v0.1.6');
       assert.deepEqual(crashes, []);
       console.log(
         `${name}: production-CSP render, authenticated Unicode filename, navigation, notes, reopen, PDF retry and isolated notes retry passed`,

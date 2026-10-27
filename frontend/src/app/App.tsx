@@ -1,3 +1,4 @@
+import appPackage from "../../../package.json";
 import { useEffect, useState } from "react";
 import { api, connect } from "../api/client";
 import type { Exam } from "../types";
@@ -13,7 +14,7 @@ import { Study, StudyPlan } from "../features/Study";
 import { Settings } from "../features/Settings";
 import { Dashboard } from "../features/Dashboard";
 import { useTranslation } from "react-i18next";
-import { checkForUpdate } from "../update";
+import { UpdateNotice } from "../components/UpdateNotice";
 import { ExamPicker } from "../components/ExamPicker";
 import { operation } from "../api/client";
 import { Progress } from "../components/Common";
@@ -34,7 +35,7 @@ const pageLabels = {
   Study: "nav.ask",
   "Advanced settings": "nav.settings",
 } as const;
-const advancedPages = ["Reported questions", "Study plan", "Local AI"];
+const advancedPages = ["Questions", "Reported questions", "Study plan", "Local AI"];
 export default function App() {
   const { t, i18n } = useTranslation();
   const [welcomed, setWelcomed] = useState(
@@ -150,8 +151,6 @@ export default function App() {
         else if (!prep.questions) setPage("Materials");
       }
       setReady(true);
-      // Update checks are best-effort and never block local study.
-      void checkForUpdate().catch(() => undefined);
     } catch (e) {
       setError(String(e));
     }
@@ -215,7 +214,6 @@ export default function App() {
             <button
               className={
                 p === page ||
-                (p === "Practice" && page === "Questions") ||
                 (p === "Dashboard" && page === "Progress")
                   ? "active"
                   : ""
@@ -223,12 +221,11 @@ export default function App() {
               key={p}
               aria-current={
                 p === page ||
-                (p === "Practice" && page === "Questions") ||
                 (p === "Dashboard" && page === "Progress")
                   ? "page"
                   : undefined
               }
-              disabled={!selected}
+              disabled={!selected && p !== "Advanced settings"}
               onClick={() => navigate(p)}
             >
               {t(pageLabels[p])}
@@ -245,7 +242,9 @@ export default function App() {
                 disabled={!selected}
                 onClick={() => navigate(p)}
               >
-                {p === "Local AI"
+                {p === "Questions"
+                  ? t("ui.manageQuestions")
+                  : p === "Local AI"
                   ? t("nav.ai")
                   : p === "Reported questions"
                     ? t("nav.reported")
@@ -259,6 +258,9 @@ export default function App() {
         <small>{t("app.localPromise")}</small>
       </aside>
       <main>
+        <UpdateNotice
+          home={page === "Dashboard" && !!selected && !aiSetup && !busy}
+        />
         <header className="window-toolbar">
           <strong>
             {exams.find((exam) => exam.id === selected)?.name || "Colloquily"}
@@ -266,27 +268,6 @@ export default function App() {
           <span>{t("app.localPromise")}</span>
         </header>
         <ErrorNotice error={error} />
-        {["Exams", "Materials", "Local AI", "Practice"].includes(page) && (
-          <ol className="setup-steps" aria-label={t("ui.setupSteps")}>
-            {[
-              ["Exams", "topicStep"],
-              ["Materials", "pdfStep"],
-              ["Local AI", "aiStep"],
-              ["Practice", "practiceStep"],
-            ].map(([target, label], index) => (
-              <li key={target}>
-                <button
-                  disabled={!selected && index > 0}
-                  aria-current={page === target ? "step" : undefined}
-                  onClick={() => navigate(target)}
-                >
-                  <span>{index + 1}</span>
-                  {t(`ui.${label}` as "ui.topicStep")}
-                </button>
-              </li>
-            ))}
-          </ol>
-        )}
         {aiJob && ["queued", "running"].includes(aiJob.status) && (
           <div className="setup-notice" role="status">
             {t("ui.redesignPreparingAI")}
@@ -322,7 +303,7 @@ export default function App() {
             <p>{t("release.privacy")}</p>
           </section>
         )}
-        {aiSetup && page !== "Local AI" && (
+        {aiSetup && page === "Dashboard" && (
           <div className="setup-notice">
             {t("setup.notice")}{" "}
             <button onClick={() => navigate("Local AI")}>
@@ -427,22 +408,6 @@ export default function App() {
             )}{" "}
             {page === "Reported questions" && <Reported exam={selected} />}{" "}
             {page === "Study" && <Study exam={selected} />}{" "}
-            {(page === "Practice" || page === "Questions") && (
-              <div className="toolbar">
-                <button
-                  aria-pressed={page === "Practice"}
-                  onClick={() => navigate("Practice")}
-                >
-                  {t("nav.practice")}
-                </button>
-                <button
-                  aria-pressed={page === "Questions"}
-                  onClick={() => navigate("Questions")}
-                >
-                  {t("ui.manageQuestions")}
-                </button>
-              </div>
-            )}
             {page === "Practice" && (
               <Practice
                 exams={exams}
@@ -463,6 +428,12 @@ export default function App() {
           </div>
         )}
       </main>
+      <footer
+        className="app-stamp"
+        aria-label={`Colloquily ${appPackage.version}`}
+      >
+        Colloquily <span>v{appPackage.version}</span>
+      </footer>
     </div>
   );
 }

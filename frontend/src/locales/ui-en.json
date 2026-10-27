@@ -329,5 +329,17 @@
   "modelAlternative": "Alternative model family for comparing feedback.",
   "exportStudyText": "Export study text (.md)",
   "noStudyText": "Study text is not available yet. Process this document first.",
-  "prepareBeforePractice": "Prepare your questions in Upload PDFs before starting practice. You can still open previous sessions below."
+  "prepareBeforePractice": "Prepare your questions in Upload PDFs before starting practice. You can still open previous sessions below.",
+  "practiceChoose": "How would you like to practise?",
+  "practiceIntro": "Choose a mode to explore what it trains and start your session.",
+  "practiceExplore": "Explore mode",
+  "practiceClose": "Close mode setup",
+  "practiceExit": "End session",
+  "practiceReflection": "A moment to reflect",
+  "practiceContinue": "Continue",
+  "practiceSources": "Reference material",
+  "practiceNextSubject": "Next subject",
+  "practiceComplete": "Session complete",
+  "practiceBack": "Back to practice modes",
+  "practiceReview": "Review this session"
 }

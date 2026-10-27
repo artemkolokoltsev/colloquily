@@ -1420,3 +1420,52 @@ h3 {
     gap: 1rem;
   }
 }
+
+.update-notice { border: 1px solid var(--border, #d5ddd8); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; background: var(--surface, #fff); }
+.update-notice summary { cursor: pointer; font-weight: 600; }
+.update-notice label { display: flex; gap: 8px; align-items: center; }
+.update-notice input[type=checkbox] { width: auto; }
+.update-notice .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.update-notice .prose { max-height: 240px; overflow: auto; white-space: pre-wrap; }
+
+/* One navigation hierarchy; focused practice lives in a quiet single view. */
+.app-stamp { position: fixed; right: 16px; bottom: 0; z-index: 40; padding: 7px 12px; border: 1px solid var(--separator); border-bottom: 0; border-radius: 10px 10px 0 0; background: var(--surface); color: var(--secondary); font-size: 11px; pointer-events: none; }
+.app-stamp span { margin-left: 8px; opacity: .75; font-variant-numeric: tabular-nums; }
+.shell > main { padding-bottom: 52px; }
+.practice-picker > h2 { font-size: clamp(24px, 3vw, 36px); letter-spacing: -.035em; }
+.practice-modes { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-top: 28px; }
+.mode-card { display: flex; flex-direction: column; align-items: flex-start; min-height: 260px; padding: 20px; text-align: left; border-radius: 18px; transition: transform .15s ease, border-color .15s ease; }
+.mode-card:hover { transform: translateY(-3px); }
+.mode-card:focus-visible { outline: 3px solid var(--accent, #3975ed); outline-offset: 3px; }
+.mode-visual { width: 120px; height: 90px; color: var(--accent, #427c97); flex-shrink: 0; margin-bottom: 14px; }
+.mode-visual-weak_topic, .mode-visual-rapid_practice { color: #b9803c; }
+.mode-visual-oral_exam_simulation, .mode-visual-full_colloquium { color: #8f7db4; }
+.mode-visual-random_practice, .mode-visual-multi_subject { color: #4d9991; }
+.mode-card .mode-focus { margin-bottom: 20px; }
+.mode-card .mode-open { margin-top: auto; font-size: 12px; font-weight: 600; width: 100%; display: flex; justify-content: space-between; }
+.practice-dialog { width: min(720px, calc(100vw - 32px)); max-height: calc(100dvh - 64px); padding: 28px; border: 1px solid var(--separator); border-radius: 22px; background: var(--surface); color: var(--ink); box-shadow: 0 24px 100px #0003; }
+.practice-dialog::backdrop { background: #101a25a6; backdrop-filter: blur(5px); }
+.dialog-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.dialog-toolbar h2 { margin: 0; }
+.dialog-toolbar button { font-size: 24px; padding: 4px 12px; }
+.practice-dialog > .mode-visual { display: block; margin: 16px auto; }
+.practice-dialog .practice-guide { margin: 0 0 20px; box-shadow: none; background: transparent; border: 0; padding: 0; }
+.practice-dialog .practice-guide-grid { grid-template-columns: 1fr; }
+.practice-dialog > .primary { width: 100%; margin-top: 24px; }
+body.practice-focus .shell { display: block; }
+body.practice-focus .shell > aside, body.practice-focus .shell > main > :not(:has(.practice-session)) { display: none; }
+body.practice-focus .shell > main { margin: 0; max-width: none; width: 100%; padding: 24px clamp(20px, 5vw, 80px) 70px; }
+.session-toolbar { display: flex; align-items: center; gap: 16px; color: var(--secondary); font-size: 13px; }
+.session-toolbar > button { margin-left: auto; }
+.session-clock { font-variant-numeric: tabular-nums; }
+.session-stage { max-width: 760px; margin: clamp(30px, 8vh, 100px) auto 0; }
+.session-question { font-size: clamp(21px, 2.4vw, 30px); line-height: 1.55; margin: 24px 0 32px; }
+.session-question .study-text { font-size: inherit; }
+.session-stage textarea { min-height: 220px; resize: vertical; border-radius: 16px; padding: 20px; line-height: 1.7; font-size: 17px; width: 100%; }
+.answer-label { display: block; font-size: 12px; color: var(--secondary); margin-bottom: 8px; }
+.session-actions { display: flex; gap: 12px; margin: 18px 0; }
+.session-reference { margin-top: 32px; font-size: 13px; color: var(--secondary); }
+.session-summary > button { margin: 10px 10px 24px 0; }
+@media (max-width: 1200px) { .practice-modes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .practice-modes { grid-template-columns: 1fr; } .practice-dialog { padding: 18px; } .session-toolbar { flex-wrap: wrap; } }
+@media (prefers-reduced-motion: reduce) { .mode-card { transition: none; } .mode-card:hover { transform: none; } }

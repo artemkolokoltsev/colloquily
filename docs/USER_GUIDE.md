@@ -63,9 +63,13 @@ Do not restore an archive from an untrusted source.
 
 ## Updates and troubleshooting
 
-This unsigned preview must be updated manually. Signed automatic updates are
-not enabled for the release candidate; never install an unknown updater file.
-Installing a new app version does not intentionally overwrite your workspace.
+Install 0.1.6 manually once if you have 0.1.5 or earlier. Starting with 0.1.6,
+Software updates checks for and downloads signed updates automatically. It waits
+for two idle minutes on Home, gives a 30-second countdown, and backs up before
+installing and restarting. Practice, background work and unsaved Home edits block
+automatic restart. Choose Later or disable automatic updates to keep control;
+manual checks/install remain available. Offline checks retry after 15 minutes.
+See [permanent download links](DOWNLOADS.md).
 
 - **AI unavailable:** start Ollama, check AI setup, and confirm the required models are downloaded.
 - **Processing interrupted:** reopen the app, inspect material status and retry the failed operation. Original sources remain local.
@@ -84,9 +88,9 @@ private lecture material, databases, model history or secrets.
 
 ## First-run setup and practice choices
 
-Follow the numbered path: **Exam topic → Upload PDFs → Choose local AI → Start practice**. The exam name is your main subject (for example, Quantum physics). Each exam has its own materials and progress. An exam without prepared questions reopens on Materials after restarting, so you can continue setup. Upload PDFs or Markdown and keep the practice preparation panel open to follow progress, retry preparation, and start a session.
+Create an exam, add PDFs in **Materials**, then open **Practice** from the sidebar. Materials shows preparation progress and links to **AI setup** when needed. The exam name is your main subject (for example, Quantum physics). Each exam has its own materials and progress. An exam without prepared questions reopens on Materials after restarting, so you can continue setup. Upload PDFs or Markdown and keep the practice preparation panel open to follow progress, retry preparation, and start a session.
 
-Practice now presents all eight modes as visible cards, with a short explanation. Expand session options to adjust time, topic filters, and question count where supported. Multi-subject modes accept up to three exams. Single-subject modes always use the current exam.
+Practice presents all eight modes as illustrated cards. Click a card to open its explanation and settings dialog, then select **Start practising**. Expand session options to adjust time, topic filters, and question count where supported. During practice the sidebar is hidden; answer the question, review feedback, then continue. **End session** returns to the mode picker. Previous runs are not listed here; review progress from Home. Multi-subject modes accept up to three exams. Single-subject modes always use the current exam.
 
 ### Comparing local practice models
 

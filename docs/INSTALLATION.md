@@ -6,7 +6,7 @@ Download your platform's installer and matching `licenses-*.zip`, then compare
 the installer SHA-256 with `SHA256SUMS.txt`. macOS/Windows may warn or refuse
 unsigned software. Only use files from this repository after reviewing their
 origin and checksum. Do not disable system security globally; if your policy
-blocks unsigned apps, wait for a signed release. Preview updates are manual.
+blocks unsigned apps, wait for a signed release. Versions through 0.1.5 require a manual upgrade to 0.1.6. From 0.1.6 onward, update artifacts are cryptographically signed and can install automatically; OS signing/notarization remains a separate requirement. See [permanent downloads and updates](DOWNLOADS.md).
 
 ## macOS
 

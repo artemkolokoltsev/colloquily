@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, downloadBackup } from "../api/client";
 import { ErrorNotice } from "../components/Common";
 import { useTranslation } from "react-i18next";
-import { checkForUpdate, installPendingUpdate } from "../update";
+
 interface SettingsData {
   values: Record<string, string | number | boolean>;
   data_directory: string;
@@ -20,9 +20,7 @@ export function Settings({ exam }: { exam: number }) {
   }>();
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [version, setVersion] = useState("0.1.5");
-  const [updateVersion, setUpdateVersion] = useState("");
-  const [updateProgress, setUpdateProgress] = useState<number | null>();
+  const [version, setVersion] = useState("0.1.6");
   const [backupFile, setBackupFile] = useState<File>();
   const [backupPreview, setBackupPreview] = useState<{
     created_at: string;
@@ -30,7 +28,6 @@ export function Settings({ exam }: { exam: number }) {
     files: Record<string, string>;
   }>();
   const [busy, setBusy] = useState(false);
-  const [notes, setNotes] = useState("");
   async function inspect(file: File) {
     setError("");
     setBackupPreview(undefined);
@@ -163,51 +160,7 @@ export function Settings({ exam }: { exam: number }) {
       <fieldset>
         <legend>{t("settings.updates")}</legend>
         <p>{t("settings.currentVersion", { version })}</p>
-        <button
-          disabled={busy}
-          onClick={() => {
-            setError("");
-            if (!("__TAURI_INTERNALS__" in window)) {
-              setMessage(t("release.unavailable"));
-              return;
-            }
-            void checkForUpdate()
-              .then((update) => {
-                setUpdateVersion(update?.version || "");
-                setNotes(update?.body || "");
-                setMessage(
-                  update
-                    ? t("settings.updateAvailable", { version: update.version })
-                    : t("settings.noUpdate"),
-                );
-              })
-              .catch(() => setError(t("settings.updateFailed")));
-          }}
-        >
-          {t("settings.checkUpdates")}
-        </button>
-        {notes && (
-          <article>
-            <h3>{t("release.notes")}</h3>
-            <p className="prose">{notes}</p>
-          </article>
-        )}
-        {updateVersion && (
-          <button
-            disabled={busy}
-            onClick={() => {
-              setBusy(true);
-              void installPendingUpdate(setUpdateProgress)
-                .catch((e) => setError(String(e)))
-                .finally(() => setBusy(false));
-            }}
-          >
-            {t("settings.installUpdate")}
-          </button>
-        )}
-        {updateProgress !== undefined && (
-          <progress max={100} value={updateProgress ?? undefined} />
-        )}
+        <p>{t("updates.location")}</p>
       </fieldset>
       <details>
         <summary>{t("nav.advanced")}</summary>

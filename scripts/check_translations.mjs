@@ -47,4 +47,4 @@ function compare(left, right, name) {
 const readJson = name => JSON.parse(fs.readFileSync(new URL(`../frontend/src/locales/${name}.json`, import.meta.url), 'utf8'));
 compare(readJson('ui-en'), readJson('ui-de'), 'feature screens');
 compare(readJson('practice-en'), readJson('practice-de'), 'practice learning guidance');
-for (const name of ['release', 'dynamic']) { const resource = readJson(name); compare(resource.en, resource.de, name); }
+for (const name of ['release', 'dynamic', 'updates']) { const resource = readJson(name); compare(resource.en, resource.de, name); }

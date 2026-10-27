@@ -329,5 +329,17 @@
   "modelAlternative": "Alternative Modellfamilie zum Vergleich des Feedbacks.",
   "exportStudyText": "Lerntext exportieren (.md)",
   "noStudyText": "Noch kein Lerntext vorhanden. Verarbeite zuerst dieses Dokument.",
-  "prepareBeforePractice": "Bereite unter PDFs hinzufügen zuerst deine Fragen vor. Frühere Sitzungen kannst du unten weiterhin öffnen."
+  "prepareBeforePractice": "Bereite unter PDFs hinzufügen zuerst deine Fragen vor. Frühere Sitzungen kannst du unten weiterhin öffnen.",
+  "practiceChoose": "Wie möchtest du üben?",
+  "practiceIntro": "Wähle einen Modus, erfahre, was er trainiert, und starte deine Übung.",
+  "practiceExplore": "Modus entdecken",
+  "practiceClose": "Moduseinstellungen schließen",
+  "practiceExit": "Übung beenden",
+  "practiceReflection": "Zeit zum Reflektieren",
+  "practiceContinue": "Weiter",
+  "practiceSources": "Quellenmaterial",
+  "practiceNextSubject": "Nächstes Fach",
+  "practiceComplete": "Übung abgeschlossen",
+  "practiceBack": "Zurück zu den Übungsmodi",
+  "practiceReview": "Diese Übung ansehen"
 }

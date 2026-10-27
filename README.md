@@ -168,3 +168,5 @@ inventories and MPL-covered sources are packaged with installers and release
 license bundles. See [licensing and redistribution](docs/LICENSING.md). PDFium is
 used instead of PyMuPDF; the distribution checks reject AGPL dependencies.
 Model weights and personal course documents are not bundled or relicensed.
+
+Permanent website installer URLs and update-channel setup: [Download integration](docs/DOWNLOADS.md).

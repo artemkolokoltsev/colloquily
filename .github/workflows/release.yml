@@ -16,10 +16,10 @@ jobs:
         include:
           - os: macos-14
             target: aarch64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg
           - os: macos-15-intel
             target: x86_64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             bundles: nsis
@@ -95,3 +95,30 @@ jobs:
           path: src-tauri/target/${{ matrix.target }}/release/bundle/
           if-no-files-found: error
 
+      - uses: actions/upload-artifact@v7
+        with:
+          name: licenses-${{ matrix.target }}
+          path: build/release-notices/
+          if-no-files-found: error
+
+  finalize-draft:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: signed-*
+          path: release-assets/installers
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: licenses-*
+          path: release-assets/licenses
+      - name: Attach complete update feed, checksums and notices to draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COLLOQUILY_STABLE_RELEASE: '1'
+        run: python scripts/publish_preview.py
