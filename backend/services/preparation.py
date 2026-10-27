@@ -38,7 +38,7 @@ def prepare_exam(ident, progress):
         if status['ollama'] != 'available':
             raise ValueError('Local AI needs setup. Open AI setup, finish installation, then try again.')
         from backend.services.models import setup_exam
-        setup_exam(subject, progress)
+        setup_exam(subject, progress, allow_downloads=False)
         subject = flow.exam(ident)
     progress(message='Reading your materials…')
     job = processing_jobs.create_processing_job(ident, {'mode': 'deterministic', 'retry_failed': True})

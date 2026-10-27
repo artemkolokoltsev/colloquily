@@ -88,6 +88,8 @@ jobs:
           updaterJsonPreferNsis: true
           assetNamePattern: "Colloquily_[version]_[arch][setup][ext]"
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: Verify signed installer and Mac notarization
+        run: python scripts/verify_native_signing.py src-tauri/target/${{ matrix.target }}/release/bundle ${{ matrix.target }} --required
       - run: python scripts/checksums.py src-tauri/target/${{ matrix.target }}/release/bundle ${{ matrix.target }}
       - uses: actions/upload-artifact@v7
         with:

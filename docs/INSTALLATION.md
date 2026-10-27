@@ -18,6 +18,15 @@ Choose `Colloquily_<version>_x64-setup.exe` for 64-bit Windows. The NSIS install
 
 ## Local AI
 
-Install [Ollama](https://ollama.com/download) and start it. Version 0.1.1 prepares suitable local models automatically for the selected exam, with progress, cancellation and retry; explicit exam model settings remain authoritative. Advanced controls are under **AI setup**. Version 0.1.0 requires explicit model downloads there. Model weights live in Ollama's model directory and are not included in installers or backups. Exam creation and material organization remain available without Ollama.
+Open **AI setup** for the guided installation and readiness flow. If Ollama is
+missing, use the official download link and complete its installer. **Start local
+AI** starts an existing installation; it never executes an installation script.
+Review the recommended model/space estimate, download models, and run the local
+readiness test. No terminal is needed. Ollama models live outside workspace
+backups. Organizing materials remains available before AI setup is complete.
+
+For publisher verification and Apple Developer ID setup, see
+[trusted releases](TRUSTED_RELEASES.md). The 0.1.6 installers remain OS-unsigned;
+adding credentials affects only newly built releases.
 
 Mutable data is stored in `~/Library/Application Support/Colloquily/` on macOS and `%APPDATA%\Colloquily\` on Windows. Installing a newer application version does not replace this directory.

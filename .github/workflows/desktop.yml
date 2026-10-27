@@ -40,6 +40,16 @@ jobs:
             target: x86_64-pc-windows-msvc
             bundles: nsis
     runs-on: ${{ matrix.os }}
+    env:
+      APPLE_CERTIFICATE: ${{ github.event_name != 'pull_request' && secrets.APPLE_CERTIFICATE || '' }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+      APPLE_SIGNING_IDENTITY: ${{ github.event_name != 'pull_request' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+      COLLOQUILY_CODESIGN_IDENTITY: ${{ github.event_name != 'pull_request' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+      APPLE_ID: ${{ github.event_name != 'pull_request' && secrets.APPLE_ID || '' }}
+      APPLE_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.APPLE_PASSWORD || '' }}
+      APPLE_TEAM_ID: ${{ github.event_name != 'pull_request' && secrets.APPLE_TEAM_ID || '' }}
+      WINDOWS_CERTIFICATE: ${{ github.event_name != 'pull_request' && secrets.WINDOWS_CERTIFICATE || '' }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.WINDOWS_CERTIFICATE_PASSWORD || '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -60,6 +70,18 @@ jobs:
         run: |
           test -n "$TAURI_SIGNING_PRIVATE_KEY"
           node scripts/configure_release_key.mjs "$UPDATER_PUBLIC_KEY"
+      - name: Check native signing credentials
+        id: native-signing
+        run: python scripts/signing_preflight.py
+      - name: Import Developer ID
+        if: runner.os == 'macOS' && steps.native-signing.outputs.enabled == 'true'
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      - name: Configure Windows publisher signature
+        if: runner.os == 'Windows' && steps.native-signing.outputs.enabled == 'true'
+        run: ./scripts/configure_windows_signing.ps1
       - run: python -m pip install -r backend/requirements.txt
       - run: npm ci
       - run: npm test
@@ -78,6 +100,12 @@ jobs:
       - name: Build local unsigned artifact
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: npm run tauri -- build --config src-tauri/tauri.unsigned.conf.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: Verify native trust before publication
+        if: steps.native-signing.outputs.enabled == 'true'
+        run: python scripts/verify_native_signing.py src-tauri/target/${{ matrix.target }}/release/bundle ${{ matrix.target }} --required
+      - name: Label OS-unsigned preview honestly
+        if: steps.native-signing.outputs.enabled != 'true'
+        run: python scripts/verify_native_signing.py src-tauri/target/${{ matrix.target }}/release/bundle ${{ matrix.target }}
       - run: python scripts/checksums.py src-tauri/target/${{ matrix.target }}/release/bundle ${{ matrix.target }}
       - uses: actions/upload-artifact@v7
         with:

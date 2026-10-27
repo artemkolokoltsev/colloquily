@@ -144,7 +144,7 @@ export function Materials({
               const readiness = await api<{ state: string }>(
                 `/exams/${exam}/models/readiness`,
               );
-              if (["ready", "preparing"].includes(readiness.state))
+              if (readiness.state === "ready")
                 await api(`/exams/${exam}/prepare`, "POST", {});
               else
                 await api(`/exams/${exam}/process`, "POST", {
@@ -333,7 +333,18 @@ export function Materials({
           <button
             className="primary"
             disabled={busy || preparing || processing || !data?.raw.length}
-            onClick={() => act(() => api(`/exams/${exam}/prepare`, "POST"))}
+            onClick={() =>
+              act(async () => {
+                const readiness = await api<{ state: string }>(
+                  `/exams/${exam}/models/readiness`,
+                );
+                if (readiness.state !== "ready") {
+                  onSetup();
+                  return;
+                }
+                return api(`/exams/${exam}/prepare`, "POST");
+              })
+            }
           >
             {preparation?.job?.status === "failed"
               ? t("ui.s8c029bc7ca")

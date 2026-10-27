@@ -1,3 +1,4 @@
+import { AISetup } from "./AISetup";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { api, operation } from "../api/client";
@@ -12,6 +13,7 @@ export function Models({
 }) {
   const { t } = useTranslation();
   const [readiness, setReadiness] = useState("checking");
+  const [manualBackend, setManualBackend] = useState(false);
   const [status, setStatus] = useState<ModelStatus>();
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState("");
@@ -27,20 +29,19 @@ export function Models({
     { name: "qwen3:8b", size: "≈ 5 GB", detail: "modelLarge" },
     { name: "gemma3:4b", size: "≈ 3.3 GB", detail: "modelAlternative" },
   ];
-  const [free, setFree] = useState<number>();
   const refresh = () =>
     Promise.all([
       api<ModelStatus>("/models/status").then(setStatus),
       api<NonNullable<typeof config>>(`/exams/${exam}/models`).then(setConfig),
-      api<{ state: string }>(`/exams/${exam}/models/readiness`).then((value) =>
-        setReadiness(value.state),
-      ),
+      api<{ state: string; manual_backend?: boolean }>(
+        `/exams/${exam}/models/readiness`,
+      ).then((value) => {
+        setReadiness(value.state);
+        setManualBackend(!!value.manual_backend);
+      }),
     ]).catch((e) => setError(String(e)));
   useEffect(() => {
     void refresh();
-    void api<{ free_bytes: number }>("/system/storage")
-      .then((data) => setFree(data.free_bytes))
-      .catch(() => undefined);
   }, []);
   async function pull(model: string) {
     setBusy(true);
@@ -57,81 +58,27 @@ export function Models({
   return (
     <section>
       <h2>{t("ui.sbe59b6d66c")}</h2>
-      <p> {t("ui.s3feb932584")} </p>
       <ErrorNotice error={error} />
-      {free !== undefined && (
-        <p>
-          {t("dynamic.modelStorage", {
-            gb: new Intl.NumberFormat(undefined, {
-              maximumFractionDigits: 1,
-            }).format(free / 1024 ** 3),
-          })}
-        </p>
-      )}
-      {!status ? (
-        <p>{t("ui.s6d6b6cc894")}</p>
+      {manualBackend ? (
+        <article>
+          <p>{t("setupFlow.alternative")}</p>
+          {onReady && (
+            <button onClick={onReady}>{t("setupFlow.continue")}</button>
+          )}
+        </article>
       ) : (
-        <>
-          <p>
-            {status.ollama === "available"
-              ? t("ui.sab53cee8b6")
-              : t("ui.s38059cf32e")}
-          </p>
-          {status.ollama !== "available" && (
-            <article>
-              <h3>{t("ui.s7ed17cde1a")}</h3>
-              <p>
-                {" "}
-                {t("ui.sc549207ef1")}{" "}
-                <a
-                  href="https://ollama.com/download"
-                  onClick={async (event) => {
-                    if ("__TAURI_INTERNALS__" in window) {
-                      event.preventDefault();
-                      try {
-                        const { invoke } = await import("@tauri-apps/api/core");
-                        await invoke("open_ollama_download");
-                      } catch (e) {
-                        setError(String(e));
-                      }
-                    }
-                  }}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {" "}
-                  {t("ui.s672661d756")}{" "}
-                </a>{" "}
-                {t("ui.s2c0e621fdb")}{" "}
-              </p>
-              <p>{status.error}</p>
-            </article>
-          )}
-          <button disabled={busy} onClick={refresh}>
-            {" "}
-            {t("ui.sfb7099ad8e")}{" "}
-          </button>
-          {readiness !== "ready" && (
-            <button
-              className="primary"
-              disabled={busy || status.ollama !== "available"}
-              onClick={async () => {
-                setBusy(true);
-                setError("");
-                try {
-                  await operation(`/exams/${exam}/models/prepare`, {}, setJob);
-                  await refresh();
-                } catch (e) {
-                  setError(String(e));
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              {" "}
-              {t("ui.s22e63945bf")}{" "}
-            </button>
-          )}
+        <AISetup
+          key={`${config?.task_models.answering}:${config?.task_models.answer_evaluation}`}
+          exam={exam}
+          status={status}
+          readiness={readiness}
+          refresh={refresh}
+          onReady={onReady}
+        />
+      )}
+      {status && (
+        <details className="model-advanced">
+          <summary>{t("setupFlow.advanced")}</summary>
           <h3>{t("ui.modelLibrary")}</h3>
           <p>{t("ui.modelLibraryIntro")}</p>
           {saved && (
@@ -230,18 +177,7 @@ export function Models({
               </article>
             ))}
           </details>
-          {readiness === "ready" && (
-            <div className="success">
-              <p> {t("ui.sed3833c4b3")} </p>
-              {onReady && (
-                <button className="primary" onClick={onReady}>
-                  {" "}
-                  {t("ui.s9fedeef0fb")}{" "}
-                </button>
-              )}
-            </div>
-          )}
-        </>
+        </details>
       )}
       <Progress job={job} />
       <p> {t("ui.saa50e918f8")} </p>

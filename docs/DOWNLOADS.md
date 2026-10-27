@@ -28,15 +28,14 @@ this metadata indefinitely. The app's update feed is **latest.json**, not
 
 `https://github.com/artemkolokoltsev/colloquily/releases/download/latest/latest.json`
 
-The download channel was bootstrapped with the published **v0.1.5-rc.1** assets.
-It intentionally has no update feed until the first updater-signed build,
-**v0.1.6-rc.1**, passes CI and publishes. Older installers contain a placeholder
-trust key and must be upgraded manually once. All three website links already
-work for manual installation.
+The download channel currently serves **v0.1.6-rc.1**, including its signed update
+feed. Versions through 0.1.5 contain a placeholder trust key and need one manual
+upgrade. The 0.1.7 update adds optional native publisher signing and verified trust
+metadata; it is separate from the already-published 0.1.6 release.
 
 ## Publishing and recovery
 
-Pushing `v0.1.6-rc.1` triggers the three-platform preview workflow. Once native
+Pushing `v0.1.7-rc.1` triggers the three-platform preview workflow. Once native
 builds, browser checks and learning acceptance pass, it publishes immutable
 version assets, the signed-update manifest, notices and checksums, then promotes
 the website channel. Update signatures are separate from Apple notarization and
@@ -74,3 +73,5 @@ inside a 0700 directory). Keep a secure backup outside this checkout before
 removing local data. It is not included in the app or committed to Git. The key
 has no passphrase; GitHub encrypts the secret at rest and the local copy relies
 on filesystem protection. Never upload it as a release asset.
+
+Native publisher-signing setup and website trust labels: [TRUSTED_RELEASES.md](TRUSTED_RELEASES.md).

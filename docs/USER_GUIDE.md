@@ -8,7 +8,7 @@ mistakes: check generated questions and feedback against the cited passages.
 
 1. Download the installer matching your computer from [Releases](https://github.com/artemkolokoltsev/colloquily/releases), plus its license bundle. See [installation](INSTALLATION.md) for preview-build warnings.
 2. Open Colloquily and select English or German. You can change language in Settings without restarting.
-3. Install and start [Ollama](https://ollama.com/download). In 0.1.1, Colloquily checks local memory and disk space, reuses suitable installed models, and prepares missing models for the selected exam automatically. Progress offers cancellation and retry. Existing explicit exam model settings are preserved; advanced changes remain under **AI setup**. The older 0.1.0 RC4 preview requires explicit model downloads there. Downloads can be large; keep sufficient free storage.
+3. Open **AI setup**. Install Ollama from the official link if needed, then choose **Start local AI**. Review the recommended model and estimated space, choose **Download and prepare local AI**, then **Test local AI**. The sample checks generation and document embeddings without your files. Failed downloads can be retried; the model library remains under Advanced controls. Downloading models requires internet and adequate disk space.
 4. Check the model status before starting AI-powered practice. You can organize exams and materials without a running model.
 
 No Python, Node.js, Docker or terminal is required for the desktop application.
@@ -127,3 +127,5 @@ Each mode now shows a learning focus, a concrete goal, an instruction for how to
 The explanations draw on [retrieval-practice experiments (Roediger & Karpicke, 2006)](https://doi.org/10.1111/j.1467-9280.2006.01693.x), [a self-explanation meta-analysis (Bisra et al., 2018)](https://doi.org/10.1007/s10648-018-9434-x), [feedback research (Hattie & Timperley, 2007)](https://doi.org/10.3102/003465430298487), [a synthesis of distributed practice (Cepeda et al., 2006)](https://doi.org/10.1037/0033-2909.132.3.354), and [a classroom trial of interleaved mathematics practice (Rohrer et al., 2020)](https://doi.org/10.1037/edu0000367).
 
 These are learning principles, not validation of the app's grading or rankings of its modes. The guide distinguishes self-explanation from merely reading aloud, random ordering from deliberate interleaving, and timed format rehearsal from a demonstrated learning benefit. Speech is not assessed; evaluation uses the submitted text. Spacing is advice to revisit material later, not a claim that every mode implements an optimal repetition schedule.
+
+Starting Ollama may leave its background runtime running after Colloquily closes, as with a normal Ollama installation. Use Ollama’s own controls when you want to quit it.

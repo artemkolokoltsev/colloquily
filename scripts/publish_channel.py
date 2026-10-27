@@ -128,6 +128,16 @@ def promote(tag, allow_legacy=False):
                 if hashlib.sha256(path.read_bytes()).hexdigest() != expected.get(name):
                     raise ValueError('License checksum mismatch: ' + name)
                 paths.append(path)
+        trust = {}
+        for name in sorted(assets):
+            if name.startswith('trust-') and name.endswith('.json'):
+                path = root/name
+                download(assets[name]['browser_download_url'], path)
+                if hashlib.sha256(path.read_bytes()).hexdigest() != expected.get(name):
+                    raise ValueError('Trust evidence checksum mismatch')
+                record = json.loads(path.read_text())
+                trust[record['target']] = record
+                paths.append(path)
         manifest = None
         if 'latest.json' in assets:
             manifest = root/'latest.json'
@@ -154,7 +164,7 @@ def promote(tag, allow_legacy=False):
         checksum.write_text(''.join(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n' for path in paths))
         paths.append(checksum)
         metadata = root/'downloads.json'
-        metadata.write_text(json.dumps({'version': version, 'tag': tag, 'prerelease': source['prerelease'], 'published_at': source['published_at'], 'release_url': source['html_url'], 'downloads': {platform: f'https://github.com/{REPO}/releases/download/{CHANNEL}/{name}' for platform, name in ALIASES.items()}}, indent=2)+'\n')
+        metadata.write_text(json.dumps({'version': version, 'tag': tag, 'native_trust': trust, 'prerelease': source['prerelease'], 'published_at': source['published_at'], 'release_url': source['html_url'], 'downloads': {platform: f'https://github.com/{REPO}/releases/download/{CHANNEL}/{name}' for platform, name in ALIASES.items()}}, indent=2)+'\n')
         body = f'<!-- source:{tag} -->\nPermanent download links for Colloquily {tag}.\n\nSource release: {source["html_url"]}\n\nThis rolling channel includes previews. Versioned release assets remain unchanged.'
         if not channel:
             channel = github.request('/releases', 'POST', {'tag_name': CHANNEL, 'target_commitish': source['target_commitish'], 'name': 'Colloquily — latest downloads', 'body': body, 'draft': True, 'prerelease': True, 'make_latest': 'false'})

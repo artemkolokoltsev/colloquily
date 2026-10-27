@@ -96,6 +96,9 @@ try {
         ),
         embedding_config: { model: "embeddinggemma:latest" },
       };
+      let runtimeState = 'available';
+      let modelsReady = true;
+      let setupDownloads = 0;
       let practiceReady = false;
       let practiceSession = {id: 901, subject_id: 1, status: 'created', remaining_seconds: 60, countdown_visible: true, sources: [], current_question: {id: 77, question_text: 'Explain why $E=mc^2$ relates mass and energy.'}};
       let practiceRun = {id: 900, status: 'running', mode: 'random_practice', sessions: [practiceSession]};
@@ -116,7 +119,7 @@ try {
         if (path === "/preferences") return json({ language });
         if (path === "/models/status")
           return json({
-            ollama: "available",
+            ollama: runtimeState,
             installed: ["qwen3:4b", "gemma3:4b"],
             required: [],
             missing: [],
@@ -171,7 +174,11 @@ try {
                   },
                 ],
           );
-        if (path.endsWith("/models/readiness")) return json({ state: "ready" });
+        if (path.endsWith('/models/readiness')) return json({state: runtimeState !== 'available' ? 'ollama_unavailable' : modelsReady ? 'ready' : 'models_missing'});
+        if (path.endsWith('/models/recommendation')) return json({task_models:modelSettings.task_models, missing:modelsReady ? [] : ['qwen3:4b','embeddinggemma:latest'],download_bytes_estimate:modelsReady ? 0 : 5 * 1024**3,disk_ok:true,limited_hardware:false,hardware:{ram_bytes:16*1024**3,free_bytes:30*1024**3,architecture:'arm64'}});
+        if (path === '/models/start') {runtimeState='available';return json({id:'start',status:'completed',result:{ready:true}});}
+        if (path.endsWith('/models/prepare')) {setupDownloads++;modelsReady=true;return json({id:'prepare',status:'completed',result:{}});}
+        if (path.endsWith('/models/verify')) return json({id:'verify',status:'completed',result:{ready:true,response_seconds:2.5,slow:false}});
         if (path.endsWith("/learning"))
           return json({
             goal: { exam_date: null, repetitions: 3, questions_per_session: 5 },
@@ -520,6 +527,7 @@ $$
       await page.reload();
       await page.locator(".advanced-nav > summary").click();
       await page.getByRole("navigation", { name: "Advanced tools" }).getByRole("button", { name: "AI setup", exact: true }).click();
+      await page.getByText("Advanced · model library and settings", {exact:true}).click();
       await page.locator(".model-library article").first().waitFor();
       await page
         .locator(".model-library article")
@@ -538,6 +546,20 @@ $$
         modelSettings.embedding_config.model,
         "embeddinggemma:latest",
       );
+      runtimeState = 'not_running'; modelsReady = false;
+      await page.reload();
+      await page.locator('.advanced-nav > summary').click();
+      await page.getByRole('navigation', {name:'Advanced tools'}).getByRole('button', {name:'AI setup',exact:true}).click();
+      await page.getByRole('button', {name:'Start local AI',exact:true}).waitFor();
+      assert.equal(setupDownloads,0,'No implicit model download on launch or navigation');
+      await page.getByText(/Detected: 16.0 GB RAM/).waitFor();
+      await page.getByRole('button', {name:'Start local AI',exact:true}).click();
+      await page.getByRole('button', {name:'Download and prepare local AI',exact:true}).click();
+      await page.getByRole('button', {name:'Test local AI',exact:true}).click();
+      await page.getByText('Local AI responded in 2.5 seconds; document embeddings also work.',{exact:true}).waitFor();
+      assert.equal(setupDownloads,1);
+      await page.screenshot({path:`output/playwright/ai-setup-${name}.png`,fullPage:true});
+      await page.getByRole('button',{name:'Continue to materials',exact:true}).click();
       emptyWorkspace = true;
       await page.reload();
       await page
@@ -551,7 +573,7 @@ $$
         .waitFor();
       assert.equal(await page.locator('.setup-steps').count(), 0);
       assert.equal(await page.getByRole('navigation', {name: 'Your learning'}).getByRole('button', {name:'Materials', exact:true}).getAttribute('aria-current'), 'page');
-      assert.equal(await page.locator('.app-stamp').innerText(), 'Colloquily v0.1.6');
+      assert.equal(await page.locator('.app-stamp').innerText(), 'Colloquily v0.1.7');
       assert.deepEqual(crashes, []);
       console.log(
         `${name}: production-CSP render, authenticated Unicode filename, navigation, notes, reopen, PDF retry and isolated notes retry passed`,

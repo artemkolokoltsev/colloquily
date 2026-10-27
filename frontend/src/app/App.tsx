@@ -16,7 +16,6 @@ import { Dashboard } from "../features/Dashboard";
 import { useTranslation } from "react-i18next";
 import { UpdateNotice } from "../components/UpdateNotice";
 import { ExamPicker } from "../components/ExamPicker";
-import { operation } from "../api/client";
 import { Progress } from "../components/Common";
 import type { Job } from "../types";
 const pages = [
@@ -35,7 +34,12 @@ const pageLabels = {
   Study: "nav.ask",
   "Advanced settings": "nav.settings",
 } as const;
-const advancedPages = ["Questions", "Reported questions", "Study plan", "Local AI"];
+const advancedPages = [
+  "Questions",
+  "Reported questions",
+  "Study plan",
+  "Local AI",
+];
 export default function App() {
   const { t, i18n } = useTranslation();
   const [welcomed, setWelcomed] = useState(
@@ -70,6 +74,24 @@ export default function App() {
     setAiRetry(0);
   }
   useEffect(() => {
+    if (!aiJob || !["queued", "running"].includes(aiJob.status)) return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      void api<Job>(`/jobs/${aiJob.id}`)
+        .then((job) => {
+          if (!active) return;
+          setAiJob(job);
+          if (!["queued", "running"].includes(job.status))
+            setAiRetry((value) => value + 1);
+        })
+        .catch(() => undefined);
+    }, 2000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [aiJob?.id, aiJob?.status]);
+  useEffect(() => {
     if (!ready || !selected) return;
     let current = true;
     const controller = new AbortController();
@@ -98,14 +120,9 @@ export default function App() {
           setAiError(t("ui.aiFailed"));
           return;
         }
-        await operation(
-          `/exams/${selected}/models/prepare`,
-          {},
-          (job) => {
-            if (current) setAiJob(job);
-          },
-          controller.signal,
-        );
+        setAiSetup(true);
+        if (status.state === "preparing" && "job" in status)
+          setAiJob((status as { job: Job }).job);
       })
       .catch((error) => {
         if (current) {
@@ -213,15 +230,13 @@ export default function App() {
           {pages.map((p) => (
             <button
               className={
-                p === page ||
-                (p === "Dashboard" && page === "Progress")
+                p === page || (p === "Dashboard" && page === "Progress")
                   ? "active"
                   : ""
               }
               key={p}
               aria-current={
-                p === page ||
-                (p === "Dashboard" && page === "Progress")
+                p === page || (p === "Dashboard" && page === "Progress")
                   ? "page"
                   : undefined
               }
@@ -245,12 +260,12 @@ export default function App() {
                 {p === "Questions"
                   ? t("ui.manageQuestions")
                   : p === "Local AI"
-                  ? t("nav.ai")
-                  : p === "Reported questions"
-                    ? t("nav.reported")
-                    : p === "Study plan"
-                      ? t("nav.plan")
-                      : t("nav.settings")}
+                    ? t("nav.ai")
+                    : p === "Reported questions"
+                      ? t("nav.reported")
+                      : p === "Study plan"
+                        ? t("nav.plan")
+                        : t("nav.settings")}
               </button>
             ))}
           </nav>

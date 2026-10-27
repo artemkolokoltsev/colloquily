@@ -21,14 +21,20 @@ def cancel_setup():
         response.close()
 
 
-def model_plan(subject):
+def model_plan(subject, *, allow_offline=False):
     provider = OllamaProvider()
-    response = requests.get(f'{provider.url}/api/tags', timeout=3)
-    response.raise_for_status()
-    return recommend(resources(), response.json().get('models', []), subject)
+    try:
+        response = requests.get(f'{provider.url}/api/tags', timeout=3)
+        response.raise_for_status()
+        installed = response.json().get('models', [])
+    except requests.RequestException:
+        if not allow_offline:
+            raise
+        installed = []
+    return recommend(resources(), installed, subject)
 
 
-def setup_exam(subject, progress):
+def setup_exam(subject, progress, *, allow_downloads=True):
     from services.database import update_subject
     if (subject.get('local_llm_config') or {}).get('backend') == 'lmstudio':
         return {'manual_backend': True}
@@ -40,6 +46,8 @@ def setup_exam(subject, progress):
         plan = model_plan(subject)
         if plan['backend'] != 'ollama':
             return {'manual_backend': True}
+        if plan['missing'] and not allow_downloads:
+            raise ValueError('Local AI models need setup. Open AI setup to review the download size and prepare the models.')
         if not plan['disk_ok']:
             raise ValueError('Not enough free disk space for local AI. Free space and retry.')
         for model in plan['missing']:
@@ -88,7 +96,8 @@ class OllamaProvider:
             missing = [name for name in required if name not in installed and f"{name}:latest" not in installed]
             return dict(backend="ready", ollama="available", installed=installed, required=required, missing=missing)
         except requests.RequestException as exc:
-            installed_app = shutil.which("ollama") or Path("/Applications/Ollama.app").exists() or (Path.home() / "AppData/Local/Programs/Ollama/ollama.exe").exists()
+            from backend.services.ollama_runtime import installed_command
+            installed_app = installed_command()[0]
             return dict(backend="ready", ollama="not_running" if installed_app else "unavailable", installed=[], required=required, missing=required, error=str(exc))
 
     def pull(self, model, progress, *, cancelled=None):
@@ -136,3 +145,34 @@ def pull_model(model, progress):
     # Advanced manual downloads share the same lock as automatic preparation.
     with _setup_lock:
         return OllamaProvider().pull(model, progress)
+
+
+def verify_exam(subject, progress):
+    """Synthetic local-only inference; measures readiness without exposing study content."""
+    import time
+    plan = model_plan(subject)
+    if plan['backend'] != 'ollama':
+        raise ValueError('Use the readiness check provided by your configured local AI backend.')
+    if plan['missing']:
+        raise ValueError('Download the recommended models before testing local AI.')
+    provider = OllamaProvider()
+    model = plan['task_models']['answering']
+    progress(message='Testing local AI with a short sample, without your documents', completed=0, total=2)
+    started = time.monotonic()
+    response = requests.post(provider.url + '/api/generate', json={
+        'model': model, 'prompt': 'In one short sentence, explain why practice helps learning.',
+        'stream': False, 'think': False, 'keep_alive': '5m',
+        'options': {'num_predict': 48, 'num_ctx': 2048, 'temperature': 0}}, timeout=(5, 180))
+    response.raise_for_status()
+    result = response.json()
+    if result.get('error') or not result.get('response', '').strip() or result.get('done') is not True:
+        raise ValueError('The model did not return a complete sample answer. Try a smaller model or retry.')
+    elapsed = time.monotonic() - started
+    progress(message='Checking local document embeddings', completed=1, total=2)
+    response = requests.post(provider.url + '/api/embed', json={
+        'model': plan['embedding_model'], 'input': 'A short local readiness test.'}, timeout=(5, 90))
+    response.raise_for_status()
+    if not response.json().get('embeddings'):
+        raise ValueError('The embedding model did not return a result. Retry model preparation.')
+    return {'ready': True, 'model': model, 'response_seconds': round(elapsed, 1),
+            'slow': elapsed > 30, 'sample_only': True}

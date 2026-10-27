@@ -1,54 +1,48 @@
 # Release status
 
-Prepared candidate: **0.1.6 — focused practice and reliable updates**.
-Local branch: `release/0.1.6`. Tag: `v0.1.6-rc.1`.
-See [release notes](RELEASE_NOTES_0.1.6.md), [website URLs](DOWNLOADS.md), and
-[the user guide](USER_GUIDE.md).
+Prepared candidate: **0.1.7 — guided local AI setup and verified publisher trust**.
+Branch `release/0.1.7`; tag `v0.1.7-rc.1`.
+The published **v0.1.6-rc.1** completed all native, browser and real-model learning
+checks. Its public release and permanent download metadata were verified as 0.1.6
+on 2026-10-27. It does not need to be rebuilt to become visible.
 
-## Verified locally
+## Local verification for 0.1.7
 
-- 93 backend/API/distribution regressions: 87 existing full-suite tests plus
-  six release-channel/manifest tests; 65 core tests and 11 frontend tests passed.
-- Version agreement, English/German translation parity, TypeScript/Vite build,
-  and locked Rust check passed. All three release workflow YAML files parse.
-- Chromium and WebKit production-CSP regressions passed: PDF rendering, notes,
-  formulas, source recovery, onboarding, eight illustrated mode dialogs, research
-  links, model selection, English/German, focused answer submission, separate
-  feedback, completion, return navigation and bottom-right version footer.
-  Light/dark screenshots were inspected.
-- A real Tauri signature verified against the committed public trust key.
-  Lifecycle tests cover concurrent checks, corrupt/failed downloads, busy
-  workspaces, server-side refusal, restart failure and retry without reinstalling.
-- The Intel macOS frozen backend rebuilt in the dedicated release environment
-  and passed its API/PDF/Markdown/SQLite/FAISS self-test and lifecycle smoke
-  (authenticated loopback access and parent-exit shutdown). The general development
-  environment failed its license gate, so it was not used for release packaging.
-- Permanent Apple Silicon, Intel and Windows links all returned HTTP 200.
-  `downloads.json` currently identifies the published `v0.1.5-rc.1` bootstrap.
-- Repository updater signing secrets are configured. Only the public key is
-  committed; see DOWNLOADS.md for private-key recovery and custody.
+- 108 backend/API/distribution tests and 65 core tests passed.
+- 11 frontend tests, translation parity, TypeScript/Vite build and locked Rust
+  check passed. Updated release workflow YAML parses.
+- Chromium and WebKit production-CSP regressions passed, including PDFs, formulas,
+  focused practice, navigation, model selection and the three-stage AI setup.
+  The setup regression checks that no model download begins before explicit action.
+- The Intel macOS frozen backend rebuilt and passed its self-test and lifecycle
+  smoke (authenticated loopback API and parent-exit shutdown).
+- Runtime tests cover already-running Ollama, missing installation, safe local
+  CLI startup, custom-port refusal, offline recommendations, synthetic readiness
+  tests and prohibition of implicit downloads during material preparation.
+- Signing tests reject incomplete credentials, development identities, wrong
+  Apple teams and missing notarization tickets. Preview trust records remain false.
 
-## Push to build and publish
+## Publication
+
+Before publishing a Mac-trusted build, configure the Apple secrets described in
+[TRUSTED_RELEASES.md](TRUSTED_RELEASES.md). This Mac has no valid signing identity;
+only updater secrets are currently configured in GitHub. Apple Developer
+membership has been confirmed by the maintainer, but certificates/notarization
+credentials are still needed. Windows signing credentials are also absent.
 
 ```bash
-git push --atomic -u origin release/0.1.6 v0.1.6-rc.1
+git push --atomic -u origin release/0.1.7 v0.1.7-rc.1
 ```
 
-The release-candidate tag triggers `.github/workflows/desktop.yml`, building
-macOS Apple Silicon, macOS Intel and Windows x64. Publication waits for native
-builds, backend/core tests, real local-model learning acceptance and browser
-regressions. It publishes installers, signed update payloads, platform signatures,
-license/source bundles, checksums and `latest.json`, then refreshes fixed website
-links under the rolling `latest` tag. A branch-only push does not publish.
+This triggers native builds, tests, real-model learning acceptance and publication.
+With no OS signing secrets, it publishes updater-signed but OS-unsigned previews.
+With all Apple secrets configured, Mac builds must pass signature, team identity,
+stapled-ticket and Gatekeeper verification. Windows can remain unsigned without
+blocking properly configured Mac builds. Stable production tags require signing
+for both platforms.
 
-The commit/tag are prepared locally, not pushed. Native 0.1.6 CI and installation
-on all target machines remain to be verified after the push. Preview installers
-are still OS-unsigned: updater signatures do not provide Apple notarization or
-Windows Authenticode. A complete native update/install/relaunch cycle must be
-validated with a subsequent higher-version build after 0.1.6 bootstrap.
-
-Users of 0.1.5 or earlier need one manual upgrade. The rolling channel has manual
-downloads now; its signed update feed appears only after 0.1.6 passes and publishes.
-Merge the download-channel workflow to the default branch for manual promotion
-and future stable-release publication triggers. Preview promotion already runs
-directly from the tagged release branch.
+Changes are prepared locally, not pushed. 0.1.7 native CI, live runtime startup on
+each target OS, and a complete installed-app update/restart remain to be verified.
+The true Apple signing/notarization path cannot be exercised until credentials
+exist. The website URLs remain unchanged; download metadata updates only after
+successful publication. See [DOWNLOADS.md](DOWNLOADS.md).

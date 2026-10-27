@@ -54,6 +54,17 @@ def health():
 def model_status():
     return OllamaProvider().status()
 
+@router.post('/models/start', response_model=Job, status_code=202)
+def start_local_runtime():
+    from backend.services.ollama_runtime import start
+    return jobs.submit('ollama-start', 'Starting local AI', start)
+
+@router.post('/exams/{ident}/models/verify', response_model=Job, status_code=202)
+def verify_local_runtime(ident: int):
+    from backend.services.models import verify_exam
+    subject = flow.exam(ident)
+    return jobs.submit(f'ai-verify:{ident}', 'Testing local AI', lambda progress: verify_exam(subject, progress))
+
 @router.post("/models/pull", response_model=Job, status_code=202)
 def pull(body: PullInput):
     return jobs.submit("model:" + body.model, "Downloading " + body.model,
@@ -62,7 +73,7 @@ def pull(body: PullInput):
 @router.get('/exams/{ident}/models/recommendation', response_model=Record)
 def model_recommendation(ident: int):
     from backend.services.models import model_plan
-    return model_plan(flow.exam(ident))
+    return model_plan(flow.exam(ident), allow_offline=True)
 
 @router.post('/exams/{ident}/models/prepare', response_model=Job, status_code=202)
 def prepare_models(ident: int):
@@ -576,7 +587,7 @@ def model_readiness(ident: int):
         return {'state':'insufficient_storage'}
     if active and active['status'] == 'failed':
         return {'state':'failed', 'job':active}
-    return {'state':'preparing'}
+    return {'state':'models_missing'}
 
 @router.get('/exams/{ident}/topics')
 def exam_topics(ident: int):

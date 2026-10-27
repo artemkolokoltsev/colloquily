@@ -1469,3 +1469,8 @@ body.practice-focus .shell > main { margin: 0; max-width: none; width: 100%; pad
 @media (max-width: 1200px) { .practice-modes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 520px) { .practice-modes { grid-template-columns: 1fr; } .practice-dialog { padding: 18px; } .session-toolbar { flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { .mode-card { transition: none; } .mode-card:hover { transform: none; } }
+.ai-setup { max-width: 800px; }
+.ai-setup-list { list-style: none; padding: 0; display: grid; gap: 16px; }
+.ai-setup-list > li { background: var(--surface); border: 1px solid var(--separator); border-radius: 16px; padding: 22px; }
+.ai-setup-list h3 { margin-top: 0; }
+.model-advanced { margin-top: 24px; }

@@ -42,6 +42,10 @@ def main():
     manifest_path = root/'latest.json'
     manifest_path.write_text(json.dumps(manifest, indent=2)+'\n')
     assets = list(dict.fromkeys([*assets, *updater_assets, manifest_path, Path('LICENSE'), Path('NOTICE')]))
+    trust = sorted((root/'installers').rglob('trust-*.json'))
+    if len(trust) != 3:
+        raise ValueError('Native trust evidence is required for all three builds')
+    assets.extend(trust)
     sums = root/'SHA256SUMS.txt'
     checksums = []
     for path in assets:

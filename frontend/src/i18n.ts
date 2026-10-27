@@ -1,6 +1,7 @@
 import i18n from "i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
 import { initReactI18next } from "react-i18next";
+import setupFlow from './locales/setup-flow.json';
 import updates from './locales/updates.json';
 import release from './locales/release.json';
 import uiEn from './locales/ui-en.json';
@@ -13,6 +14,7 @@ export const en = {
   translation: {
     release: release.en,
     updates: updates.en,
+    setupFlow: setupFlow.en,
     ui: uiEn,
     dynamic: dynamic.en,
     practiceLearning: practiceEn,
@@ -30,6 +32,7 @@ export const en = {
 const de = { translation: {
   release: release.de,
     updates: updates.de,
+    setupFlow: setupFlow.de,
   ui: uiDe,
   dynamic: dynamic.de,
   practiceLearning: practiceDe,
