@@ -199,9 +199,9 @@ def index(ident: int):
     return jobs.submit(f"index:{ident}", "Building accepted-evidence FAISS index", lambda _: flow.build_index(ident))
 
 @router.get("/exams/{ident}/review", response_model=list[Record])
-def review(ident: int):
+def review(ident: int, document_id: int | None = None):
     flow.exam(ident)
-    return knowledge.list_review_units(ident)
+    return knowledge.list_review_units(ident, document_id=document_id)
 
 @router.patch("/exams/{ident}/review/{unit_id}", response_model=Record)
 def review_one(ident: int, unit_id: int, body: ReviewInput):

@@ -1,3 +1,4 @@
+import { StudyText } from "./StudyText";
 import { useEffect, useState } from "react";
 import { sourceBlob } from "../api/client";
 import type { Evaluation, Job, Source } from "../types";
@@ -84,7 +85,9 @@ export function EvaluationView({ value }: { value: Evaluation | null }) {
           <h4>{t("ui.expectedPoints")}</h4>
           <ul>
             {value.expected_core_points?.map((point, i) => (
-              <li key={i}>{point.text}</li>
+              <li key={i}>
+                <StudyText>{point.text}</StudyText>
+              </li>
             ))}
           </ul>
         </>
@@ -97,13 +100,15 @@ export function EvaluationView({ value }: { value: Evaluation | null }) {
               {(value[key as "correct"] || [])
                 .filter((item) => item.text || item.claim)
                 .map((item, i) => (
-                  <li key={i}>{item.text || item.claim}</li>
+                  <li key={i}>
+                    <StudyText>{item.text || item.claim}</StudyText>
+                  </li>
                 ))}
             </ul>
           </div>
         ))}
       {value.status !== "skipped" && (
-        <p className="prose">{value.better_oral_answer}</p>
+        <StudyText>{value.better_oral_answer}</StudyText>
       )}
       {value.subject_id && (
         <Sources exam={value.subject_id} sources={value.sources || []} />
@@ -144,7 +149,7 @@ export function Sources({
               ? s.source_location
               : s.source_location?.replace(/,\s*lines?\s*\d+-\d+/i, "")}
           </summary>
-          <p className="prose">{s.content || s.preview}</p>
+          <StudyText>{s.content || s.preview}</StudyText>
           {(s.relative_path || s.doc_name) && (
             <button
               onClick={() => {

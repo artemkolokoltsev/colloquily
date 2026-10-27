@@ -5,12 +5,15 @@ import release from './locales/release.json';
 import uiEn from './locales/ui-en.json';
 import uiDe from './locales/ui-de.json';
 import dynamic from './locales/dynamic.json';
+import practiceEn from './locales/practice-en.json';
+import practiceDe from './locales/practice-de.json';
 
 export const en = {
   translation: {
     release: release.en,
     ui: uiEn,
     dynamic: dynamic.en,
+    practiceLearning: practiceEn,
     app: { tagline: "Your local oral-exam workspace", currentExam: "Current exam", createExam: "Create an exam", localPromise: "Local files. Local inference. No cloud account." },
     nav: { dashboard: "Home", materials: "Materials", questions: "Questions", practice: "Practice", progress: "Progress", ask: "Ask", reported: "Reported questions", plan: "Study plan", ai: "AI setup", settings: "Settings", advanced: "Advanced tools" },
     startup: { starting: "Starting your local study workspace…", retry: "Retry connection" },
@@ -26,6 +29,7 @@ const de = { translation: {
   release: release.de,
   ui: uiDe,
   dynamic: dynamic.de,
+  practiceLearning: practiceDe,
   app: { tagline: "Dein lokaler Arbeitsbereich für mündliche Prüfungen", currentExam: "Aktuelle Prüfung", createExam: "Prüfung erstellen", localPromise: "Lokale Dateien. Lokale KI. Kein Cloud-Konto." },
   nav: { dashboard: "Start", materials: "Materialien", questions: "Fragen", practice: "Üben", progress: "Fortschritt", ask: "Fragen", reported: "Prüfungsprotokollfragen", plan: "Lernplan", ai: "KI einrichten", settings: "Einstellungen", advanced: "Erweiterte Werkzeuge" },
   startup: { starting: "Dein lokaler Lernbereich wird gestartet…", retry: "Verbindung erneut versuchen" },

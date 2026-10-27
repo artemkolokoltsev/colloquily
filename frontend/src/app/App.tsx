@@ -135,12 +135,19 @@ export default function App() {
         });
       const existing = await refresh();
       if (!existing.length) setPage("Exams");
-      else if (existing.length === 1 && existing[0].slug === "imported-exam") {
+      else {
         const [files, prep] = await Promise.all([
           api<{ raw: string[] }>(`/exams/${existing[0].id}/documents`),
           api<{ questions: number }>(`/exams/${existing[0].id}/preparation`),
         ]);
-        if (!files.raw.length && !prep.questions) setPage("Exams");
+        if (
+          existing.length === 1 &&
+          existing[0].slug === "imported-exam" &&
+          !files.raw.length &&
+          !prep.questions
+        )
+          setPage("Exams");
+        else if (!prep.questions) setPage("Materials");
       }
       setReady(true);
       // Update checks are best-effort and never block local study.
@@ -160,11 +167,13 @@ export default function App() {
         language: i18n.resolvedLanguage || "en",
       });
       const exam = await api<Exam>("/exams", "POST", {
-        name,
+        name: name.trim(),
         exam_date: examDate || null,
         language: i18n.resolvedLanguage || "en",
       });
       await refresh();
+      localStorage.setItem("colloquily.welcomed", "true");
+      setWelcomed(true);
       setSelected(exam.id);
       setName("");
       setExamDate("");
@@ -219,6 +228,7 @@ export default function App() {
                   ? "page"
                   : undefined
               }
+              disabled={!selected}
               onClick={() => navigate(p)}
             >
               {t(pageLabels[p])}
@@ -232,6 +242,7 @@ export default function App() {
               <button
                 key={p}
                 className={page === p ? "active" : ""}
+                disabled={!selected}
                 onClick={() => navigate(p)}
               >
                 {p === "Local AI"
@@ -255,6 +266,27 @@ export default function App() {
           <span>{t("app.localPromise")}</span>
         </header>
         <ErrorNotice error={error} />
+        {["Exams", "Materials", "Local AI", "Practice"].includes(page) && (
+          <ol className="setup-steps" aria-label={t("ui.setupSteps")}>
+            {[
+              ["Exams", "topicStep"],
+              ["Materials", "pdfStep"],
+              ["Local AI", "aiStep"],
+              ["Practice", "practiceStep"],
+            ].map(([target, label], index) => (
+              <li key={target}>
+                <button
+                  disabled={!selected && index > 0}
+                  aria-current={page === target ? "step" : undefined}
+                  onClick={() => navigate(target)}
+                >
+                  <span>{index + 1}</span>
+                  {t(`ui.${label}` as "ui.topicStep")}
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
         {aiJob && ["queued", "running"].includes(aiJob.status) && (
           <div className="setup-notice" role="status">
             {t("ui.redesignPreparingAI")}
@@ -288,14 +320,6 @@ export default function App() {
               </select>
             </label>
             <p>{t("release.privacy")}</p>
-            <button
-              onClick={() => {
-                localStorage.setItem("colloquily.welcomed", "true");
-                setWelcomed(true);
-              }}
-            >
-              {t("release.continue")}
-            </button>
           </section>
         )}
         {aiSetup && page !== "Local AI" && (

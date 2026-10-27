@@ -1,3 +1,4 @@
+import { StudyText } from "../components/StudyText";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { api, operation } from "../api/client";
@@ -66,7 +67,7 @@ export function Study({ exam }: { exam: number }) {
       <Progress job={job} />
       {answer && (
         <article>
-          <p className="prose">{answer.answer}</p>
+          <StudyText>{answer.answer}</StudyText>
           <Sources exam={exam} sources={answer.contexts} />
         </article>
       )}
@@ -74,7 +75,7 @@ export function Study({ exam }: { exam: number }) {
       {history.map((h, i) => (
         <details key={h.id || i}>
           <summary>{h.input_text}</summary>
-          <p className="prose">{h.output_text}</p>
+          <StudyText>{h.output_text}</StudyText>
           <Sources exam={exam} sources={h.sources || []} />
         </details>
       ))}
@@ -168,7 +169,7 @@ export function StudyPlan({ exam }: { exam: number }) {
         <article key={s.id}>
           <h3>{s.concept}</h3>
           <p>{s.quality_status}</p>
-          <p className="prose">{s.content?.oral_answer}</p>
+          <StudyText>{s.content?.oral_answer}</StudyText>
           <ul>
             {s.content?.must_know?.map((p, i) => (
               <li key={i}>{p.text}</li>

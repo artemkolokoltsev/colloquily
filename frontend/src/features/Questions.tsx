@@ -1,3 +1,4 @@
+import { StudyText } from "../components/StudyText";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { api, operation } from "../api/client";
@@ -263,7 +264,7 @@ export function Questions({
                   <span className="row-preview">{q.question_text}</span>
                 </summary>
                 <div className="row-detail">
-                  <p>{q.question_text}</p>
+                  <StudyText>{q.question_text}</StudyText>
                   <h4>{t("ui.s6d139c6975")}</h4>
                   {q.expected_core_points?.length ? (
                     <ul>

@@ -1,3 +1,6 @@
+import { PracticeGuide } from "./PracticeGuide";
+import { practiceModes, type PracticeMode } from "./practiceLearning";
+import { StudyText } from "../components/StudyText";
 import { useTranslation } from "react-i18next";
 import { useEffect, useRef, useState } from "react";
 import { api, operation } from "../api/client";
@@ -20,7 +23,7 @@ export function Practice({
   initialCount?: number;
 }) {
   const { t } = useTranslation();
-  const [mode, setMode] = useState(
+  const [mode, setMode] = useState<PracticeMode>(
     initialTopic || initialCount > 1 ? "random_practice" : "single_question",
   );
   const [ids, setIds] = useState([selected]);
@@ -48,8 +51,24 @@ export function Practice({
       .split(",")
       .map((value) => value.trim())
       .filter(Boolean);
+  const [availableQuestions, setAvailableQuestions] = useState<number | null>(
+    null,
+  );
   const [preparation, setPreparation] = useState(0);
   const [started, setStarted] = useState(Date.now());
+  useEffect(() => {
+    let current = true;
+    void api<{ questions: number }>(`/exams/${selected}/preparation`)
+      .then((value) => {
+        if (current) setAvailableQuestions(value.questions);
+      })
+      .catch((e) => {
+        if (current) setError(String(e));
+      });
+    return () => {
+      current = false;
+    };
+  }, [selected]);
   useEffect(() => {
     api<typeof history>(`/practice?subject_id=${selected}`)
       .then(setHistory)
@@ -133,6 +152,12 @@ export function Practice({
       submitting.current = false;
     }
   }
+  const validSubjectCount =
+    mode === "full_colloquium"
+      ? ids.length === 3
+      : mode === "multi_subject"
+        ? ids.length >= 2 && ids.length <= 3
+        : true;
   const active = session && ["answering", "preparing"].includes(session.status);
   return (
     <section>
@@ -149,49 +174,62 @@ export function Practice({
               t("ui.s76732acc88")}{" "}
             {t("ui.sab261a436a")}{" "}
           </p>
+          <div
+            className="practice-modes"
+            role="group"
+            aria-label={t("ui.chooseMode")}
+          >
+            {practiceModes.map((value) => (
+              <button
+                key={value}
+                className="mode-card"
+                aria-pressed={mode === value}
+                aria-controls="practice-mode-guide"
+                onClick={() => {
+                  setMode(value);
+                  setIds([selected]);
+                }}
+              >
+                <strong>
+                  {t(`dynamic.${value}`, {
+                    defaultValue: value.replaceAll("_", " "),
+                  })}
+                </strong>
+                <span>
+                  {t(`ui.mode_${value}` as "ui.mode_single_question")}
+                </span>
+                <span className="mode-focus">
+                  {t(`practiceLearning.${value}_focus`)}
+                </span>
+              </button>
+            ))}
+          </div>
+          <PracticeGuide key={mode} mode={mode} />
           <details>
             <summary>{t("ui.sef46ed5421")}</summary>
-            <label>
-              {" "}
-              {t("ui.s5e23ec6a30")}{" "}
-              <select value={mode} onChange={(e) => setMode(e.target.value)}>
-                {[
-                  "single_question",
-                  "rapid_practice",
-                  "weak_topic",
-                  "random_practice",
-                  "oral_exam_simulation",
-                  "subject_simulation",
-                  "multi_subject",
-                  "full_colloquium",
-                ].map((m) => (
-                  <option key={m} value={m}>
-                    {t(`dynamic.${m}`, {
-                      defaultValue: m.replaceAll("_", " "),
-                    })}
-                  </option>
+            {["multi_subject", "full_colloquium"].includes(mode) && (
+              <fieldset>
+                <legend>{t("ui.s16aaf28e05")}</legend>
+                <p>{t("practiceLearning.selectionHelp")}</p>
+                {exams.map((e) => (
+                  <label className="inline" key={e.id}>
+                    <input
+                      type="checkbox"
+                      checked={ids.includes(e.id)}
+                      disabled={!ids.includes(e.id) && ids.length >= 3}
+                      onChange={(ev) =>
+                        setIds(
+                          ev.target.checked
+                            ? [...ids, e.id]
+                            : ids.filter((id) => id !== e.id),
+                        )
+                      }
+                    />
+                    {e.name}
+                  </label>
                 ))}
-              </select>
-            </label>
-            <fieldset>
-              <legend>{t("ui.s16aaf28e05")}</legend>
-              {exams.map((e) => (
-                <label className="inline" key={e.id}>
-                  <input
-                    type="checkbox"
-                    checked={ids.includes(e.id)}
-                    onChange={(ev) =>
-                      setIds(
-                        ev.target.checked
-                          ? [...ids, e.id]
-                          : ids.filter((id) => id !== e.id),
-                      )
-                    }
-                  />
-                  {e.name}
-                </label>
-              ))}
-            </fieldset>
+              </fieldset>
+            )}
             <label>
               {" "}
               {t("ui.s2762dc6987")}{" "}
@@ -271,13 +309,32 @@ export function Practice({
               {t("ui.s6eab5bfe15")}{" "}
             </label>
           </details>
+          {!validSubjectCount && (
+            <p role="status">{t("practiceLearning.selectionHelp")}</p>
+          )}
+          {availableQuestions === 0 && (
+            <p className="setup-notice" role="status">
+              {t("ui.prepareBeforePractice")}
+            </p>
+          )}
           <button
             className="primary"
-            disabled={busy}
+            disabled={
+              busy ||
+              !validSubjectCount ||
+              !ids.length ||
+              ids.length > 3 ||
+              (!["multi_subject", "full_colloquium"].includes(mode) &&
+                !availableQuestions)
+            }
             onClick={() =>
               act(async () => {
                 const r = await api<Run>("/practice", "POST", {
-                  subject_ids: ids,
+                  subject_ids: ["multi_subject", "full_colloquium"].includes(
+                    mode,
+                  )
+                    ? ids
+                    : [selected],
                   mode,
                   preparation_seconds: preparation,
                   answer_seconds: seconds,
@@ -312,6 +369,7 @@ export function Practice({
         </>
       ) : (
         <>
+          <PracticeGuide key={run.id} mode={run.mode} compact />
           <div className="toolbar">
             <h3>
               {" "}
@@ -367,7 +425,9 @@ export function Practice({
               )}
               {active && (
                 <>
-                  <h3>{session.current_question?.question_text}</h3>
+                  <StudyText>
+                    {session.current_question?.question_text}
+                  </StudyText>
                   <textarea
                     aria-label={t("ui.sb6733159ba")}
                     placeholder={t("ui.s3ec2097bdc")}

@@ -1,3 +1,4 @@
+import { StudyText } from "../components/StudyText";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { lazy, Suspense } from "react";
@@ -176,6 +177,40 @@ export function Materials({
           return (
             <article key={document.id}>
               <h3>{document.title}</h3>
+              <button
+                disabled={busy || processing}
+                onClick={() =>
+                  void act(async () => {
+                    const passages = await api<Unit[]>(
+                      `/exams/${exam}/review?document_id=${document.id}`,
+                    );
+                    if (!passages.length) throw new Error(t("ui.noStudyText"));
+                    const text = passages
+                      .sort(
+                        (a, b) =>
+                          (a.source_start || 0) - (b.source_start || 0) ||
+                          a.id - b.id,
+                      )
+                      .map(
+                        (unit) =>
+                          `## ${unit.source_location} · ${unit.review_status}\n\n${unit.content}`,
+                      )
+                      .join("\n\n");
+                    const url = URL.createObjectURL(
+                      new Blob([`# ${document.title}\n\n${text}`], {
+                        type: "text/markdown;charset=utf-8",
+                      }),
+                    );
+                    const link = window.document.createElement("a");
+                    link.href = url;
+                    link.download = "study-text.md";
+                    link.click();
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                  })
+                }
+              >
+                {t("ui.exportStudyText")}
+              </button>
               <span className="status-badge">
                 {t(
                   document.processing_status === "raw"
@@ -284,7 +319,7 @@ export function Materials({
           );
         })}
       </div>
-      <details>
+      <details open>
         <summary>{t("ui.practicePreparation")}</summary>
         <article className="preparation-card">
           <h3>
@@ -470,6 +505,8 @@ function StudentEvidence({
       {editing ? (
         <label>
           {t("ui.redesignEditContent")}
+          <p className="muted">{t("ui.mathHelp")}</p>
+          <StudyText>{content}</StudyText>
           <textarea
             value={content}
             onChange={(event) => setContent(event.target.value)}
@@ -477,7 +514,7 @@ function StudentEvidence({
           />
         </label>
       ) : (
-        <p>{unit.content}</p>
+        <StudyText>{unit.content}</StudyText>
       )}
       {unit.review_status !== "accepted" && (
         <p className="muted">

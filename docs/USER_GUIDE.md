@@ -80,3 +80,46 @@ this directory to troubleshoot without making a backup.
 For bug reports, use [GitHub Issues](https://github.com/artemkolokoltsev/colloquily/issues).
 Include app version, operating system and reproducible steps. Do not upload
 private lecture material, databases, model history or secrets.
+
+
+## First-run setup and practice choices
+
+Follow the numbered path: **Exam topic → Upload PDFs → Choose local AI → Start practice**. The exam name is your main subject (for example, Quantum physics). Each exam has its own materials and progress. An exam without prepared questions reopens on Materials after restarting, so you can continue setup. Upload PDFs or Markdown and keep the practice preparation panel open to follow progress, retry preparation, and start a session.
+
+Practice now presents all eight modes as visible cards, with a short explanation. Expand session options to adjust time, topic filters, and question count where supported. Multi-subject modes accept up to three exams. Single-subject modes always use the current exam.
+
+### Comparing local practice models
+
+AI setup includes a model library. You can explicitly download several models, then select an installed model for this exam's answer feedback. Other task choices and the embedding model are preserved. Existing installed text models also appear in the library. Downloads are shared between exams; selections are exam-specific.
+
+The initial comparison set is Qwen 2.5 1.5B (small), Qwen 3 4B (medium), Qwen 3 8B (larger), and Gemma 3 4B (alternative family). Sizes shown are approximate weight downloads, not RAM requirements. These are comparison candidates, not measured quality rankings. Start with the hardware-based recommendation, then compare feedback on the same course questions. Actual inference speed, correctness, and memory use need validation on your machine. Small models may fail preparation quality checks.
+
+Upstream model descriptions and available variants: [Qwen 2.5](https://ollama.com/library/qwen2.5), [Qwen 3](https://ollama.com/library/qwen3), [Gemma 3](https://ollama.com/library/gemma3).
+
+### Readable formulas and Markdown
+
+Study answers, source passages, detailed questions, and feedback support Markdown, tables, and LaTeX mathematics through [react-markdown](https://github.com/remarkjs/react-markdown) and [remark-math / KaTeX](https://github.com/remarkjs/remark-math). Use `$x^2$` for inline math and a `$$` block for display equations. Rendering and fonts work locally without a CDN.
+
+The PDF reader preserves the original visual page. Its notes editor has a rendered preview and **Export notes as Markdown**. **Export study text (.md)** on a material exports its processed passages, source locations, and review status, preserving any LaTeX already present. Process the document first. Review and correct extracted passages against the original PDF before confirming them for practice; corrected passages can contain Markdown and LaTeX.
+
+This does not provide automatic equation OCR or reconstruct missing PDF symbols. A formula stored as positioned glyphs or an image may still require manual transcription. Personal notes stay separate from course evidence. Markdown exports retain review labels and can include passages that still need checking.
+
+
+### What the practice modes train
+
+Each mode now shows a learning focus, a concrete goal, an instruction for how to practise, and the actual session format. The selected mode's guide includes expandable research notes with citations; it is also available during a run. English and German are supported. Research links open in your browser from the desktop app.
+
+| Mode | Intended practice | Feedback / format |
+| --- | --- | --- |
+| Single question | Retrieve and explain one concept | Feedback after submission |
+| Rapid practice | Give concise, accurate answers | Feedback after each answer; short time budget |
+| Weak topic | Identify and repair gaps using earlier attempts | Due questions first, normal pool if no history; evaluate afterward |
+| Random practice | Identify the relevant concept in a varied selection | Configurable count and filters; evaluate afterward |
+| Oral exam simulation | Structure explanations within a time budget | Configurable count and filters; evaluate afterward |
+| Subject simulation | Sustain explanations across one subject | Configured exam duration; evaluate afterward |
+| Multiple subjects | Rehearse changing subject context | Two or three consecutive subject blocks; evaluate afterward |
+| Full colloquium | Rehearse the complete three-subject format | Exactly three exams, 15 minutes each including preparation; evaluate afterward |
+
+The explanations draw on [retrieval-practice experiments (Roediger & Karpicke, 2006)](https://doi.org/10.1111/j.1467-9280.2006.01693.x), [a self-explanation meta-analysis (Bisra et al., 2018)](https://doi.org/10.1007/s10648-018-9434-x), [feedback research (Hattie & Timperley, 2007)](https://doi.org/10.3102/003465430298487), [a synthesis of distributed practice (Cepeda et al., 2006)](https://doi.org/10.1037/0033-2909.132.3.354), and [a classroom trial of interleaved mathematics practice (Rohrer et al., 2020)](https://doi.org/10.1037/edu0000367).
+
+These are learning principles, not validation of the app's grading or rankings of its modes. The guide distinguishes self-explanation from merely reading aloud, random ordering from deliberate interleaving, and timed format rehearsal from a demonstrated learning benefit. Speech is not assessed; evaluation uses the submitted text. Spacing is advice to revisit material later, not a claim that every mode implements an optimal repetition schedule.

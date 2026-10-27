@@ -1,10 +1,11 @@
 /** Exercise the built reader under the exact desktop CSP, never a dev server. */
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, mkdir } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import { chromium, webkit } from "playwright";
 
+await mkdir("output/playwright", { recursive: true });
 const root = resolve("frontend/dist");
 const policy = JSON.parse(await readFile("src-tauri/tauri.conf.json", "utf8"))
   .app.security.csp;
@@ -58,9 +59,15 @@ try {
       page.on("pageerror", (e) => crashes.push(String(e)));
       await page.addInitScript(
         ({ origin, token }) => {
+          window.learningReferencesOpened = [];
           window.__TAURI_INTERNALS__ = {
-            invoke: async (command) =>
-              command === "backend_connection" ? { url: origin, token } : null,
+            invoke: async (command, args) => {
+              if (command === "backend_connection")
+                return { url: origin, token };
+              if (command === "open_learning_reference")
+                window.learningReferencesOpened.push(args.reference);
+              return null;
+            },
           };
           window.pdfPolicyViolations = [];
           document.addEventListener("securitypolicyviolation", (e) =>
@@ -74,6 +81,21 @@ try {
       let failSource = false,
         failNotes = false,
         sourceRequests = 0;
+      let emptyWorkspace = false;
+      let language = "en";
+      let modelSettings = {
+        task_models: Object.fromEntries(
+          [
+            "cleaning",
+            "topic_extraction",
+            "question_generation",
+            "answer_evaluation",
+            "answering",
+            "examiner_follow_up",
+          ].map((task) => [task, "qwen3:4b"]),
+        ),
+        embedding_config: { model: "embeddinggemma:latest" },
+      };
       const notes = { 1: "Saved first-page note" };
       await page.route("**/api/**", async (route) => {
         const request = route.request();
@@ -88,16 +110,50 @@ try {
           );
         const json = (value) => route.fulfill({ json: value });
         if (path === "/health") return json({ status: "ready" });
-        if (path === "/preferences") return json({ language: "en" });
+        if (path === "/preferences") return json({ language });
+        if (path === "/models/status")
+          return json({
+            ollama: "available",
+            installed: ["qwen3:4b", "gemma3:4b"],
+            required: [],
+            missing: [],
+          });
+        if (path === "/system/storage")
+          return json({ free_bytes: 30 * 1024 ** 3 });
+        if (path === "/exams/1/models") {
+          if (request.method() === "PATCH") {
+            const body = request.postDataJSON();
+            modelSettings = {
+              task_models: body.task_models,
+              embedding_config: { model: body.embedding_model },
+            };
+          }
+          return json(modelSettings);
+        }
+        if (path === "/practice") return json([]);
+        if (path === "/exams" && request.method() === "POST") {
+          assert.equal(request.postDataJSON().name, "Quantum physics");
+          emptyWorkspace = false;
+          return json({
+            id: 1,
+            name: "Quantum physics",
+            slug: "quantum-physics",
+            exam_duration_minutes: 15,
+          });
+        }
         if (path === "/exams")
-          return json([
-            {
-              id: 1,
-              name: "PDF regression",
-              slug: "pdf-regression",
-              exam_duration_minutes: 15,
-            },
-          ]);
+          return json(
+            emptyWorkspace
+              ? []
+              : [
+                  {
+                    id: 1,
+                    name: "PDF regression",
+                    slug: "pdf-regression",
+                    exam_duration_minutes: 15,
+                  },
+                ],
+          );
         if (path.endsWith("/models/readiness")) return json({ state: "ready" });
         if (path.endsWith("/learning"))
           return json({
@@ -258,6 +314,39 @@ try {
         await page.locator(".page-notes textarea").inputValue(),
         "Page-two note",
       );
+      await page.locator(".page-notes textarea").fill(String.raw`# Formula notes
+
+Inline $x^2$ and display:
+
+$$
+\frac{a}{b}
+$$
+
+| Quantity | Value |
+| --- | --- |
+| Energy | $mc^2$ |
+
+<script>window.untrustedMath = true</script>`);
+      await page.locator(".page-notes .katex-display").waitFor();
+      assert.equal(
+        await page.locator(".page-notes .study-text table").count(),
+        1,
+      );
+      assert.equal(await page.evaluate(() => window.untrustedMath), undefined);
+      await page.screenshot({
+        path: `output/playwright/math-notes-${name}.png`,
+        fullPage: true,
+      });
+      const [download] = await Promise.all([
+        page.waitForEvent("download"),
+        page
+          .getByRole("button", {
+            name: "Export notes as Markdown",
+            exact: true,
+          })
+          .click(),
+      ]);
+      assert.equal(download.suggestedFilename(), "study-notes.md");
       await close();
       failSource = true;
       const attempts = sourceRequests;
@@ -295,6 +384,132 @@ try {
       assert.deepEqual(
         await page.evaluate(() => window.pdfPolicyViolations),
         [],
+      );
+      await close();
+      await page.getByRole("button", { name: /4.*Start practice/ }).click();
+      await page.locator(".mode-card").first().waitFor();
+      assert.equal(await page.locator(".mode-card").count(), 8);
+      await page.screenshot({
+        path: `output/playwright/practice-modes-${name}.png`,
+        fullPage: true,
+      });
+      await page
+        .getByRole("button", { name: /One question, then detailed feedback/ })
+        .click();
+      assert.equal(
+        await page.locator('.mode-card[aria-pressed="true"]').count(),
+        1,
+      );
+      const guide = page.locator("#practice-mode-guide");
+      await guide
+        .getByText("Why this can help · learning research", { exact: true })
+        .click();
+      await guide.getByRole("link", { name: /Roediger & Karpicke/ }).click();
+      await page.waitForFunction(
+        () => window.learningReferencesOpened.length === 1,
+      );
+      assert.deepEqual(
+        await page.evaluate(() => window.learningReferencesOpened),
+        ["retrieval"],
+      );
+      assert.equal(
+        await guide.getByRole("link", { name: /Bisra/ }).getAttribute("href"),
+        "https://doi.org/10.1007/s10648-018-9434-x",
+      );
+      assert.ok((await guide.innerText()).includes("speech is not assessed"));
+      const modeNames = [
+        "Single question",
+        "Random practice",
+        "Weak topic",
+        "Oral exam simulation",
+        "Rapid practice",
+        "Subject simulation",
+        "Multiple subjects",
+        "Full colloquium",
+      ];
+      for (const title of modeNames) {
+        await page
+          .locator(".mode-card")
+          .filter({
+            has: page.locator("strong", { hasText: new RegExp(`^${title}$`) }),
+          })
+          .click();
+        assert.equal(
+          await guide.getByRole("heading", { level: 3 }).innerText(),
+          title,
+        );
+        assert.equal(await guide.locator("dt").count(), 3);
+        assert.ok((await guide.innerText()).includes("After practice:"));
+      }
+      assert.ok(
+        (await guide.innerText()).includes(
+          "Exactly three exams with 15 minutes per subject",
+        ),
+      );
+      await page
+        .locator(".mode-card")
+        .filter({ hasText: "Random practice" })
+        .click();
+      await guide
+        .getByText("Why this can help · learning research", { exact: true })
+        .click();
+      assert.ok(
+        (await guide.innerText()).includes(
+          "random order is not automatically interleaving",
+        ),
+      );
+      await guide.screenshot({
+        path: `output/playwright/practice-learning-${name}.png`,
+      });
+      await page.setViewportSize({ width: 390, height: 900 });
+      assert.ok(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth - innerWidth <= 1,
+        ),
+      );
+      await page.setViewportSize({ width: 1280, height: 1000 });
+      language = "de";
+      await page.reload();
+      await page.getByRole("button", { name: /4.*Übung starten/ }).click();
+      await guide
+        .getByRole("heading", { name: "Zufällige Übung", exact: true })
+        .waitFor();
+      assert.ok((await guide.innerText()).includes("So übst du"));
+      language = "en";
+      await page.reload();
+      await page.getByRole("button", { name: /3.*Choose local AI/ }).click();
+      await page.locator(".model-library article").first().waitFor();
+      await page
+        .locator(".model-library article")
+        .filter({
+          has: page.getByRole("heading", { name: "gemma3:4b", exact: true }),
+        })
+        .getByRole("button")
+        .click();
+      await page
+        .getByRole("status")
+        .filter({ hasText: "Practice model saved" })
+        .waitFor();
+      assert.equal(modelSettings.task_models.answer_evaluation, "gemma3:4b");
+      assert.equal(modelSettings.task_models.answering, "qwen3:4b");
+      assert.equal(
+        modelSettings.embedding_config.model,
+        "embeddinggemma:latest",
+      );
+      emptyWorkspace = true;
+      await page.reload();
+      await page
+        .getByRole("textbox", { name: "New exam name" })
+        .fill("Quantum physics");
+      await page
+        .getByRole("button", { name: "Create exam & add PDFs →" })
+        .click();
+      await page
+        .getByRole("button", { name: "Open PDF", exact: true })
+        .waitFor();
+      assert.equal(
+        await page.locator('.setup-steps [aria-current="step"]').innerText(),
+        "2\nUpload PDFs",
       );
       assert.deepEqual(crashes, []);
       console.log(

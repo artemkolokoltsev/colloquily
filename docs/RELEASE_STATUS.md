@@ -1,18 +1,45 @@
 # Release status
 
-Current candidate: **0.1.4, unsigned responsive workspace update**. Publication uses
-`v0.1.4-rc.1` and is gated by real-model learning acceptance plus Windows x64,
-Intel macOS and Apple Silicon macOS native builds plus the production-CSP Chromium/WebKit PDF regression on the tagged revision.
+Current candidate: **0.1.5, unsigned guided setup and explained practice update**.
+The local release branch is `release/0.1.5`; the release tag is `v0.1.5-rc.1`.
+See [the release notes](RELEASE_NOTES_0.1.5.md) and [the user guide](USER_GUIDE.md).
 
-Local verification: 84 backend/API tests, 65 core regressions and 4 frontend
-tests passed. Translation parity, TypeScript/Vite, Rust checks, the clean frozen
-backend/self-test/lifecycle smoke and unsigned Intel macOS app build passed.
-Responsive layout checks cover 390–3440px in Chromium and WebKit.
-See [the responsive update](RELEASE_NOTES_0.1.4.md), [the PDF hotfix report](RELEASE_NOTES_0.1.3.md) and [the original implementation and migration report](RELEASE_NOTES_0.1.2.md).
+## Local verification
 
-Production signing/notarization and signed updater credentials remain separate
-release gates. Published previews are listed under
-[GitHub Releases](https://github.com/artemkolokoltsev/colloquily/releases).
+- Version agreement across application metadata, both lockfiles, backend API
+  and Settings fallback; release-candidate tag validation.
+- 87 backend/API/distribution tests (84 full-suite tests plus three new notice
+  regressions), 65 core regressions and four frontend utility tests passed.
+- English/German catalog parity, TypeScript/Vite build and locked Rust check passed.
+- Production Chromium/WebKit checks passed for PDF rendering, formula notes,
+  Markdown export, onboarding, all eight learning guides, research links,
+  language switching and per-exam model selection.
+- The Intel macOS frozen backend rebuilt and passed its self-test and lifecycle
+  smoke, including authenticated loopback access and parent-exit shutdown.
+- Release notices collected 139 frontend and 324 target Rust packages. The
+  omitted math-package licenses now use reviewed, version-pinned upstream text,
+  with Windows checkout line-ending coverage. Production npm audit: zero findings.
+
+## Build and publication
+
+Push the prepared branch and tag together:
+
+```bash
+git push --atomic -u origin release/0.1.5 v0.1.5-rc.1
+```
+
+The tag triggers `.github/workflows/desktop.yml`. It rebuilds the Python sidecar
+and installers for Windows x64, Intel macOS and Apple Silicon macOS. Publication
+waits for those builds, real local-model learning acceptance, and the production
+Chromium/WebKit regression. The workflow then creates the unsigned GitHub
+prerelease with three installers, license/source archives and checksums, using
+`docs/RELEASE_NOTES.md` as its release description. A branch-only push does not
+start this release pipeline.
+
+The release is prepared locally; remote builds and publication occur after the
+push and are not yet verified for this tag. This preview requires a manual
+installer update. Production signing/notarization and signed updater credentials
+remain separate release gates.
 
 ## Historical v0.1.0 RC4 verification
 

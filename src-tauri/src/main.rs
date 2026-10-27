@@ -28,6 +28,21 @@ fn open_ollama_download(app: tauri::AppHandle) -> Result<(), String> {
     app.shell().open("https://ollama.com/download", None).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn open_learning_reference(app: tauri::AppHandle, reference: &str) -> Result<(), String> {
+    // Open only the research references bundled with the practice guide.
+    let url = match reference {
+        "retrieval" => "https://doi.org/10.1111/j.1467-9280.2006.01693.x",
+        "explanation" => "https://doi.org/10.1007/s10648-018-9434-x",
+        "feedback" => "https://doi.org/10.3102/003465430298487",
+        "spacing" => "https://doi.org/10.1037/0033-2909.132.3.354",
+        "interleaving" => "https://doi.org/10.1037/edu0000367",
+        _ => return Err("Unknown learning reference".into()),
+    };
+    #[allow(deprecated)]
+    app.shell().open(url, None).map_err(|e| e.to_string())
+}
+
 fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
@@ -37,7 +52,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(Backend { child: Mutex::new(None), connection: Mutex::new(Err("starting".into())) })
-        .invoke_handler(tauri::generate_handler![backend_connection, open_ollama_download])
+        .invoke_handler(tauri::generate_handler![backend_connection, open_ollama_download, open_learning_reference])
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {

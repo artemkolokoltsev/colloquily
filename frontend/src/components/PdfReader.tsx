@@ -7,6 +7,7 @@ import {
 } from "pdfjs-dist/legacy/build/pdf.mjs";
 import worker from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import { api, sourceBytes } from "../api/client";
+import { StudyText } from "./StudyText";
 import { ErrorNotice } from "./Common";
 GlobalWorkerOptions.workerSrc = worker;
 interface Note {
@@ -361,6 +362,32 @@ export function PdfReader({
             {saving ? t("ui.savingNote") : t("ui.notesAutosave")}
           </p>
           <p className="muted">{t("ui.notesPrivate")}</p>
+          <p className="muted">{t("ui.mathHelp")}</p>
+          <StudyText>{notes[page]}</StudyText>
+          <button
+            disabled={
+              !loaded || !Object.values(notes).some((text) => text.trim())
+            }
+            onClick={() => {
+              const content = Object.entries(notes)
+                .filter(([, text]) => text.trim())
+                .sort(([a], [b]) => Number(a) - Number(b))
+                .map(
+                  ([number, text]) => `## ${t("ui.page")} ${number}\n\n${text}`,
+                )
+                .join("\n\n");
+              const url = URL.createObjectURL(
+                new Blob([content], { type: "text/markdown;charset=utf-8" }),
+              );
+              const link = window.document.createElement("a");
+              link.href = url;
+              link.download = "study-notes.md";
+              link.click();
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }}
+          >
+            {t("ui.exportNotes")}
+          </button>
           <div className="toolbar">
             {Object.entries(notes)
               .filter(([, text]) => text.trim())
