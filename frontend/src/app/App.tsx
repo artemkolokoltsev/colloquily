@@ -270,7 +270,14 @@ export default function App() {
             ))}
           </nav>
         </details>
-        <small>{t("app.localPromise")}</small>
+        <footer className="sidebar-footer">
+          <strong>
+            Colloquily <span>v{appPackage.version}</span>
+          </strong>
+          <small>
+            © {new Date().getFullYear()} Colloquily. {t("ui.rightsReserved")}
+          </small>
+        </footer>
       </aside>
       <main>
         <UpdateNotice
@@ -443,12 +450,6 @@ export default function App() {
           </div>
         )}
       </main>
-      <footer
-        className="app-stamp"
-        aria-label={`Colloquily ${appPackage.version}`}
-      >
-        Colloquily <span>v{appPackage.version}</span>
-      </footer>
     </div>
   );
 }

@@ -74,6 +74,8 @@ export interface Session {
   evaluation?: { percent_correct?: number; german_grade?: number };
 }
 export interface Run {
+  evaluation_status?: string;
+  evaluation_job?: Job;
   id: number;
   status: string;
   mode: string;

@@ -341,5 +341,21 @@
   "practiceNextSubject": "Next subject",
   "practiceComplete": "Session complete",
   "practiceBack": "Back to practice modes",
-  "practiceReview": "Review this session"
+  "practiceReview": "Review this session",
+  "rightsReserved": "All rights reserved.",
+  "retryEvaluation": "Retry evaluation",
+  "autoEvaluating": "Your session is complete. Evaluating your answers automatically…",
+  "practiceResumeHelp": "You have an unfinished session. Resume it, or choose another mode to end it and start fresh.",
+  "practiceResume": "Resume session",
+  "practiceDiscard": "End unfinished session",
+  "chatIntro": "Discuss your exam materials. Follow-up messages use recent conversation context; answers still need support from your sources.",
+  "chatConversation": "Exam conversation",
+  "chatEmpty": "Ask a question about your materials to start chatting.",
+  "chatLoading": "Loading conversation…",
+  "chatYou": "You",
+  "chatThinking": "Checking your sources and composing a reply…",
+  "chatMessage": "Message",
+  "chatPlaceholder": "Ask a question or follow up on an answer…",
+  "chatSend": "Send",
+  "chatHint": "Enter to send · Shift+Enter for a new line. Conversations are stored locally for this exam."
 }

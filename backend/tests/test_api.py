@@ -18,6 +18,57 @@ from fastapi import UploadFile
 from io import BytesIO
 
 class ArchitectureTests(unittest.TestCase):
+    def test_all_eight_practice_modes_start_and_empty_runs_finish(self):
+        fixture = Path(__file__).resolve().parents[2] / 'tests/core/fixtures/question_pool.json'
+        with TestClient(app) as client:
+            ids=[]
+            for name in ['Mode first', 'Mode second', 'Mode third']:
+                ident=client.post('/api/exams',json={'name':name}).json()['id']
+                imported=client.post(f'/api/exams/{ident}/questions/import',files={'file':('pool.json',fixture.read_bytes(),'application/json')})
+                self.assertEqual(imported.status_code,200,imported.text);ids.append(ident)
+            for mode in ['single_question','rapid_practice','weak_topic','random_practice','oral_exam_simulation','subject_simulation','multi_subject','full_colloquium']:
+                with self.subTest(mode=mode):
+                    selected=ids if mode=='full_colloquium' else ids[:2] if mode=='multi_subject' else ids[:1]
+                    response=client.post('/api/practice',json={'subject_ids':selected,'mode':mode,'question_count':3})
+                    self.assertEqual(response.status_code,201,response.text)
+                    run=response.json()
+                    session=client.post(f'/api/sessions/{run["sessions"][0]["id"]}/begin').json()
+                    self.assertEqual(session['status'],'answering',session)
+                    self.assertIsNotNone(session['current_question'])
+                    finished=client.post(f'/api/practice/{run["id"]}/finish',json={})
+                    self.assertEqual(finished.status_code,200,finished.text)
+
+    def test_last_answer_and_timeout_trigger_evaluation_without_manual_post(self):
+        from services import database as db
+        from contextlib import closing
+        fixture=Path(__file__).resolve().parents[2]/'tests/core/fixtures/question_pool.json'
+        questions=json.loads(fixture.read_text())
+        questions.append({**questions[0], 'id':'AUTO002', 'concept_id':'auto-second', 'question':'Explain a second learning principle.'})
+        with TestClient(app) as client, patch('backend.services.workflows.evaluate',return_value={'status':'evaluated','score':4,'correct':[],'missing':[],'scores':{}}) as evaluate:
+            ident=client.post('/api/exams',json={'name':'Auto evaluation'}).json()['id']
+            client.post(f'/api/exams/{ident}/questions/import',files={'file':('pool.json',json.dumps(questions).encode(),'application/json')})
+            for timed in [False, True]:
+                run=client.post('/api/practice',json={'subject_ids':[ident],'mode':'random_practice','question_count':3 if timed else 1}).json()
+                session=client.post(f'/api/sessions/{run["sessions"][0]["id"]}/begin').json()
+                answer=client.post(f'/api/sessions/{session["id"]}/answer',json={'question_id':session['current_question']['id'],'answer':'A synthetic answer.'}).json()
+                for _ in range(100):
+                    answer=client.get(f'/api/jobs/{answer["id"]}').json()
+                    if answer['status'] not in {'queued','running'}: break
+                    time.sleep(.02)
+                self.assertEqual(answer['status'],'completed',answer)
+                if timed:
+                    with closing(db._connect()) as connection:
+                        connection.execute("UPDATE exam_sessions SET deadline_at='2000-01-01T00:00:00+00:00' WHERE id=?",(session['id'],));connection.commit()
+                    self.assertEqual(client.get(f'/api/sessions/{session["id"]}').json()['status'],'time_expired')
+                for _ in range(100):
+                    result=client.get(f'/api/practice/{run["id"]}').json()
+                    if result['evaluation_status']=='completed': break
+                    time.sleep(.02)
+                self.assertEqual(result['evaluation_status'],'completed',result)
+                self.assertEqual(result['sessions'][0]['attempts'][0]['evaluation']['score'],4)
+                self.assertEqual(result['overall_evaluation']['german_grade'],2.0)
+            self.assertEqual(evaluate.call_count,2)
+
     def test_answer_jobs_are_deduplicated_per_question_not_across_questions(self):
         from backend.api.routes import answer
         from backend.models.api import AnswerInput

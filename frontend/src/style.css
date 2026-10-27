@@ -1429,8 +1429,6 @@ h3 {
 .update-notice .prose { max-height: 240px; overflow: auto; white-space: pre-wrap; }
 
 /* One navigation hierarchy; focused practice lives in a quiet single view. */
-.app-stamp { position: fixed; right: 16px; bottom: 0; z-index: 40; padding: 7px 12px; border: 1px solid var(--separator); border-bottom: 0; border-radius: 10px 10px 0 0; background: var(--surface); color: var(--secondary); font-size: 11px; pointer-events: none; }
-.app-stamp span { margin-left: 8px; opacity: .75; font-variant-numeric: tabular-nums; }
 .shell > main { padding-bottom: 52px; }
 .practice-picker > h2 { font-size: clamp(24px, 3vw, 36px); letter-spacing: -.035em; }
 .practice-modes { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-top: 28px; }
@@ -1474,3 +1472,20 @@ body.practice-focus .shell > main { margin: 0; max-width: none; width: 100%; pad
 .ai-setup-list > li { background: var(--surface); border: 1px solid var(--separator); border-radius: 16px; padding: 22px; }
 .ai-setup-list h3 { margin-top: 0; }
 .model-advanced { margin-top: 24px; }
+
+.shell > aside { display: flex; flex-direction: column; }
+.sidebar-footer { margin-top: auto; padding: 32px 10px 0; color: var(--secondary); font-size: 12px; }
+.sidebar-footer strong, .sidebar-footer small { display: block; }
+.sidebar-footer span { font-weight: 400; margin-left: 5px; }
+.sidebar-footer small { margin-top: 6px; font-size: 10px; line-height: 1.6; }
+.study-chat { display: flex; flex-direction: column; height: calc(100dvh - 210px); min-height: 480px; max-width: 900px !important; margin-inline: auto; }
+.study-chat > header h2 { margin-bottom: 6px; }
+.chat-transcript { flex: 1; min-height: 180px; overflow-y: auto; padding: 16px 12px; scrollbar-gutter: stable; }
+.chat-message { max-width: 90%; margin: 12px 0; padding: 16px 20px; border-radius: 18px; overflow-wrap: anywhere; }
+.chat-user { margin-left: auto; background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
+.chat-assistant { margin-right: auto; }
+.chat-empty { text-align: center; color: var(--secondary); padding: 50px 16px; }
+.chat-composer { width: 100%; max-width: none; padding-top: 16px; border-top: 1px solid var(--separator); }
+.chat-composer textarea { min-height: 88px; max-height: 220px; width: 100%; resize: vertical; }
+.chat-composer-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+@media (max-width: 700px) { .study-chat { height: 75dvh; } .chat-message { max-width: 100%; } }

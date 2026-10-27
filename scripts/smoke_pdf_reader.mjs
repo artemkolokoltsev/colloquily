@@ -102,6 +102,7 @@ try {
       let practiceReady = false;
       let practiceSession = {id: 901, subject_id: 1, status: 'created', remaining_seconds: 60, countdown_visible: true, sources: [], current_question: {id: 77, question_text: 'Explain why $E=mc^2$ relates mass and energy.'}};
       let practiceRun = {id: 900, status: 'running', mode: 'random_practice', sessions: [practiceSession]};
+      const chatHistory = [];
       const notes = { 1: "Saved first-page note" };
       await page.route("**/api/**", async (route) => {
         const request = route.request();
@@ -136,15 +137,26 @@ try {
           }
           return json(modelSettings);
         }
+        if (path === '/exams/1/history') return json([...chatHistory].reverse());
+        if (path === '/exams/1/ask') {
+          const body = request.postDataJSON();
+          assert.deepEqual(body.history_ids, chatHistory.slice(-4).map(turn => turn.id));
+          chatHistory.push({id:chatHistory.length+1,input_text:body.question,output_text:'Mass and energy are related by $E=mc^2$.',sources:[]});
+          return json({id:'chat-job',status:'completed',result:{}});
+        }
         if (path === '/practice') {
-          if (request.method() === 'GET') return json([]);
+          if (request.method() === 'GET') return json(practiceRun.status === 'running' ? [{id:900,status:'running'}] : []);
+          practiceSession.status = 'created';
+          practiceRun.status = 'running';
           practiceRun.mode = request.postDataJSON().mode;
+          const selected = request.postDataJSON().subject_ids;
+          assert.equal(selected.length, practiceRun.mode === 'full_colloquium' ? 3 : practiceRun.mode === 'multi_subject' ? 2 : 1);
           return json(practiceRun);
         }
         if (path === '/sessions/901/begin') { practiceSession.status = 'answering'; return json(practiceSession); }
         if (path === '/sessions/901') return json(practiceSession);
         if (path === '/practice/900') return json(practiceRun);
-        if (path === '/practice/900/finish') { practiceSession.status = 'completed'; return json({}); }
+        if (path === '/practice/900/finish') { practiceSession.status = 'completed'; practiceRun.status = 'completed'; return json({}); }
         if (path === '/sessions/901/answer') {
           assert.match(request.postDataJSON().answer, /energy/);
           practiceSession.status = 'completed';
@@ -172,6 +184,8 @@ try {
                     slug: "pdf-regression",
                     exam_duration_minutes: 15,
                   },
+                  {id:2,name:"Second exam",slug:"second",exam_duration_minutes:15},
+                  {id:3,name:"Third exam",slug:"third",exam_duration_minutes:15},
                 ],
           );
         if (path.endsWith('/models/readiness')) return json({state: runtimeState !== 'available' ? 'ollama_unavailable' : modelsReady ? 'ready' : 'models_missing'});
@@ -515,6 +529,26 @@ $$
       await page.locator('aside').waitFor({state:'visible'});
       assert.equal(await page.locator('aside').isVisible(), true);
       assert.equal(await page.locator('.mode-card').count(), 8);
+      for (const title of modeNames) {
+        await page.locator('.mode-card').filter({has:page.locator('strong',{hasText:new RegExp(`^${title}$`)})}).click();
+        if (['Multiple subjects','Full colloquium'].includes(title)) {
+          await page.getByRole('checkbox',{name:'Second exam',exact:true}).check();
+          if (title === 'Full colloquium') await page.getByRole('checkbox',{name:'Third exam',exact:true}).check();
+        }
+        await page.getByRole('button',{name:'Start practising',exact:true}).click();
+        await page.locator('.session-question').waitFor();
+        await page.getByRole('button',{name:'End session',exact:true}).click();
+        await page.locator('.mode-card').first().waitFor();
+      }
+      await page.getByRole('navigation', {name:'Your learning'}).getByRole('button', {name:'Chat',exact:true}).click();
+      await page.locator('.chat-composer textarea').fill('Explain mass and energy.');
+      await page.locator('.chat-composer textarea').press('Enter');
+      await page.locator('.chat-assistant .katex').first().waitFor();
+      await page.locator('.chat-composer textarea').fill('Can you give an example?');
+      await page.locator('.chat-composer textarea').press('Enter');
+      await page.waitForFunction(() => document.querySelectorAll('.chat-assistant').length === 2);
+      assert.equal(chatHistory.length, 2);
+      await page.screenshot({path:`output/playwright/chat-${name}.png`,fullPage:true});
       language = "de";
       await page.reload();
       await page.getByRole("navigation", { name: "Your learning" }).getByRole("button", { name: "Üben", exact: true }).click();
@@ -573,7 +607,9 @@ $$
         .waitFor();
       assert.equal(await page.locator('.setup-steps').count(), 0);
       assert.equal(await page.getByRole('navigation', {name: 'Your learning'}).getByRole('button', {name:'Materials', exact:true}).getAttribute('aria-current'), 'page');
-      assert.equal(await page.locator('.app-stamp').innerText(), 'Colloquily v0.1.7');
+      assert.match(await page.locator('aside .sidebar-footer').innerText(), /Colloquily v0\.1\.8/);
+      assert.ok((await page.locator('aside .sidebar-footer').innerText()).includes(`© ${new Date().getFullYear()} Colloquily. All rights reserved.`));
+      assert.equal(await page.locator('.app-stamp').count(), 0);
       assert.deepEqual(crashes, []);
       console.log(
         `${name}: production-CSP render, authenticated Unicode filename, navigation, notes, reopen, PDF retry and isolated notes retry passed`,

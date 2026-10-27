@@ -341,5 +341,21 @@
   "practiceNextSubject": "Nächstes Fach",
   "practiceComplete": "Übung abgeschlossen",
   "practiceBack": "Zurück zu den Übungsmodi",
-  "practiceReview": "Diese Übung ansehen"
+  "practiceReview": "Diese Übung ansehen",
+  "rightsReserved": "Alle Rechte vorbehalten.",
+  "retryEvaluation": "Bewertung erneut versuchen",
+  "autoEvaluating": "Die Übung ist beendet. Deine Antworten werden automatisch bewertet…",
+  "practiceResumeHelp": "Du hast eine offene Übung. Setze sie fort oder wähle einen anderen Modus, um sie zu beenden und neu zu starten.",
+  "practiceResume": "Übung fortsetzen",
+  "practiceDiscard": "Offene Übung beenden",
+  "chatIntro": "Besprich deine Prüfungsmaterialien. Rückfragen nutzen den bisherigen Gesprächskontext; Antworten müssen weiterhin durch deine Quellen belegt sein.",
+  "chatConversation": "Prüfungsgespräch",
+  "chatEmpty": "Stelle eine Frage zu deinen Materialien, um den Chat zu beginnen.",
+  "chatLoading": "Gespräch laden…",
+  "chatYou": "Du",
+  "chatThinking": "Quellen prüfen und Antwort formulieren…",
+  "chatMessage": "Nachricht",
+  "chatPlaceholder": "Stelle eine Frage oder hake bei einer Antwort nach…",
+  "chatSend": "Senden",
+  "chatHint": "Enter zum Senden · Shift+Enter für eine neue Zeile. Gespräche werden lokal für diese Prüfung gespeichert."
 }

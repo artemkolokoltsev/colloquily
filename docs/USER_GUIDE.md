@@ -129,3 +129,14 @@ The explanations draw on [retrieval-practice experiments (Roediger & Karpicke, 2
 These are learning principles, not validation of the app's grading or rankings of its modes. The guide distinguishes self-explanation from merely reading aloud, random ordering from deliberate interleaving, and timed format rehearsal from a demonstrated learning benefit. Speech is not assessed; evaluation uses the submitted text. Spacing is advice to revisit material later, not a claim that every mode implements an optimal repetition schedule.
 
 Starting Ollama may leave its background runtime running after Colloquily closes, as with a normal Ollama installation. Use Ollama’s own controls when you want to quit it.
+
+
+### Chat and automatic practice evaluation
+
+Chat keeps a local conversation for each exam. Enter sends a message; Shift+Enter adds a line. Follow-up messages use the last four saved exchanges for context, with current course evidence providing citations. Personal notes remain opt-in.
+
+Practice always opens the mode picker. An unfinished run offers Resume or End unfinished session; starting another mode ends the unfinished run. Multiple subjects requires two or three exams, and Full colloquium requires exactly three; the exam checkboxes appear directly in the mode dialog. Each selected exam needs eligible accepted questions.
+
+Deferred evaluation starts automatically after the last question or timer expiry completes the run. In multi-subject practice, finish all subject blocks first. Only submitted answers are evaluated; an unsent draft is not submitted when time expires. The summary shows evaluation progress, then grades. If local AI fails, restore it and use Retry evaluation. A run without answers has no grade.
+
+The left sidebar footer shows Colloquily, the installed version, and a copyright notice with the current year. It is hidden with the sidebar during focused practice.

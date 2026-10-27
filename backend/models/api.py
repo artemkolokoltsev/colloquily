@@ -62,6 +62,7 @@ class SkipInput(BaseModel):
     question_id: int = Field(ge=1)
 
 class AskInput(BaseModel):
+    history_ids: list[int] = Field(default_factory=list, max_length=12)
     include_notes: bool = False
     question: str = Field(min_length=1, max_length=20000)
 

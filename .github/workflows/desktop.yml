@@ -96,10 +96,24 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npm run tauri -- build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+        shell: bash
+        run: |
+          # Tauri treats an empty APPLE_CERTIFICATE as a certificate to import.
+          # Keep configured values; preflight already rejects partial credentials.
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!name}" ]]; then unset "$name"; fi
+          done
+          npm run tauri -- build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
       - name: Build local unsigned artifact
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        run: npm run tauri -- build --config src-tauri/tauri.unsigned.conf.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+        shell: bash
+        run: |
+          # Tauri treats an empty APPLE_CERTIFICATE as a certificate to import.
+          # Keep configured values; preflight already rejects partial credentials.
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!name}" ]]; then unset "$name"; fi
+          done
+          npm run tauri -- build --config src-tauri/tauri.unsigned.conf.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
       - name: Verify native trust before publication
         if: steps.native-signing.outputs.enabled == 'true'
         run: python scripts/verify_native_signing.py src-tauri/target/${{ matrix.target }}/release/bundle ${{ matrix.target }} --required

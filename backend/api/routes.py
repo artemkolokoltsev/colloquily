@@ -249,7 +249,7 @@ def import_questions(ident: int, file: UploadFile = File(...)):
 @router.post("/exams/{ident}/ask", response_model=Job, status_code=202)
 def ask(ident: int, body: AskInput):
     flow.exam(ident)
-    return jobs.submit(f"ask:{ident}", "Retrieving evidence and composing an answer", lambda _: flow.ask(ident, body.question, include_notes=body.include_notes))
+    return jobs.submit(f"ask:{ident}", "Retrieving evidence and composing an answer", lambda _: flow.ask(ident, body.question, include_notes=body.include_notes, history_ids=body.history_ids))
 
 @router.get("/exams/{ident}/history", response_model=list[Record])
 def history(ident: int):
@@ -303,17 +303,23 @@ def start(body: RunInput):
 @router.get("/practice/{ident}", response_model=Record)
 @router.get("/mock-exams/{ident}", response_model=Record)
 def run(ident: int):
-    return flow.run(ident)
+    existing = flow.run(ident)
+    for part in existing['sessions']:
+        exam_state.expire_exam_session(part['id'])
+    return flow.automatic_evaluation(ident)
 
 @router.post("/practice/{ident}/evaluate", response_model=Job, status_code=202)
 def evaluate_run(ident: int):
-    flow.run(ident)
+    current = flow.run(ident)
+    if not all(part['status'] in exam_state.FINISHED_STATUSES for part in current['sessions']):
+        raise ValueError('Finish all practice sessions before evaluating the run')
     return jobs.submit(f"evaluate:{ident}", "Evaluating stored answers", lambda _: exam_state.evaluate_exam_run(ident, flow.local_user_id(), flow.evaluate))
 
 @router.get("/sessions/{ident}", response_model=Record)
 def session(ident: int):
     flow.session(ident)
     result = exam_state.expire_exam_session(ident)
+    flow.automatic_evaluation(result["exam_run_id"])
     question = result.get("current_question") or {}
     result["sources"] = list(training.accepted_evidence_map(result["subject_id"], question.get("evidence_ids", [])).values())
     return result

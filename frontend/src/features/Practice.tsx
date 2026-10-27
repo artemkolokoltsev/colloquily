@@ -29,6 +29,7 @@ export function Practice({
   );
   const [ids, setIds] = useState([selected]);
   const [run, setRun] = useState<Run>();
+  const [resumable, setResumable] = useState<Run>();
   const [session, setSession] = useState<Session>();
   const [answer, setAnswer] = useState("");
   const [feedback, setFeedback] = useState<Evaluation | null>(null);
@@ -56,17 +57,17 @@ export function Practice({
     )
       .then(async (runs) => {
         const pending = runs.find((item) =>
-          ["created", "running"].includes(item.status),
+          ["created", "running", "transition"].includes(item.status),
         );
         if (!pending) return;
         const existing = await api<Run>(`/practice/${pending.id}`);
         if (!current) return;
-        setRun(existing);
-        setSession(
-          existing.sessions.find(
-            (item) => !["completed", "time_expired"].includes(item.status),
-          ) || existing.sessions.at(-1),
-        );
+        if (
+          existing.sessions.some(
+            (part) => !["completed", "time_expired"].includes(part.status),
+          )
+        )
+          setResumable(existing);
       })
       .catch((e) => {
         if (current) setError(String(e));
@@ -205,6 +206,36 @@ export function Practice({
       <ErrorNotice error={error} />
       {!run ? (
         <>
+          {resumable && (
+            <div className="setup-notice">
+              <p>{t("ui.practiceResumeHelp")}</p>
+              <button
+                onClick={() => {
+                  setRun(resumable);
+                  setSession(
+                    resumable.sessions.find(
+                      (item) =>
+                        !["completed", "time_expired"].includes(item.status),
+                    ) || resumable.sessions.at(-1),
+                  );
+                  setResumable(undefined);
+                }}
+              >
+                {t("ui.practiceResume")}
+              </button>
+              <button
+                disabled={busy}
+                onClick={() =>
+                  void act(async () => {
+                    await api(`/practice/${resumable.id}/finish`, "POST", {});
+                    setResumable(undefined);
+                  })
+                }
+              >
+                {t("ui.practiceDiscard")}
+              </button>
+            </div>
+          )}
           <div
             className="practice-modes"
             role="group"
@@ -219,6 +250,10 @@ export function Practice({
                 onClick={() => {
                   setMode(value);
                   setIds([selected]);
+                  setError("");
+                  setDifficulties("");
+                  setPriorities("");
+                  setTopics(value === "random_practice" ? initialTopic : "");
                   setSetupOpen(true);
                 }}
               >
@@ -259,31 +294,31 @@ export function Practice({
             <ModeVisual mode={mode} />
             <PracticeGuide key={mode} mode={mode} />
             <ErrorNotice error={error} />
-            <details open={["multi_subject", "full_colloquium"].includes(mode)}>
+            {["multi_subject", "full_colloquium"].includes(mode) && (
+              <fieldset>
+                <legend>{t("ui.s16aaf28e05")}</legend>
+                <p>{t("practiceLearning.selectionHelp")}</p>
+                {exams.map((e) => (
+                  <label className="inline" key={e.id}>
+                    <input
+                      type="checkbox"
+                      checked={ids.includes(e.id)}
+                      disabled={!ids.includes(e.id) && ids.length >= 3}
+                      onChange={(ev) =>
+                        setIds(
+                          ev.target.checked
+                            ? [...ids, e.id]
+                            : ids.filter((id) => id !== e.id),
+                        )
+                      }
+                    />
+                    {e.name}
+                  </label>
+                ))}
+              </fieldset>
+            )}
+            <details>
               <summary>{t("ui.sef46ed5421")}</summary>
-              {["multi_subject", "full_colloquium"].includes(mode) && (
-                <fieldset>
-                  <legend>{t("ui.s16aaf28e05")}</legend>
-                  <p>{t("practiceLearning.selectionHelp")}</p>
-                  {exams.map((e) => (
-                    <label className="inline" key={e.id}>
-                      <input
-                        type="checkbox"
-                        checked={ids.includes(e.id)}
-                        disabled={!ids.includes(e.id) && ids.length >= 3}
-                        onChange={(ev) =>
-                          setIds(
-                            ev.target.checked
-                              ? [...ids, e.id]
-                              : ids.filter((id) => id !== e.id),
-                          )
-                        }
-                      />
-                      {e.name}
-                    </label>
-                  ))}
-                </fieldset>
-              )}
               <label>
                 {" "}
                 {t("ui.s2762dc6987")}{" "}
@@ -384,6 +419,10 @@ export function Practice({
               }
               onClick={() =>
                 act(async () => {
+                  if (resumable) {
+                    await api(`/practice/${resumable.id}/finish`, "POST", {});
+                    setResumable(undefined);
+                  }
                   const r = await api<Run>("/practice", "POST", {
                     subject_ids: ["multi_subject", "full_colloquium"].includes(
                       mode,
@@ -573,27 +612,35 @@ export function Practice({
                     >
                       {t("ui.practiceBack")}
                     </button>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        void act(async () => {
-                          await operation(
-                            `/practice/${run.id}/evaluate`,
-                            {},
-                            setJob,
-                          );
-                          setRun(await api<Run>(`/practice/${run.id}`));
-                        })
-                      }
-                    >
-                      {t("ui.s798048576d")}
-                    </button>
-                    {run.overall_evaluation && (
-                      <p>
-                        {t("ui.s9d532448e6")}{" "}
-                        {run.overall_evaluation.german_grade}
-                      </p>
+                    {run.evaluation_status === "failed" && (
+                      <button
+                        disabled={busy}
+                        onClick={() =>
+                          void act(async () => {
+                            await operation(
+                              `/practice/${run.id}/evaluate`,
+                              {},
+                              setJob,
+                            );
+                            setRun(await api<Run>(`/practice/${run.id}`));
+                          })
+                        }
+                      >
+                        {t("ui.retryEvaluation")}
+                      </button>
                     )}
+                    {["queued", "running"].includes(
+                      run.evaluation_status || "",
+                    ) && <p role="status">{t("ui.autoEvaluating")}</p>}
+                    <Progress job={run.evaluation_job || null} />
+                    {run.overall_evaluation &&
+                      (!run.evaluation_status ||
+                        run.evaluation_status === "completed") && (
+                        <p>
+                          {t("ui.s9d532448e6")}{" "}
+                          {run.overall_evaluation.german_grade}
+                        </p>
+                      )}
                     <details>
                       <summary>{t("ui.practiceReview")}</summary>
                       {run.sessions.map((s) => (
@@ -601,12 +648,15 @@ export function Practice({
                           <strong>
                             {exams.find((e) => e.id === s.subject_id)?.name}
                           </strong>
-                          {s.evaluation && (
-                            <p>
-                              {s.evaluation.percent_correct}
-                              {t("ui.s168d73ac14")} {s.evaluation.german_grade}
-                            </p>
-                          )}
+                          {s.evaluation &&
+                            (!run.evaluation_status ||
+                              run.evaluation_status === "completed") && (
+                              <p>
+                                {s.evaluation.percent_correct}
+                                {t("ui.s168d73ac14")}{" "}
+                                {s.evaluation.german_grade}
+                              </p>
+                            )}
                           {s.attempts?.map((a) => (
                             <details key={a.id}>
                               <summary>{a.question_text}</summary>

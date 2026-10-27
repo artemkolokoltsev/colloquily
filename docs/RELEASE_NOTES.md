@@ -1,35 +1,16 @@
-# Colloquily 0.1.7 — Guided local AI setup and verified publisher trust
+# Colloquily 0.1.8 — Chat and automatic practice evaluation
 
-AI setup now guides you through installing/starting Ollama, reviewing recommended
-models and their space estimate, downloading them, and testing local AI before
-returning to your materials. No terminal is needed. The first-time Ollama
-installer still comes from its official website; Colloquily does not silently
-install third-party software.
+- Chat replaces Ask with a local conversation per exam, follow-up context, cited sources and clear mathematics.
+- Practice evaluation starts automatically when all questions are answered or the timer completes the run. Multi-subject runs evaluate after all subject blocks finish. Failed evaluation offers a retry.
+- Fix Mac preview packaging when Apple signing credentials are absent; empty certificate variables no longer trigger a failed keychain import.
+- All eight training modes can start. Unfinished runs offer an explicit Resume option instead of hiding the mode picker. Multi-exam selection is visible in the setup dialog.
+- The bottom of the left sidebar shows the app name, version, current year and rights notice.
+- Includes the guided local AI setup and native-signing support prepared for 0.1.7: start installed Ollama, explicitly download recommended models, and test generation and embeddings.
 
-- Start an existing Ollama installation from the app. Setup detects when the
-  runtime becomes available and handles slow startup with a retry path.
-- Model recommendations remain visible before Ollama is running. Large model
-  downloads require an explicit setup action; opening an exam or uploading a
-  document no longer implicitly downloads models.
-- The readiness sample tests generation and embeddings without your documents
-  or personal answers. It reports elapsed generation time and flags a slow sample.
-- Advanced model selection remains available, including existing explicit exam
-  settings and alternative local backends.
-- Mac preview builds can use Developer ID signing/notarization independently of
-  Windows signing. Partially configured credentials fail early. Native checks
-  must pass before release metadata can claim publisher trust.
-- Release assets include per-platform trust reports, also exposed in website
-  download metadata. Missing trust records must be treated as unverified.
+## Preview and updates
 
-## Signing status
+This is a preview with signed updater payloads. OS publisher trust depends on configured Apple/Windows signing credentials and is recorded in the release trust reports. Updater signatures alone do not establish OS publisher trust.
 
-The code supports native signing, but no valid Developer ID identity or Apple
-notarization secrets were available during preparation. An Apple Developer
-membership alone does not sign an app. Follow [trusted release setup](TRUSTED_RELEASES.md)
-before pushing if this release should be Mac-signed. Windows publisher signing
-also requires separate credentials. Without them the platform remains an
-OS-unsigned preview, clearly reported as such; updater signatures remain enabled.
+Existing permanent website download URLs stay the same. Apps on 0.1.6 or later can use the signed updater after publication. Earlier versions need a manual download.
 
-The already-published 0.1.6 release and permanent website links remain intact.
-Users on 0.1.6 can receive this higher-version update through the signed updater
-once this release passes CI. Users on 0.1.5 and earlier require one manual upgrade.
+Local verification: 117 backend/API tests, 65 core tests, 11 frontend tests, translation checks, production build, and Chromium/WebKit practice and chat regressions passed before the version bump. Native release builds and acceptance gates run on GitHub before publication.

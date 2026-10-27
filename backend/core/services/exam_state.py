@@ -341,7 +341,7 @@ def _finish_session(connection, session: dict, status: str, now: datetime) -> No
                 {"subject_id": row["subject_id"], "report": json.loads(row["evaluation_json"] or "null")}
                 for row in session_reports
             ]
-        grades = [item["report"].get("german_grade") for item in subject_reports if item.get("report")]
+        grades = [item["report"].get("german_grade") for item in subject_reports if item.get("report") and item["report"].get("german_grade") is not None]
         all_passed = len(grades) == len(subject_reports) and all(grade <= 4.0 for grade in grades)
         overall = {"subjects": subject_reports, "all_passed": all_passed,
                    "german_grade": float(statistics.median(grades)) if all_passed and grades else 5.0 if grades else None}
@@ -444,6 +444,8 @@ def evaluate_exam_run(run_id: int, user_id: int, evaluator: Callable[[int, int, 
     run = get_exam_run(run_id)
     if not run or int(run["user_id"]) != int(user_id):
         raise ValueError("Exam run not found")
+    if any(part["status"] not in FINISHED_STATUSES for part in run["sessions"]):
+        raise ValueError("Finish all practice sessions before evaluation")
     with closing(_connect()) as connection:
         rows = connection.execute(
             """SELECT a.* FROM attempts a JOIN exam_sessions es ON es.id=a.exam_session_id

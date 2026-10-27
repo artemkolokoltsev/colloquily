@@ -1,6 +1,6 @@
 [package]
 name = "colloquily"
-version = "0.1.7"
+version = "0.1.8"
 description = "Local evidence-grounded oral exam preparation"
 license = "Apache-2.0"
 repository = "https://github.com/artemkolokoltsev/colloquily"
