@@ -1,8 +1,15 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
+import { createPortal } from "react-dom";
 import { updater } from "../update";
 
-export function UpdateNotice({ home }: { home: boolean }) {
+export function UpdateNotice({
+  home,
+  visible = false,
+}: {
+  home: boolean;
+  visible?: boolean;
+}) {
   const { t } = useTranslation();
   const state = useSyncExternalStore(updater.subscribe, updater.snapshot);
   const [automatic, setAutomatic] = useState(
@@ -90,24 +97,28 @@ export function UpdateNotice({ home }: { home: boolean }) {
   const busy = ["checking", "downloading", "installing", "restarting"].includes(
     state.phase,
   );
-  return (
-    <details
-      className="update-notice"
-      open={
-        [
-          "available",
-          "ready",
-          "downloading",
-          "installing",
-          "restarting",
-          "error",
-        ].includes(state.phase) || undefined
-      }
-    >
-      <summary>
+  if (!visible)
+    return countdown !== null ? (
+      <div className="update-toast" role="status">
+        {t("updates.countdown", { count: countdown })}
+        <button
+          onClick={() => {
+            setDeferred(true);
+            setCountdown(null);
+          }}
+        >
+          {t("updates.later")}
+        </button>
+      </div>
+    ) : null;
+  const target = document.getElementById("about-updates");
+  if (!target) return null;
+  return createPortal(
+    <section className="update-notice">
+      <h3>
         {t("updates.title")}
         {state.version ? ` · ${state.version}` : ""}
-      </summary>
+      </h3>
       <p role="status">{t(`updates.${state.phase}`)}</p>
       <label>
         <input
@@ -174,6 +185,7 @@ export function UpdateNotice({ home }: { home: boolean }) {
         )}
       </div>
       {deferred && <p>{t("updates.deferred")}</p>}
-    </details>
+    </section>,
+    target,
   );
 }

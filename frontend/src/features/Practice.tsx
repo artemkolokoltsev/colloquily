@@ -1,3 +1,4 @@
+import { SessionResults } from "./SessionResults";
 import { ModeVisual } from "./ModeVisual";
 import { PracticeGuide } from "./PracticeGuide";
 import { practiceModes, type PracticeMode } from "./practiceLearning";
@@ -32,10 +33,14 @@ export function Practice({
   const [resumable, setResumable] = useState<Run>();
   const [session, setSession] = useState<Session>();
   const [answer, setAnswer] = useState("");
+  const [insightOpen, setInsightOpen] = useState(false);
+  const [submittedQuestion, setSubmittedQuestion] = useState("");
+  const [submittedAnswer, setSubmittedAnswer] = useState("");
   const [feedback, setFeedback] = useState<Evaluation | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
+  const closed = useRef(false);
   const transitionVersion = useRef(0);
   const [job, setJob] = useState<Job | null>(null);
   const [resumeReady, setResumeReady] = useState(false);
@@ -79,7 +84,7 @@ export function Practice({
       current = false;
     };
   }, [selected]);
-  const [seconds, setSeconds] = useState(60);
+  const [durationSeconds, setDurationSeconds] = useState(300);
   const [count, setCount] = useState(initialCount);
   const [topics, setTopics] = useState(initialTopic);
   const [difficulties, setDifficulties] = useState("");
@@ -110,24 +115,46 @@ export function Practice({
     };
   }, [selected]);
   useEffect(() => {
-    if (!session) return;
+    if (!session || closed.current) return;
+    if (
+      ["completed", "time_expired"].includes(session.status) &&
+      ["completed", "failed"].includes(run?.evaluation_status || "")
+    )
+      return;
+    let current = true;
     const timer = setInterval(() => {
-      if (submitting.current) return;
+      if (submitting.current || closed.current || !current) return;
       const version = transitionVersion.current;
       api<Session>(`/sessions/${session.id}`)
         .then((s) => {
-          if (version !== transitionVersion.current || submitting.current)
+          if (
+            !current ||
+            closed.current ||
+            version !== transitionVersion.current ||
+            submitting.current
+          )
             return;
           setSession(s);
           if (["completed", "time_expired"].includes(s.status) && run)
             api<Run>(`/practice/${run.id}`)
-              .then(setRun)
+              .then((result) => {
+                if (
+                  current &&
+                  !closed.current &&
+                  version === transitionVersion.current
+                )
+                  setRun(result);
+              })
               .catch((e) => setError(String(e)));
         })
         .catch((e) => setError(String(e)));
     }, 1000);
-    return () => clearInterval(timer);
-  }, [session?.id, run?.id]);
+    return () => {
+      current = false;
+      clearInterval(timer);
+    };
+  }, [session?.id, session?.status, run?.id, run?.evaluation_status]);
+  useEffect(() => setInsightOpen(false), [session?.current_question?.id]);
   async function act(work: () => Promise<unknown>) {
     setBusy(true);
     setError("");
@@ -168,6 +195,8 @@ export function Practice({
             setJob,
           );
       setSession(result.session);
+      setSubmittedQuestion(session.current_question?.question_text || "");
+      setSubmittedAnswer(answer);
       setFeedback(result.evaluation);
       setAnswer("");
       setStarted(Date.now());
@@ -188,7 +217,14 @@ export function Practice({
   );
   async function leave() {
     if (!run) return;
-    await api(`/practice/${run.id}/finish`, "POST", {});
+    closed.current = true;
+    transitionVersion.current += 1;
+    try {
+      await api(`/practice/${run.id}/finish`, "POST", {});
+    } catch (error) {
+      closed.current = false;
+      throw error;
+    }
     setRun(undefined);
     setSession(undefined);
     setFeedback(null);
@@ -211,6 +247,7 @@ export function Practice({
               <p>{t("ui.practiceResumeHelp")}</p>
               <button
                 onClick={() => {
+                  closed.current = false;
                   setRun(resumable);
                   setSession(
                     resumable.sessions.find(
@@ -249,6 +286,7 @@ export function Practice({
                 aria-pressed={setupOpen && mode === value}
                 onClick={() => {
                   setMode(value);
+                  setDurationSeconds(value === "full_colloquium" ? 900 : 300);
                   setIds([selected]);
                   setError("");
                   setDifficulties("");
@@ -317,6 +355,39 @@ export function Practice({
                 ))}
               </fieldset>
             )}
+            <fieldset className="timer-options">
+              <legend>{t("ui.timerDuration")}</legend>
+              <p className="muted">
+                {t(
+                  ["multi_subject", "full_colloquium"].includes(mode)
+                    ? "ui.timerPerSubject"
+                    : "ui.timerTotal",
+                )}
+              </p>
+              <div
+                className="timer-cards"
+                role="group"
+                aria-label={t("ui.timerDuration")}
+              >
+                {[5, 10, 15, 30, 45, 60, 90].map((minutes) => (
+                  <button
+                    type="button"
+                    key={minutes}
+                    aria-pressed={durationSeconds === minutes * 60}
+                    onClick={() => {
+                      setDurationSeconds(minutes * 60);
+                      setPreparation((value) =>
+                        Math.min(value, minutes * 60 - 15),
+                      );
+                    }}
+                  >
+                    <span aria-hidden="true">◷</span>
+                    <strong>{minutes}</strong>
+                    <small>{t("ui.timerMinutes")}</small>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
             <details>
               <summary>{t("ui.sef46ed5421")}</summary>
               <label>
@@ -325,20 +396,9 @@ export function Practice({
                 <input
                   type="number"
                   min="0"
-                  max="600"
+                  max={Math.min(600, durationSeconds - 15)}
                   value={preparation}
                   onChange={(e) => setPreparation(Number(e.target.value))}
-                />
-              </label>
-              <label>
-                {" "}
-                {t("ui.sb14a6e6b6a")}{" "}
-                <input
-                  type="number"
-                  min="15"
-                  max="3600"
-                  value={seconds}
-                  onChange={(e) => setSeconds(Number(e.target.value))}
                 />
               </label>
               {["random_practice", "oral_exam_simulation"].includes(mode) && (
@@ -431,7 +491,8 @@ export function Practice({
                       : [selected],
                     mode,
                     preparation_seconds: preparation,
-                    answer_seconds: seconds,
+                    answer_seconds: 60,
+                    session_duration_seconds: durationSeconds,
                     question_count: count,
                     topics:
                       topics && topics === initialTopic
@@ -442,6 +503,7 @@ export function Practice({
                     countdown_visible: showTimer,
                     random_order: randomOrder,
                   });
+                  closed.current = false;
                   setRun(r);
                   setSetupOpen(false);
                   setSession(r.sessions[0]);
@@ -475,15 +537,18 @@ export function Practice({
                   })
                 : ""}
             </span>
-            <button disabled={busy} onClick={() => void act(leave)}>
-              {t("ui.practiceExit")}
-            </button>
+            {!completed && (
+              <button disabled={busy} onClick={() => void act(leave)}>
+                {t("ui.practiceExit")}
+              </button>
+            )}
           </header>
           <div className="session-stage">
             {feedback ? (
               <div className="session-feedback">
                 <h2>{t("ui.practiceReflection")}</h2>
-                <EvaluationView value={feedback} />
+                <StudyText>{submittedQuestion}</StudyText>
+                <EvaluationView value={feedback} answer={submittedAnswer} />
                 <button className="primary" onClick={() => setFeedback(null)}>
                   {t("ui.practiceContinue")}
                 </button>
@@ -535,12 +600,20 @@ export function Practice({
                             {t("ui.s53b3a211e4")}
                           </button>
                         </div>
-                        <details className="session-reference">
-                          <summary>{t("ui.practiceSources")}</summary>
-                          <Sources
-                            exam={session.subject_id}
-                            sources={session.sources || []}
-                          />
+                        <details
+                          className="session-reference"
+                          open={insightOpen}
+                          onToggle={(event) =>
+                            setInsightOpen(event.currentTarget.open)
+                          }
+                        >
+                          <summary>{t("ui.insight")}</summary>
+                          {insightOpen && (
+                            <Sources
+                              exam={session.subject_id}
+                              sources={session.sources || []}
+                            />
+                          )}
                         </details>
                       </>
                     )}
@@ -566,9 +639,10 @@ export function Practice({
                           : t("ui.sea2c732683")}
                       </button>
                     )}
-                    {["completed", "time_expired"].includes(session.status) && (
-                      <p>{t("ui.s0a12b202b3")}</p>
-                    )}
+                    {!completed &&
+                      ["completed", "time_expired"].includes(
+                        session.status,
+                      ) && <p>{t("ui.s0a12b202b3")}</p>}
                   </>
                 )}
                 {!active &&
@@ -633,45 +707,12 @@ export function Practice({
                       run.evaluation_status || "",
                     ) && <p role="status">{t("ui.autoEvaluating")}</p>}
                     <Progress job={run.evaluation_job || null} />
-                    {run.overall_evaluation &&
-                      (!run.evaluation_status ||
-                        run.evaluation_status === "completed") && (
-                        <p>
-                          {t("ui.s9d532448e6")}{" "}
-                          {run.overall_evaluation.german_grade}
-                        </p>
-                      )}
-                    <details>
-                      <summary>{t("ui.practiceReview")}</summary>
-                      {run.sessions.map((s) => (
-                        <article key={s.id}>
-                          <strong>
-                            {exams.find((e) => e.id === s.subject_id)?.name}
-                          </strong>
-                          {s.evaluation &&
-                            (!run.evaluation_status ||
-                              run.evaluation_status === "completed") && (
-                              <p>
-                                {s.evaluation.percent_correct}
-                                {t("ui.s168d73ac14")}{" "}
-                                {s.evaluation.german_grade}
-                              </p>
-                            )}
-                          {s.attempts?.map((a) => (
-                            <details key={a.id}>
-                              <summary>{a.question_text}</summary>
-                              <StudyText>{a.answer_text}</StudyText>
-                              <EvaluationView value={a.evaluation} />
-                            </details>
-                          ))}
-                        </article>
-                      ))}
-                    </details>
+                    <SessionResults run={run} exams={exams} />
                   </div>
                 )}
               </>
             )}
-            <Progress job={job} />
+            <Progress job={job?.status === "completed" ? null : job} />
           </div>
         </>
       )}

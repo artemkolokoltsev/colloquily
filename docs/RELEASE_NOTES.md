@@ -1,16 +1,20 @@
-# Colloquily 0.1.8 — Chat and automatic practice evaluation
+# Colloquily 0.1.9 — Source insights and clearer session review
 
-- Chat replaces Ask with a local conversation per exam, follow-up context, cited sources and clear mathematics.
-- Practice evaluation starts automatically when all questions are answered or the timer completes the run. Multi-subject runs evaluate after all subject blocks finish. Failed evaluation offers a retry.
-- Fix Mac preview packaging when Apple signing credentials are absent; empty certificate variables no longer trigger a failed keychain import.
-- All eight training modes can start. Unfinished runs offer an explicit Resume option instead of hiding the mode picker. Multi-exam selection is visible in the setup dialog.
-- The bottom of the left sidebar shows the app name, version, current year and rights notice.
-- Includes the guided local AI setup and native-signing support prepared for 0.1.7: start installed Ollama, explicitly download recommended models, and test generation and embeddings.
+- Filter detected course logistics and outline-only passages out of study evidence, including previously accepted material. Keep originals and historical answers available. Require supported comparison questions and use a separate validation pass with the configured answering model.
+- Fix retrieval so it can return several relevant passages from one document.
+- Insight previews the actual cited PDF page, preserving formulas and diagrams. Includes enlargement, retry, and secondary extracted text.
+- Session results show question-score charts, evaluated/skipped/ungraded counts, and feedback-based suggestions. Submitted answers are visible, repeated feedback is removed, and Previous/Next controls simplify review.
+- End session now finalizes submitted work, clears timers and cannot be reopened by delayed polling. Pending or unreliable evaluations are not scored as zero.
+- Choose 5, 10, 15, 30, 45, 60 or 90 minutes using duration cards. Time applies to the whole session, or separately to each subject block, including preparation.
+- Move update controls into About Colloquily, accessible from the sidebar, Settings and native About menu. Include app, storage, privacy and feedback information. Background updates continue without a permanent workspace banner.
+- Refine Settings with English/Deutsch cards that save immediately. Fix progress display and dark-mode contrast; completed jobs use compact confirmations without stale percentages.
 
 ## Preview and updates
 
-This is a preview with signed updater payloads. OS publisher trust depends on configured Apple/Windows signing credentials and is recorded in the release trust reports. Updater signatures alone do not establish OS publisher trust.
+Study-content filters reduce unsupported questions but do not guarantee AI correctness. Check uncertain feedback against the original sources. Existing materials and answers are retained.
 
-Existing permanent website download URLs stay the same. Apps on 0.1.6 or later can use the signed updater after publication. Earlier versions need a manual download.
+This preview includes signed updater payloads. Native publisher trust is recorded separately in the per-platform trust reports and requires configured signing credentials.
 
-Local verification: 117 backend/API tests, 65 core tests, 11 frontend tests, translation checks, production build, and Chromium/WebKit practice and chat regressions passed before the version bump. Native release builds and acceptance gates run on GitHub before publication.
+Permanent website download URLs remain unchanged. Version 0.1.6 and later can receive this release through the signed updater; earlier versions need a manual download.
+
+Local verification: 124 backend/API tests, 65 core tests and 17 frontend tests passed, along with translation checks, production build, Rust check, and Chromium/WebKit browser regressions. Native installers and real-model learning acceptance are checked by the release workflow before publication.

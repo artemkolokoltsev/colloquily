@@ -122,7 +122,7 @@ Each mode now shows a learning focus, a concrete goal, an instruction for how to
 | Oral exam simulation | Structure explanations within a time budget | Configurable count and filters; evaluate afterward |
 | Subject simulation | Sustain explanations across one subject | Configured exam duration; evaluate afterward |
 | Multiple subjects | Rehearse changing subject context | Two or three consecutive subject blocks; evaluate afterward |
-| Full colloquium | Rehearse the complete three-subject format | Exactly three exams, 15 minutes each including preparation; evaluate afterward |
+| Full colloquium | Rehearse the complete three-subject format | Exactly three exams, 15 minutes per subject by default; adjustable time and automatic evaluation |
 
 The explanations draw on [retrieval-practice experiments (Roediger & Karpicke, 2006)](https://doi.org/10.1111/j.1467-9280.2006.01693.x), [a self-explanation meta-analysis (Bisra et al., 2018)](https://doi.org/10.1007/s10648-018-9434-x), [feedback research (Hattie & Timperley, 2007)](https://doi.org/10.3102/003465430298487), [a synthesis of distributed practice (Cepeda et al., 2006)](https://doi.org/10.1037/0033-2909.132.3.354), and [a classroom trial of interleaved mathematics practice (Rohrer et al., 2020)](https://doi.org/10.1037/edu0000367).
 
@@ -140,3 +140,22 @@ Practice always opens the mode picker. An unfinished run offers Resume or End un
 Deferred evaluation starts automatically after the last question or timer expiry completes the run. In multi-subject practice, finish all subject blocks first. Only submitted answers are evaluated; an unsent draft is not submitted when time expires. The summary shows evaluation progress, then grades. If local AI fails, restore it and use Retry evaluation. A run without answers has no grade.
 
 The left sidebar footer shows Colloquily, the installed version, and a copyright notice with the current year. It is hidden with the sidebar during focused practice.
+
+
+### Study evidence, insights and session review
+
+Question generation excludes detected course administration (such as Moodle slide availability and exam-admission thresholds) and outline-only passages. These checks apply to previously accepted evidence too, so affected questions stop appearing in new practice sessions without deleting source files or historical answers. Originals remain available in Materials and Advanced review. The filters are conservative heuristics, not a guarantee that every irrelevant passage will be detected.
+
+Questions require exact support quotes and complete answer points. Comparisons must support both concepts and the requested comparison dimension. Generation also uses the configured answering model for a separate validation pass. Retrieval can return multiple relevant passages from one document instead of dropping them while trying to diversify sources. AI errors remain possible; use the original page to verify uncertain feedback.
+
+Insight opens the actual cited PDF page inside practice, with enlargement and retry controls. Extracted text is secondary because it may lose mathematical layout. No page is guessed when a citation lacks a reliable page number.
+
+Session results show evaluated, skipped and ungraded counts, a question-score chart, and suggested follow-up questions based on actual feedback. Select a bar or use Previous/Next to review an answer. Submitted text stays visible above the feedback. Repeated reference/model-answer points and empty feedback headings are omitted. Pending or unreliable evaluations receive no numeric grade; skips remain part of the documented session-grade calculation.
+
+Duration cards offer 5, 10, 15, 30, 45, 60 and 90 minutes. The selected time covers the entire session, including preparation; for multi-subject runs it applies separately to each subject. Sessions finish earlier when all questions are answered. End session closes all remaining blocks, clears timers and finalizes submitted work. Unsaved draft answers are not submitted automatically.
+
+### About and settings
+
+Open About Colloquily from the sidebar footer, Settings, or the native application menu. It contains the installed version, update controls, data/privacy information, feedback limitations, platform, storage folder and license. Background update checks continue without a permanent workspace banner. A compact countdown still appears before an unattended restart.
+
+Settings provides English/Deutsch cards that save the interface language immediately. Backups and advanced model settings remain available; advanced changes use their own Save settings button. Completed background jobs use a compact confirmation rather than displaying stale phase percentages.

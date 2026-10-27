@@ -11,6 +11,7 @@ from typing import Callable, Literal
 from pydantic import BaseModel, Field
 
 import config
+from services.study_content import study_content_problem
 from services.database import get_subject
 from services.knowledge_repository import (
     checkpoint,
@@ -236,6 +237,8 @@ def deterministic_cleanup(unit: dict) -> dict:
         repeated_keys = {_line_key(line) for line in repeated}
         kept = [line for line in text.splitlines() if _line_key(line) not in repeated_keys]
         text = normalize_text("\n".join(kept))
+    if purpose_problem := study_content_problem(text):
+        problems.append(purpose_problem)
     if NAVIGATION_PATTERN.match(text):
         problems.append("navigation_boilerplate")
     if COPYRIGHT_PATTERN.search(text):
@@ -280,6 +283,7 @@ def deterministic_cleanup(unit: dict) -> dict:
 
     quarantine_reasons = {
         "meaningless_fragment", "corrupted_table", "broken_formula", "navigation_boilerplate",
+        "course_administration", "outline_without_explanation",
     }
     if repeated and (not text or not meaningful or not academic):
         status: ReviewStatus = "rejected"

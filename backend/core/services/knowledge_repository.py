@@ -5,6 +5,7 @@ from contextlib import closing
 from datetime import datetime
 
 from services.database import _connect
+from services.study_content import study_evidence
 from services.topic_normalization import normalize_topic_titles, single_topic_title
 
 
@@ -324,7 +325,7 @@ def accepted_units(subject_id: int) -> list[dict]:
             """,
             (subject_id,),
         ).fetchall()
-        return [dict(row) for row in rows]
+        return [dict(row) for row in rows if study_evidence(dict(row))]
 
 
 def list_review_units(

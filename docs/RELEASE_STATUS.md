@@ -1,17 +1,18 @@
 # Release status
 
-Release candidate: **0.1.8 — Chat and automatic practice evaluation**.
-Branch `release/0.1.8`; tag `v0.1.8-rc.1`.
+Release candidate: **0.1.9 — Source insights and clearer session review**.
+Branch `release/0.1.9`; tag `v0.1.9-rc.1`.
 
-Includes all prepared 0.1.7 changes plus the practice, chat and sidebar fixes.
-Local validation passed: 117 backend/API tests, 65 core tests, 11 frontend tests,
-translation parity, production build, and Chromium/WebKit browser checks.
+Includes the complete question-quality, PDF insight, results, timer, session-closing,
+About, progress and Settings changes described in [release notes](RELEASE_NOTES_0.1.9.md).
 
-Publication is authorized. The tagged GitHub workflow builds macOS Apple Silicon,
-macOS Intel and Windows installers, runs acceptance checks, then publishes the
-preview and promotes the permanent download links. Publication must be verified
-from the completed workflow and release assets; pushing a tag alone is not success.
+Local verification passed: 124 backend/API tests, 65 core tests, 17 frontend tests,
+translation checks, production build, Rust check, and Chromium/WebKit regressions.
 
-Native publisher trust is reported per platform. Missing OS signing credentials
-produce an OS-unsigned preview with signed updater payloads. See
-[TRUSTED_RELEASES.md](TRUSTED_RELEASES.md) and [DOWNLOADS.md](DOWNLOADS.md).
+Publication is authorized. The tagged workflow builds all three native installers,
+runs real-model learning acceptance, and publishes only after the required jobs pass.
+Confirm publication from the workflow and release assets, not merely the tag push.
+Permanent download URLs and the updater feed are promoted after publication.
+
+OS publisher trust depends on configured signing credentials and is reported
+per platform. See [TRUSTED_RELEASES.md](TRUSTED_RELEASES.md) and [DOWNLOADS.md](DOWNLOADS.md).

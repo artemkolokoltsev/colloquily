@@ -11,7 +11,13 @@ interface SettingsData {
     fields: { key: string; label: string; type: string; options?: string[] }[];
   }[];
 }
-export function Settings({ exam }: { exam: number }) {
+export function Settings({
+  exam,
+  onAbout,
+}: {
+  exam: number;
+  onAbout: () => void;
+}) {
   const { t, i18n } = useTranslation();
   const [data, setData] = useState<SettingsData>();
   const [models, setModels] = useState<{
@@ -19,8 +25,9 @@ export function Settings({ exam }: { exam: number }) {
     embedding_config: { model: string };
   }>();
   const [error, setError] = useState("");
+  const [languageBusy, setLanguageBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [version, setVersion] = useState("0.1.8");
+  const [version, setVersion] = useState("0.1.9");
   const [backupFile, setBackupFile] = useState<File>();
   const [backupPreview, setBackupPreview] = useState<{
     created_at: string;
@@ -69,7 +76,9 @@ export function Settings({ exam }: { exam: number }) {
     if ("__TAURI_INTERNALS__" in window)
       import("@tauri-apps/api/app")
         .then(({ getVersion }) => getVersion())
-        .then(setVersion)
+        .then((value) => {
+          if (typeof value === "string" && value) setVersion(value);
+        })
         .catch(() => undefined);
   }, []);
   async function save() {
@@ -87,29 +96,47 @@ export function Settings({ exam }: { exam: number }) {
     }
   }
   return (
-    <section>
+    <section className="settings-page">
       <h2>{t("settings.title")}</h2>
       <p>{t("settings.intro")}</p>
       <ErrorNotice error={error} />
       <p role="status">{message}</p>
-      <label>
-        {t("settings.language")}
-        <select
-          value={i18n.resolvedLanguage || "en"}
-          onChange={(event) => {
-            const language = event.target.value;
-            void api("/preferences", "PATCH", { language })
-              .then(() => i18n.changeLanguage(language))
-              .catch((e) => setError(String(e)));
-          }}
+      <section className="settings-card">
+        <h3>{t("settings.language")}</h3>
+        <p className="muted">{t("ui.languageHelp")}</p>
+        <div
+          className="language-cards"
+          role="group"
+          aria-label={t("settings.language")}
         >
-          <option value="de">{t("settings.german")}</option>
-          <option value="en">{t("settings.english")}</option>
-        </select>
-      </label>
-      <p>
-        {t("settings.dataDirectory", { path: data?.data_directory || "…" })}
-      </p>
+          {[
+            ["en", "English"],
+            ["de", "Deutsch"],
+          ].map(([language, label]) => (
+            <button
+              key={language}
+              disabled={languageBusy}
+              aria-pressed={(i18n.resolvedLanguage || "en") === language}
+              onClick={async () => {
+                setLanguageBusy(true);
+                setError("");
+                try {
+                  await api("/preferences", "PATCH", { language });
+                  await i18n.changeLanguage(language);
+                  setMessage(i18n.t("common.languageChanged"));
+                } catch (error) {
+                  setError(String(error));
+                } finally {
+                  setLanguageBusy(false);
+                }
+              }}
+            >
+              <strong>{label}</strong>
+              <span>{language.toUpperCase()}</span>
+            </button>
+          ))}
+        </div>
+      </section>
       <fieldset>
         <legend>{t("settings.backup")}</legend>
         <button
@@ -160,10 +187,13 @@ export function Settings({ exam }: { exam: number }) {
       <fieldset>
         <legend>{t("settings.updates")}</legend>
         <p>{t("settings.currentVersion", { version })}</p>
-        <p>{t("updates.location")}</p>
+        <button onClick={onAbout}>{t("ui.aboutTitle")}</button>
       </fieldset>
       <details>
         <summary>{t("nav.advanced")}</summary>
+        <p className="storage-path">
+          {t("settings.dataDirectory", { path: data?.data_directory || "…" })}
+        </p>
         {models && (
           <fieldset>
             <legend>{t("settings.models")}</legend>
@@ -250,8 +280,8 @@ export function Settings({ exam }: { exam: number }) {
               ))}
           </details>
         ))}
+        <button onClick={save}>{t("settings.save")}</button>
       </details>
-      <button onClick={save}>{t("settings.save")}</button>
     </section>
   );
 }

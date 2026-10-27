@@ -39,7 +39,7 @@
   "full_colloquium_focus": "Den gesamten Ablauf proben",
   "full_colloquium_goal": "Trainiere Zeiteinteilung und zusammenhängende Erklärungen in einer vollständigen Sitzung über drei Fächer. Erkenne, wo eine längere Probe Wissenslücken sichtbar macht.",
   "full_colloquium_method": "Bereite zuerst alle drei Fächer vor. Antworte bei Bedarf laut, reiche deine schriftlichen Antworten ein und leite aus dem abschließenden Feedback konkrete Wiederholungsthemen ab.",
-  "full_colloquium_format": "Genau drei Prüfungen mit je 15 Minuten pro Fach, einschließlich möglicher Vorbereitungszeit. Bewertung anschließend. Dies ist eine Ablaufprobe, keine validierte Vorhersage deiner tatsächlichen Prüfungsnote.",
+  "full_colloquium_format": "Genau drei Prüfungen. Standard: 15 Minuten pro Fach; die Dauer kann im Dialog geändert werden. Vorbereitung ist enthalten. Automatische Bewertung nach allen Fachblöcken. Dies ist eine Ablaufprobe, keine validierte Notenprognose.",
   "retrieval_title": "Abrufübung · der Testeffekt",
   "retrieval_text": "Das Abrufen aus dem Gedächtnis kann die spätere Erinnerung stärken. In Experimenten mit Sachtexten führte Abrufübung zu besserer verzögerter Erinnerung als erneutes Lesen, obwohl Lesen die Zuversicht erhöhte.",
   "explanation_title": "Selbsterklärung · Warum und Wie verbinden",

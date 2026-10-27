@@ -6,6 +6,7 @@ from contextlib import closing, nullcontext
 from datetime import datetime
 
 from services.database import _connect
+from services.study_content import study_evidence, study_content_problem
 
 
 def accepted_evidence_map(subject_id: int, evidence_ids: list[int] | None = None, *, compact: bool = False) -> dict[int, dict]:
@@ -15,7 +16,7 @@ def accepted_evidence_map(subject_id: int, evidence_ids: list[int] | None = None
         WHERE ku.subject_id = ? AND ku.review_status = 'accepted' AND ku.enabled_for_retrieval = 1
     """
     if compact:
-        query = query.replace("ku.*, d.title AS document_title, d.relative_path", "ku.id")
+        query = query.replace("ku.*, d.title AS document_title, d.relative_path", "ku.id, ku.content")
     params: list[object] = [subject_id]
     if evidence_ids is not None:
         if not evidence_ids:
@@ -26,7 +27,7 @@ def accepted_evidence_map(subject_id: int, evidence_ids: list[int] | None = None
     query += ' ORDER BY d.relative_path, ku.source_start, ku.id'
     with closing(_connect()) as connection:
         rows = connection.execute(query, params).fetchall()
-        return {int(row["id"]): dict(row) for row in rows}
+        return {int(row["id"]): dict(row) for row in rows if study_evidence(dict(row))}
 
 
 def create_question(subject_id: int, payload: dict) -> dict:
@@ -109,7 +110,7 @@ def get_question(question_id: int) -> dict | None:
 def list_questions(subject_id: int, *, accepted_only: bool = False, compact: bool = False) -> list[dict]:
     query = "SELECT q.*, COALESCE(t.name, NULLIF(q.topic_name, ''), 'Unassigned') AS resolved_topic_name FROM questions q LEFT JOIN topics t ON t.id=q.topic_id WHERE q.subject_id = ?"
     if compact:
-        query = query.replace("q.*", "q.id,q.topic_id,q.enabled,q.review_status,q.question_pool_id,q.evidence_ids_json")
+        query = query.replace("q.*", "q.id,q.question_text,q.topic_id,q.enabled,q.review_status,q.question_pool_id,q.evidence_ids_json")
     if accepted_only:
         query += " AND q.review_status = 'accepted' AND q.enabled = 1"
     query += " ORDER BY q.created_at DESC, q.id DESC"
@@ -122,6 +123,8 @@ def list_questions(subject_id: int, *, accepted_only: bool = False, compact: boo
 
 
 def question_has_current_evidence(question: dict, evidence: set[int]) -> bool:
+    if study_content_problem(question.get('question_text', '')):
+        return False
     # Explicitly imported question pools remain usable without lecture sources.
     return bool(question.get('question_pool_id')) or bool(question.get('evidence_ids') and set(question['evidence_ids']).issubset(evidence))
 

@@ -46,6 +46,7 @@ class RunInput(BaseModel):
     mode: Literal["single_question", "rapid_practice", "weak_topic", "random_practice", "oral_exam_simulation", "subject_simulation", "multi_subject", "full_colloquium"] = "single_question"
     preparation_seconds: int = Field(default=0, ge=0, le=600)
     answer_seconds: int = Field(default=60, ge=15, le=3600)
+    session_duration_seconds: int | None = Field(default=None, ge=60, le=5400)
     countdown_visible: bool = True
     random_order: bool = False
     question_count: int = Field(default=10, ge=1, le=100)

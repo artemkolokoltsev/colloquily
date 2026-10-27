@@ -229,7 +229,7 @@ def questions(ident: int):
 def generate(ident: int, body: GenerateInput):
     subject = flow.exam(ident)
     return jobs.submit(f"questions:{ident}", "Generating grounded questions", lambda _: generate_grounded_questions(subject, body.count,
-        llm_client=subject_task_llm(subject, "question_generation")))
+        llm_client=subject_task_llm(subject, "question_generation"), validator_client=subject_task_llm(subject, "answering")))
 
 @router.patch("/exams/{ident}/questions/{question_id}", response_model=Record)
 def review_question(ident: int, question_id: int, body: ReviewInput):
@@ -450,12 +450,8 @@ def cancel_update():
 @router.post('/practice/{ident}/finish', response_model=Record)
 def finish_practice(ident: int):
     flow.run(ident)
-    from contextlib import closing
-    with closing(db._connect()) as database:
-        database.execute("UPDATE exam_sessions SET status='completed', deadline_at=NULL WHERE exam_run_id=? AND status NOT IN ('completed','expired')", (ident,))
-        database.execute("UPDATE exam_runs SET status='completed' WHERE id=?", (ident,))
-        database.commit()
-    return flow.run(ident)
+    exam_state.finish_exam_run(ident, flow.local_user_id())
+    return flow.automatic_evaluation(ident)
 
 @router.get('/backups/{filename}')
 def download_backup(filename: str):

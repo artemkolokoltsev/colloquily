@@ -177,12 +177,20 @@ class SubjectIndex:
         results: list[dict] = []
         seen_documents: set[int] = set()
         for item in candidates:
-            if len(results) >= k:
+            if len(results) >= min(2, k):
                 break
-            if item["document_id"] not in seen_documents or len(results) >= min(2, k):
+            if item["document_id"] not in seen_documents:
                 item["citation_id"] = f"E{item['knowledge_unit_id']}"
                 results.append(item)
                 seen_documents.add(item["document_id"])
+        selected_ids = {item['knowledge_unit_id'] for item in results}
+        for item in candidates:
+            if len(results) >= k:
+                break
+            if item['knowledge_unit_id'] not in selected_ids:
+                item['citation_id'] = f"E{item['knowledge_unit_id']}"
+                results.append(item)
+                selected_ids.add(item['knowledge_unit_id'])
         return results
 
     def grounded_context(self, query: str, *, topic_id: int | None = None, k: int = 5) -> dict:

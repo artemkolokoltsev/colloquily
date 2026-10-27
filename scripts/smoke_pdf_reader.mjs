@@ -100,7 +100,7 @@ try {
       let modelsReady = true;
       let setupDownloads = 0;
       let practiceReady = false;
-      let practiceSession = {id: 901, subject_id: 1, status: 'created', remaining_seconds: 60, countdown_visible: true, sources: [], current_question: {id: 77, question_text: 'Explain why $E=mc^2$ relates mass and energy.'}};
+      let practiceSession = {id: 901, subject_id: 1, status: 'created', remaining_seconds: 60, countdown_visible: true, sources: [{id:1,document_title:'Lecture',relative_path:'Lecture & Übung.pdf',source_start:2,source_location:'page 2',content:'Mass and energy are related by $E=mc^2$.'}], current_question: {id: 77, question_text: 'Explain why $E=mc^2$ relates mass and energy.'}};
       let practiceRun = {id: 900, status: 'running', mode: 'random_practice', sessions: [practiceSession]};
       const chatHistory = [];
       const notes = { 1: "Saved first-page note" };
@@ -117,7 +117,11 @@ try {
           );
         const json = (value) => route.fulfill({ json: value });
         if (path === "/health") return json({ status: "ready" });
-        if (path === "/preferences") return json({ language });
+        if (path === "/preferences") {
+          if (request.method() === 'PATCH') language = request.postDataJSON().language;
+          return json({language});
+        }
+        if (path === '/settings') return json({values:{},data_directory:'/local/Colloquily',sections:[]});
         if (path === "/models/status")
           return json({
             ollama: runtimeState,
@@ -149,6 +153,7 @@ try {
           practiceSession.status = 'created';
           practiceRun.status = 'running';
           practiceRun.mode = request.postDataJSON().mode;
+          assert.ok([300,600,900,1800,2700,3600,5400].includes(request.postDataJSON().session_duration_seconds));
           const selected = request.postDataJSON().subject_ids;
           assert.equal(selected.length, practiceRun.mode === 'full_colloquium' ? 3 : practiceRun.mode === 'multi_subject' ? 2 : 1);
           return json(practiceRun);
@@ -161,6 +166,14 @@ try {
           assert.match(request.postDataJSON().answer, /energy/);
           practiceSession.status = 'completed';
           practiceRun.status = 'completed';
+          practiceRun.evaluation_status = 'completed';
+          const point = 'Explain the relationship between mass and energy.';
+          practiceSession.attempts = [
+            {id:1,question_text:'Explain mass and energy.',answer_text:request.postDataJSON().answer,evaluation:{status:'evaluated',score:1,missing:[{text:point}],expected_core_points:[{text:point}],better_oral_answer:point,sources:practiceSession.sources,subject_id:1}},
+            {id:2,question_text:'Define a physical quantity.',answer_text:'My second submitted answer.',evaluation:{status:'evaluated',score:4,correct:[{text:'A supported definition.'}]}},
+            {id:3,question_text:'Skipped question.',answer_text:'',evaluation:{status:'skipped',score:0}},
+            {id:4,question_text:'Uncertain question.',answer_text:'My uncertain answer.',evaluation:{status:'needs_review',score:0}},
+          ];
           return json({id: 'practice-answer-job', status: 'completed', result: {session: practiceSession, evaluation: {status:'evaluated', score:1, correct:[{text:'Mass and energy are related.'}], missing:[], incorrect:[], sources:[]}}});
         }
         if (path === "/exams" && request.method() === "POST") {
@@ -192,7 +205,7 @@ try {
         if (path.endsWith('/models/recommendation')) return json({task_models:modelSettings.task_models, missing:modelsReady ? [] : ['qwen3:4b','embeddinggemma:latest'],download_bytes_estimate:modelsReady ? 0 : 5 * 1024**3,disk_ok:true,limited_hardware:false,hardware:{ram_bytes:16*1024**3,free_bytes:30*1024**3,architecture:'arm64'}});
         if (path === '/models/start') {runtimeState='available';return json({id:'start',status:'completed',result:{ready:true}});}
         if (path.endsWith('/models/prepare')) {setupDownloads++;modelsReady=true;return json({id:'prepare',status:'completed',result:{}});}
-        if (path.endsWith('/models/verify')) return json({id:'verify',status:'completed',result:{ready:true,response_seconds:2.5,slow:false}});
+        if (path.endsWith('/models/verify')) return json({id:'verify',status:'completed',completed:1,total:2,result:{ready:true,response_seconds:2.5,slow:false}});
         if (path.endsWith("/learning"))
           return json({
             goal: { exam_date: null, repetitions: 3, questions_per_session: 5 },
@@ -483,7 +496,7 @@ $$
       }
       assert.ok(
         (await guide.innerText()).includes(
-          "Exactly three exams with 15 minutes per subject",
+          "Exactly three exams. Default: 15 minutes per subject",
         ),
       );
       await page.getByRole("button", { name: "Close mode setup" }).click();
@@ -510,11 +523,27 @@ $$
       );
       await page.setViewportSize({ width: 1280, height: 1000 });
       assert.equal(await page.getByText('Previous runs', {exact:true}).count(), 0);
+      assert.equal(await page.locator('.timer-cards button').count(),7);
+      await page.locator('.timer-cards button').filter({has:page.locator('strong',{hasText:/^90$/})}).click();
+      assert.equal(await page.locator('.timer-cards button[aria-pressed="true"] strong').innerText(),'90');
+      await page.screenshot({path:`output/playwright/practice-timers-${name}.png`,fullPage:true});
       await page.getByRole('button', {name:'Start practising', exact:true}).click();
       await page.locator('.session-question .katex').first().waitFor();
       assert.equal(await page.locator('aside').isVisible(), false);
       assert.equal(await page.locator('.window-toolbar').isVisible(), false);
       assert.equal(await page.getByRole('textbox', {name:'Your oral answer'}).count(), 1);
+      await page.locator('.session-reference > summary').click();
+      await page.locator('.insight-pdf canvas').waitFor({state:'visible'});
+      await page.getByText('Page 2 / 2',{exact:true}).waitFor();
+      assert.equal(await page.locator('.source-insight iframe').count(),0);
+      await page.screenshot({path:`output/playwright/insight-source-${name}.png`,fullPage:true});
+      await page.locator('.session-reference > summary').click();
+      failSource=true;
+      await page.locator('.session-reference > summary').click();
+      await page.getByRole('button',{name:'Retry preview',exact:true}).waitFor();
+      await page.getByRole('button',{name:'Retry preview',exact:true}).click();
+      await page.locator('.insight-pdf canvas').waitFor({state:'visible'});
+      await page.locator('.session-reference > summary').click();
       await page.getByRole('textbox', {name:'Your oral answer'}).fill('Mass is a form of energy.');
       await page.screenshot({path:`output/playwright/practice-ambient-${name}.png`, fullPage:true});
       await page.emulateMedia({colorScheme:'dark'});
@@ -523,8 +552,20 @@ $$
       await page.getByRole('button', {name:'Submit answer', exact:true}).click();
       await page.getByRole('heading', {name:'A moment to reflect', exact:true}).waitFor();
       assert.equal(await page.locator('.session-question').count(), 0);
+      assert.ok((await page.locator('.submitted-answer').innerText()).includes('Mass is a form of energy.'));
       await page.getByRole('button', {name:'Continue', exact:true}).click();
       await page.getByRole('heading', {name:'Session complete', exact:true}).waitFor();
+      await page.locator('.result-chart-row').first().waitFor();
+      assert.equal(await page.locator('.result-chart-row').count(),4);
+      assert.equal(await page.locator('.result-detail').getByText('Explain the relationship between mass and energy.',{exact:true}).count(),1);
+      assert.ok((await page.locator('.result-detail .submitted-answer').innerText()).includes('Mass is a form of energy.'));
+      await page.getByRole('button',{name:'Next answer',exact:true}).click();
+      assert.ok((await page.locator('.result-detail .submitted-answer').innerText()).includes('My second submitted answer.'));
+      await page.getByRole('button',{name:'Previous answer',exact:true}).click();
+      await page.screenshot({path:`output/playwright/session-analysis-${name}.png`,fullPage:true});
+      await page.emulateMedia({colorScheme:'dark'});
+      await page.screenshot({path:`output/playwright/session-analysis-dark-${name}.png`,fullPage:true});
+      await page.emulateMedia({colorScheme:'light'});
       await page.getByRole('button', {name:'Back to practice modes', exact:true}).click();
       await page.locator('aside').waitFor({state:'visible'});
       assert.equal(await page.locator('aside').isVisible(), true);
@@ -539,6 +580,9 @@ $$
         await page.locator('.session-question').waitFor();
         await page.getByRole('button',{name:'End session',exact:true}).click();
         await page.locator('.mode-card').first().waitFor();
+        await page.waitForTimeout(1100);
+        assert.equal(await page.locator('.session-question').count(),0);
+        assert.equal(await page.locator('aside').isVisible(),true);
       }
       await page.getByRole('navigation', {name:'Your learning'}).getByRole('button', {name:'Chat',exact:true}).click();
       await page.locator('.chat-composer textarea').fill('Explain mass and energy.');
@@ -549,6 +593,23 @@ $$
       await page.waitForFunction(() => document.querySelectorAll('.chat-assistant').length === 2);
       assert.equal(chatHistory.length, 2);
       await page.screenshot({path:`output/playwright/chat-${name}.png`,fullPage:true});
+      assert.equal(await page.locator('main > .update-notice').count(),0);
+      await page.getByRole('navigation',{name:'Your learning'}).getByRole('button',{name:'Settings',exact:true}).click();
+      await page.getByRole('button',{name:'Deutsch DE',exact:true}).click();
+      await page.getByRole('heading',{name:'Einstellungen',exact:true}).waitFor();
+      assert.equal(language,'de');
+      await page.getByRole('button',{name:'English EN',exact:true}).click();
+      await page.getByRole('heading',{name:'Settings',exact:true}).waitFor();
+      assert.equal(language,'en');
+      await page.emulateMedia({colorScheme:'dark'});
+      await page.screenshot({path:`output/playwright/settings-refined-${name}.png`,fullPage:true});
+      await page.locator('.sidebar-footer button').click();
+      await page.locator('.about-dialog[open] .update-notice').waitFor();
+      await page.getByRole('button',{name:'Check for updates',exact:true}).waitFor();
+      await page.screenshot({path:`output/playwright/about-${name}.png`,fullPage:true});
+      await page.getByRole('button',{name:'Close About',exact:true}).click();
+      assert.equal(await page.locator('.update-notice').count(),0);
+      await page.emulateMedia({colorScheme:'light'});
       language = "de";
       await page.reload();
       await page.getByRole("navigation", { name: "Your learning" }).getByRole("button", { name: "Üben", exact: true }).click();
@@ -592,6 +653,8 @@ $$
       await page.getByRole('button', {name:'Test local AI',exact:true}).click();
       await page.getByText('Local AI responded in 2.5 seconds; document embeddings also work.',{exact:true}).waitFor();
       assert.equal(setupDownloads,1);
+      assert.equal(await page.locator('.progress progress').count(),0);
+      assert.equal(await page.getByText('50% · 1 / 2',{exact:true}).count(),0);
       await page.screenshot({path:`output/playwright/ai-setup-${name}.png`,fullPage:true});
       await page.getByRole('button',{name:'Continue to materials',exact:true}).click();
       emptyWorkspace = true;
@@ -607,7 +670,7 @@ $$
         .waitFor();
       assert.equal(await page.locator('.setup-steps').count(), 0);
       assert.equal(await page.getByRole('navigation', {name: 'Your learning'}).getByRole('button', {name:'Materials', exact:true}).getAttribute('aria-current'), 'page');
-      assert.match(await page.locator('aside .sidebar-footer').innerText(), /Colloquily v0\.1\.8/);
+      assert.match(await page.locator('aside .sidebar-footer').innerText(), /Colloquily v0\.1\.9/);
       assert.ok((await page.locator('aside .sidebar-footer').innerText()).includes(`© ${new Date().getFullYear()} Colloquily. All rights reserved.`));
       assert.equal(await page.locator('.app-stamp').count(), 0);
       assert.deepEqual(crashes, []);

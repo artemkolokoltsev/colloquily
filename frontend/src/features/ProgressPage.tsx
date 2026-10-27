@@ -219,13 +219,10 @@ export function ProgressPage({ exam }: { exam: number }) {
                           ? tr("ui.skipped")
                           : tr("ui.evaluated")}
                       </summary>
-                      {a.answer_text && (
-                        <>
-                          <h4>{tr("ui.yourAnswer")}</h4>
-                          <p className="prose">{a.answer_text}</p>
-                        </>
-                      )}
-                      <EvaluationView value={a.evaluation} />
+                      <EvaluationView
+                        value={a.evaluation}
+                        answer={a.answer_text || ""}
+                      />
                     </details>
                   </article>
                 ))}

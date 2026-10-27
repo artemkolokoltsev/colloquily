@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::{sync::Mutex, time::Duration};
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 use tauri_plugin_shell::{process::{CommandChild, CommandEvent}, ShellExt};
 
 #[derive(Clone, serde::Serialize)]
@@ -53,7 +53,28 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .manage(Backend { child: Mutex::new(None), connection: Mutex::new(Err("starting".into())) })
         .invoke_handler(tauri::generate_handler![backend_connection, open_ollama_download, open_learning_reference])
+        .on_menu_event(|app, event| {
+            if event.id().as_ref() == "about-colloquily" {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    let _ = window.emit("show-about", ());
+                }
+            }
+        })
         .setup(|app| {
+            let menu = tauri::menu::Menu::default(app.handle())?;
+            for (index, item) in menu.items()?.iter().enumerate() {
+                if let Some(submenu) = item.as_submenu() {
+                    let about_menu = if cfg!(target_os = "macos") { index == 0 } else { submenu.text()? == "Help" };
+                    if about_menu {
+                        submenu.remove_at(0)?;
+                        let about = tauri::menu::MenuItem::with_id(app, "about-colloquily", "About Colloquily", true, None::<&str>)?;
+                        submenu.insert(&about, 0)?;
+                    }
+                }
+            }
+            app.set_menu(menu)?;
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let result = launch(&handle).await;

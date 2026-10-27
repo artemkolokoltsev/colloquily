@@ -39,7 +39,7 @@
   "full_colloquium_focus": "Rehearse the complete format",
   "full_colloquium_goal": "Rehearse pacing and coherent explanations across a complete three-subject session. Use it to find where a longer rehearsal exposes gaps.",
   "full_colloquium_method": "Prepare all three subjects first. Answer aloud if useful, submit your written answers, and turn the final feedback into specific topics to revisit.",
-  "full_colloquium_format": "Exactly three exams with 15 minutes per subject, including any preparation time. Evaluate afterward. This is format rehearsal; it is not a validated prediction of your real exam grade.",
+  "full_colloquium_format": "Exactly three exams. Default: 15 minutes per subject; choose a different duration in setup. Preparation is included. Evaluation starts automatically after all subject blocks finish. This is format rehearsal, not a validated prediction of your real exam grade.",
   "retrieval_title": "Retrieval practice · the testing effect",
   "retrieval_text": "Recalling material from memory can strengthen later retention. In experiments with prose passages, retrieval practice led to better delayed recall than rereading, although rereading increased confidence.",
   "explanation_title": "Self-explanation · connect the why and how",

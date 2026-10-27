@@ -11,6 +11,7 @@ import { Materials } from "../features/Materials";
 import { Questions } from "../features/Questions";
 import { Practice } from "../features/Practice";
 import { Study, StudyPlan } from "../features/Study";
+import { About } from "../features/About";
 import { Settings } from "../features/Settings";
 import { Dashboard } from "../features/Dashboard";
 import { useTranslation } from "react-i18next";
@@ -42,6 +43,23 @@ const advancedPages = [
 ];
 export default function App() {
   const { t, i18n } = useTranslation();
+  const [aboutOpen, setAboutOpen] = useState(false);
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let active = true;
+    let stop: (() => void) | undefined;
+    void import("@tauri-apps/api/event")
+      .then(({ listen }) => listen("show-about", () => setAboutOpen(true)))
+      .then((unlisten) => {
+        if (active) stop = unlisten;
+        else unlisten();
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      stop?.();
+    };
+  }, []);
   const [welcomed, setWelcomed] = useState(
     () => localStorage.getItem("colloquily.welcomed") === "true",
   );
@@ -271,17 +289,35 @@ export default function App() {
           </nav>
         </details>
         <footer className="sidebar-footer">
-          <strong>
-            Colloquily <span>v{appPackage.version}</span>
-          </strong>
+          <button
+            className="about-trigger"
+            onClick={() => setAboutOpen(true)}
+            aria-label={t("ui.aboutTitle")}
+          >
+            <strong>
+              Colloquily <span>v{appPackage.version}</span>
+            </strong>
+          </button>
           <small>
             © {new Date().getFullYear()} Colloquily. {t("ui.rightsReserved")}
           </small>
         </footer>
       </aside>
+      <About
+        open={aboutOpen}
+        close={() => setAboutOpen(false)}
+        version={appPackage.version}
+      />
       <main>
         <UpdateNotice
-          home={page === "Dashboard" && !!selected && !aiSetup && !busy}
+          visible={aboutOpen}
+          home={
+            page === "Dashboard" &&
+            !!selected &&
+            !aiSetup &&
+            !busy &&
+            !aboutOpen
+          }
         />
         <header className="window-toolbar">
           <strong>
@@ -326,8 +362,8 @@ export default function App() {
           </section>
         )}
         {aiSetup && page === "Dashboard" && (
-          <div className="setup-notice">
-            {t("setup.notice")}{" "}
+          <div className="setup-inline">
+            <span>{t("ui.setupCompact")}</span>{" "}
             <button onClick={() => navigate("Local AI")}>
               {t("setup.action")}
             </button>
@@ -404,7 +440,11 @@ export default function App() {
           />
         )}
         {page === "Advanced settings" && (
-          <Settings key={selected} exam={selected} />
+          <Settings
+            key={selected}
+            exam={selected}
+            onAbout={() => setAboutOpen(true)}
+          />
         )}
         {selected > 0 && (
           <div key={`${page}:${selected}`}>

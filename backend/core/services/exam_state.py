@@ -39,13 +39,12 @@ def german_grade(percent_correct: float) -> float:
 
 
 def _evaluation_report(evaluations: list[dict]) -> dict:
-    scores = [float(item["score"]) for item in evaluations if item.get("score") is not None and item.get("status") not in {"skipped", "pending", "needs_review"}]
-    # A timed session can finish before deferred evaluations run. Keep its
-    # established provisional zero-grade behavior, while skipped attempts still
-    # remain explicitly non-graded in their own persisted state.
+    scores = [float(item["score"]) for item in evaluations if item.get("score") is not None and item.get("status") not in {"skipped", "pending", "needs_review", "internal_error"}]
+    # Pending/unreliable answers have no grade. Skips retain the documented
+    # session-level penalty but are never represented as evaluated answers.
     skipped_count = sum(item.get('status') == 'skipped' for item in evaluations)
     denominator = len(scores) + skipped_count
-    percent = round(sum(scores) / (denominator * 5) * 100, 1) if denominator else (0.0 if evaluations else None)
+    percent = round(sum(scores) / (denominator * 5) * 100, 1) if denominator else None
     grade = german_grade(percent) if percent is not None else None
     return {
         "answers": len(evaluations), "average_score": round(sum(scores) / len(scores), 2) if scores else None,
@@ -78,6 +77,9 @@ def _decode_session(row) -> dict | None:
     item["current_question"] = get_question(item["current_question_id"]) if item["current_question_id"] else None
     deadline = _parse(item["deadline_at"])
     item["remaining_seconds"] = max(0, int((deadline - utc_now()).total_seconds())) if deadline else item["duration_seconds"]
+    if item["status"] in FINISHED_STATUSES:
+        item["remaining_seconds"] = 0
+        item["current_question"] = None
     return item
 
 
@@ -194,8 +196,13 @@ def create_exam_run(
     preparation_seconds: int = 30,
     answer_seconds: int = 60,
     countdown_visible: bool = True,
+    session_duration_seconds: int | None = None,
     selected_question_ids: dict[int, list[int]] | None = None,
 ) -> dict:
+    if session_duration_seconds is not None and not 60 <= session_duration_seconds <= 5400:
+        raise ValueError("Session duration must be between 1 and 90 minutes")
+    if session_duration_seconds is not None and preparation_seconds >= session_duration_seconds:
+        raise ValueError("Preparation must be shorter than the session duration")
     unique_subjects = list(dict.fromkeys(int(item) for item in subject_ids))
     if not 1 <= len(unique_subjects) <= 3:
         raise ValueError("An exam run requires one to three distinct subjects")
@@ -210,7 +217,7 @@ def create_exam_run(
         if not get_subject(subject_id):
             raise ValueError("Subject not found")
         subject = get_subject(subject_id)
-        planned = 15 * 60 if mode == "full_colloquium" else int(subject["exam_duration_minutes"]) * 60
+        planned = session_duration_seconds or (15 * 60 if mode == "full_colloquium" else int(subject["exam_duration_minutes"]) * 60)
         selected = (selected_question_ids or {}).get(subject_id)
         if not selected:
             _question_order(subject_id, target=mock_question_target(planned) if timed_mock else None)
@@ -234,13 +241,15 @@ def create_exam_run(
             if mode == "weak_topic":
                 from services.progress import subject_progress
                 weak_ids = [item["question_id"] for item in subject_progress(user_id, subject_id)["due_questions"]]
-            planned = 15 * 60 if mode == "full_colloquium" else int(subject["exam_duration_minutes"]) * 60
+            planned = session_duration_seconds or (15 * 60 if mode == "full_colloquium" else int(subject["exam_duration_minutes"]) * 60)
             question_order = (selected_question_ids or {}).get(subject_id) or _question_order(
                 subject_id, weak_question_ids=weak_ids,
                 target=mock_question_target(planned) if timed_mock else None,
                 randomize=timed_mock,
             )
-            if mode == "full_colloquium":
+            if session_duration_seconds is not None:
+                duration_seconds = session_duration_seconds
+            elif mode == "full_colloquium":
                 duration_seconds = 15 * 60
             elif mode in {"subject_simulation", "multi_subject"}:
                 duration_seconds = int(subject["exam_duration_minutes"]) * 60
@@ -318,7 +327,7 @@ def _finish_session(connection, session: dict, status: str, now: datetime) -> No
     evaluations = [json.loads(row[0]) for row in attempts if row[0]]
     report = _evaluation_report(evaluations)
     connection.execute(
-        "UPDATE exam_sessions SET status = ?, ended_at = ?, evaluation_json = ? WHERE id = ?",
+        "UPDATE exam_sessions SET status = ?, ended_at = ?, evaluation_json = ?, deadline_at = NULL, current_question_id = NULL WHERE id = ?",
         (status, _iso(now), json.dumps(report, ensure_ascii=False), session["id"]),
     )
     remaining = connection.execute(
@@ -495,6 +504,7 @@ def evaluate_exam_run(run_id: int, user_id: int, evaluator: Callable[[int, int, 
     return get_exam_run(run_id)
 
 
+@serialized_transition
 def expire_exam_session(session_id: int, *, now: datetime | None = None) -> dict:
     now = now or utc_now()
     session = get_exam_session(session_id)
@@ -506,3 +516,22 @@ def expire_exam_session(session_id: int, *, now: datetime | None = None) -> dict
             _finish_session(connection, session, "time_expired", now)
             connection.commit()
     return get_exam_session(session_id)
+
+
+@serialized_transition
+def end_exam_session(session_id: int) -> None:
+    session = get_exam_session(session_id)
+    if not session or session['status'] in FINISHED_STATUSES:
+        return
+    with closing(_connect()) as connection:
+        _finish_session(connection, session, 'completed', utc_now())
+        connection.commit()
+
+
+def finish_exam_run(run_id: int, user_id: int) -> dict:
+    run = get_exam_run(run_id)
+    if not run or run['user_id'] != user_id:
+        raise ValueError('Exam run not found')
+    for session in run['sessions']:
+        end_exam_session(session['id'])
+    return get_exam_run(run_id)

@@ -15,7 +15,7 @@
     "countdown": "Restarting in {{count}} seconds. Any interaction postpones the restart.",
     "later": "Later",
     "deferred": "Automatic restart is postponed until the next app launch. You can still install manually.",
-    "location": "Use Software updates at the top of this page to check, install or change automatic updates."
+    "location": "Open About Colloquily to check for updates, install them or change automatic updates."
   },
   "de": {
     "title": "Programmaktualisierungen",
@@ -33,6 +33,6 @@
     "countdown": "Neustart in {{count}} Sekunden. Jede Interaktion verschiebt den Neustart.",
     "later": "Später",
     "deferred": "Der automatische Neustart ist bis zum nächsten App-Start verschoben. Du kannst weiterhin manuell installieren.",
-    "location": "Unter Programmaktualisierungen oben auf dieser Seite kannst du Updates suchen, installieren und die Automatik ändern."
+    "location": "Öffne Über Colloquily, um Updates zu suchen, zu installieren oder automatische Updates zu ändern."
   }
 }

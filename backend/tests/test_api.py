@@ -69,6 +69,28 @@ class ArchitectureTests(unittest.TestCase):
                 self.assertEqual(result['overall_evaluation']['german_grade'],2.0)
             self.assertEqual(evaluate.call_count,2)
 
+    def test_duration_presets_are_total_and_finish_closes_session_idempotently(self):
+        fixture=Path(__file__).resolve().parents[2]/'tests/core/fixtures/question_pool.json'
+        with TestClient(app) as client:
+            ident=client.post('/api/exams',json={'name':'Timer presets'}).json()['id']
+            client.post(f'/api/exams/{ident}/questions/import',files={'file':('pool.json',fixture.read_bytes(),'application/json')})
+            for minutes in [5,10,15,30,45,60,90]:
+                run=client.post('/api/practice',json={'subject_ids':[ident],'mode':'random_practice','session_duration_seconds':minutes*60}).json()
+                session=client.post(f'/api/sessions/{run["sessions"][0]["id"]}/begin').json()
+                self.assertEqual(session['duration_seconds'],minutes*60)
+                for _ in range(2):
+                    finished=client.post(f'/api/practice/{run["id"]}/finish').json()
+                    self.assertEqual(finished['status'],'completed')
+                    ended=finished['sessions'][0]
+                    self.assertEqual(ended['remaining_seconds'],0)
+                    self.assertIsNone(ended['deadline_at'])
+                    self.assertIsNone(ended['current_question'])
+                    self.assertIsNotNone(ended['ended_at'])
+                    self.assertIsNone(finished['overall_evaluation']['german_grade'])
+                self.assertEqual(client.post(f'/api/sessions/{session["id"]}/begin').json()['status'],'completed')
+            self.assertEqual(client.post('/api/practice',json={'subject_ids':[ident],'session_duration_seconds':5401}).status_code,422)
+            self.assertEqual(client.post('/api/practice',json={'subject_ids':[ident],'session_duration_seconds':300,'preparation_seconds':300}).status_code,400)
+
     def test_answer_jobs_are_deduplicated_per_question_not_across_questions(self):
         from backend.api.routes import answer
         from backend.models.api import AnswerInput

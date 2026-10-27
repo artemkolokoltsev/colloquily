@@ -1,6 +1,7 @@
+import { evaluationPresentation } from "./evaluationPresentation";
 import { StudyText } from "./StudyText";
-import { useEffect, useState } from "react";
-import { sourceBlob } from "../api/client";
+import { lazy, Suspense, useState } from "react";
+const SourcePdfPreview = lazy(() => import("./SourcePdfPreview"));
 import type { Evaluation, Job, Source } from "../types";
 import { useTranslation } from "react-i18next";
 import { sourcePage } from "./sourcePage";
@@ -14,6 +15,17 @@ export function ErrorNotice({ error }: { error: string }) {
 export function Progress({ job }: { job: Job | null }) {
   const { t } = useTranslation();
   if (!job) return null;
+  if (job.status === "completed")
+    return (
+      <p className="job-complete" role="status">
+        <span aria-hidden="true">✓ </span>
+        {t("common.completed")}
+      </p>
+    );
+  const fraction =
+    job.total && job.total > 0
+      ? Math.min(1, Math.max(0, (job.completed || 0) / job.total))
+      : undefined;
   return (
     <div role="status" className="progress">
       <strong>
@@ -34,19 +46,14 @@ export function Progress({ job }: { job: Job | null }) {
       </strong>
       {job.status !== "failed" && (
         <progress
-          max={job.status === "completed" ? 100 : job.total || undefined}
-          value={
-            job.status === "completed"
-              ? 100
-              : job.total
-                ? job.completed
-                : undefined
-          }
+          aria-label={job.message || t("ui.progressWorking")}
+          max={100}
+          value={fraction === undefined ? undefined : fraction * 100}
         />
       )}
       {!!job.total && (
         <small>
-          {Math.round(((job.completed || 0) / job.total) * 100)}% ·{" "}
+          {Math.round((fraction || 0) * 100)}% ·{" "}
           {job.total > 1000000
             ? `${((job.completed || 0) / 1e9).toFixed(2)} / ${(job.total / 1e9).toFixed(2)} GB`
             : `${job.completed || 0} / ${job.total}`}
@@ -55,65 +62,92 @@ export function Progress({ job }: { job: Job | null }) {
     </div>
   );
 }
-export function EvaluationView({ value }: { value: Evaluation | null }) {
+export function EvaluationView({
+  value,
+  answer,
+}: {
+  value: Evaluation | null;
+  answer?: string;
+}) {
   const { t } = useTranslation();
   if (!value) return null;
+  const feedback = evaluationPresentation(value);
+  const ungraded = ["pending", "needs_review", "internal_error"].includes(
+    value.status || "",
+  );
+  const skipped = value.status === "skipped";
+  const score = ungraded || skipped ? null : value.score;
   return (
-    <article
-      className={`evaluation-card score-${value.status === "skipped" ? "skipped" : (value.score ?? 0) < 2 ? "low" : (value.score ?? 0) < 4 ? "partial" : "strong"}`}
-    >
-      <p className="status-label">
-        {t(
-          value.status === "skipped"
-            ? "ui.skipped"
-            : value.status === "pending"
-              ? "ui.pendingEvaluation"
-              : (value.score ?? 0) < 2
-                ? "ui.lowScore"
-                : (value.score ?? 0) < 4
-                  ? "ui.partialScore"
-                  : "ui.strongScore",
+    <div className="answer-review">
+      {answer !== undefined && (
+        <section className="submitted-answer">
+          <h4>{t("ui.resultsYourAnswer")}</h4>
+          <StudyText>{answer || t("ui.resultsNoAnswer")}</StudyText>
+        </section>
+      )}
+      <article
+        className={`evaluation-card score-${ungraded || skipped ? "skipped" : (score ?? 0) < 2 ? "low" : (score ?? 0) < 4 ? "partial" : "strong"}`}
+      >
+        <h3>
+          {t("common.answerFeedback")}
+          {score != null && ` · ${score}/5`}
+        </h3>
+        {(ungraded || skipped) && (
+          <p>
+            {t(
+              skipped
+                ? "ui.resultsSkipped"
+                : value.status === "pending"
+                  ? "ui.pendingEvaluation"
+                  : "ui.resultsUngradedNote",
+            )}
+          </p>
         )}
-      </p>
-      <h3>
-        {t("common.answerFeedback")}{" "}
-        {(value.score != null || value.status === "skipped") &&
-          `· ${value.status === "skipped" ? 0 : value.score}/5`}
-      </h3>
-      {!!value.expected_core_points?.length && (
-        <>
-          <h4>{t("ui.expectedPoints")}</h4>
-          <ul>
-            {value.expected_core_points?.map((point, i) => (
-              <li key={i}>
-                <StudyText>{point.text}</StudyText>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-      {value.status !== "skipped" &&
-        (["correct", "missing", "incorrect"] as const).map((key) => (
-          <div key={key}>
-            <h4>{t(`common.${key}`)}</h4>
-            <ul>
-              {(value[key as "correct"] || [])
-                .filter((item) => item.text || item.claim)
-                .map((item, i) => (
-                  <li key={i}>
-                    <StudyText>{item.text || item.claim}</StudyText>
-                  </li>
-                ))}
-            </ul>
-          </div>
-        ))}
-      {value.status !== "skipped" && (
-        <StudyText>{value.better_oral_answer}</StudyText>
-      )}
-      {value.subject_id && (
-        <Sources exam={value.subject_id} sources={value.sources || []} />
-      )}
-    </article>
+        {!ungraded && !skipped && (
+          <>
+            {(["correct", "missing", "incorrect"] as const).map(
+              (key) =>
+                feedback[key].length > 0 && (
+                  <section key={key}>
+                    <h4>{t(`common.${key}`)}</h4>
+                    <ul>
+                      {feedback[key].map((text, i) => (
+                        <li key={i}>
+                          <StudyText>{text}</StudyText>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ),
+            )}
+            {feedback.expected.length > 0 && (
+              <details>
+                <summary>{t("ui.expectedPoints")}</summary>
+                <ul>
+                  {feedback.expected.map((text, i) => (
+                    <li key={i}>
+                      <StudyText>{text}</StudyText>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            {feedback.modelAnswer && (
+              <details>
+                <summary>{t("ui.feedbackModelAnswer")}</summary>
+                <StudyText>{feedback.modelAnswer}</StudyText>
+              </details>
+            )}
+          </>
+        )}
+        {value.subject_id && !!value.sources?.length && (
+          <details>
+            <summary>{t("ui.insight")}</summary>
+            <Sources exam={value.subject_id} sources={value.sources} />
+          </details>
+        )}
+      </article>
+    </div>
   );
 }
 export function Sources({
@@ -126,52 +160,56 @@ export function Sources({
   technical?: boolean;
 }) {
   const { t } = useTranslation();
-  const [url, setUrl] = useState("");
-  const [error, setError] = useState("");
-  useEffect(
-    () => () => {
-      if (url) URL.revokeObjectURL(url.split("#")[0]);
-    },
-    [url],
-  );
+  const [selected, setSelected] = useState(0);
+  const source = sources[Math.min(selected, sources.length - 1)];
+  if (!source) return null;
+  const path = source.relative_path || source.doc_name;
+  const page = sourcePage(source);
+  const pdf = path?.toLowerCase().endsWith(".pdf");
   return (
-    <div>
-      <ErrorNotice error={error} />
-      {sources.map((s, i) => (
-        <details key={i}>
-          <summary>
-            {technical
-              ? s.citation_id ||
-                (s.id ? `E${s.id}` : t("common.source", { count: i + 1 }))
-              : t("common.source", { count: i + 1 })}{" "}
-            · {s.document_title || s.doc_name} ·{" "}
-            {technical
-              ? s.source_location
-              : s.source_location?.replace(/,\s*lines?\s*\d+-\d+/i, "")}
-          </summary>
-          <StudyText>{s.content || s.preview}</StudyText>
-          {(s.relative_path || s.doc_name) && (
+    <section className="source-insight" aria-label={t("ui.insight")}>
+      {sources.length > 1 && (
+        <div
+          className="insight-tabs"
+          role="group"
+          aria-label={t("ui.insightChooseSource")}
+        >
+          {sources.map((item, i) => (
             <button
-              onClick={() => {
-                sourceBlob(exam, s.relative_path || s.doc_name!)
-                  .then((blobUrl) => {
-                    const page = sourcePage(s);
-                    setUrl(page ? `${blobUrl}#page=${page}` : blobUrl);
-                  })
-                  .catch((e) => setError(String(e)));
-              }}
+              key={i}
+              aria-pressed={i === selected}
+              onClick={() => setSelected(i)}
             >
-              {t("common.openSource")}
+              {t("common.source", { count: i + 1 })}
             </button>
-          )}
-        </details>
-      ))}
-      {url && (
-        <div className="source-preview">
-          <button onClick={() => setUrl("")}>{t("common.closeSource")}</button>
-          <iframe title="Original course source" src={url} />
+          ))}
         </div>
       )}
-    </div>
+      <h4>
+        {source.document_title || source.doc_name} ·{" "}
+        {source.source_location?.replace(/,\s*lines?\s*\d+-\d+/i, "")}
+      </h4>
+      {technical && (
+        <small>
+          {source.citation_id || (source.id ? `E${source.id}` : "")}
+        </small>
+      )}
+      {pdf && page && path ? (
+        <Suspense fallback={<p role="status">{t("ui.insightLoading")}</p>}>
+          <SourcePdfPreview
+            key={`${exam}:${path}:${page}`}
+            exam={exam}
+            path={path}
+            page={page}
+          />
+        </Suspense>
+      ) : (
+        pdf && <p className="muted">{t("ui.insightNoPage")}</p>
+      )}
+      <details open={!pdf}>
+        <summary>{t("ui.insightExtracted")}</summary>
+        <StudyText>{source.content || source.preview}</StudyText>
+      </details>
+    </section>
   );
 }
