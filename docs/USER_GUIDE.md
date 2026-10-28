@@ -25,7 +25,7 @@ weights are not included with Colloquily.
 4. If extraction is uncertain or preparation fails, inspect the material and source-review tools. Poor-quality or unreviewed evidence is excluded from grounded retrieval. Scanned PDFs without extractable text may require a searchable/OCR version prepared separately.
 5. Check generated questions, expected points and sources. Review, disable or edit questionable items before practising. Question-pool imports and reported exam questions are available as additional inputs.
 
-In 0.1.1, preparation covers every eligible document/topic batch. A weak model may
+Preparation covers every eligible document/topic batch. A weak model may
 produce fewer valid questions than requested: the app retains those results and
 shows incomplete coverage rather than inserting filler. Choose **Generate
 questions for uncovered topics** to continue. Check each material's **Ready**,
@@ -40,7 +40,7 @@ includes source passages. Open the original source to verify the assessment;
 PDF references can jump to a cited page. Scores are learning aids, not an
 official university grade.
 
-In 0.1.1, **Skip** advances without calling AI, grading your answer or revealing a
+**Skip** advances without calling AI, grading your answer or revealing a
 model answer. The attempt is saved as skipped, not correct. Skipping the final
 question completes the session; repeated clicks do not skip an extra question.
 
@@ -116,12 +116,12 @@ Each mode now shows a learning focus, a concrete goal, an instruction for how to
 | Mode | Intended practice | Feedback / format |
 | --- | --- | --- |
 | Single question | Retrieve and explain one concept | Feedback after submission |
-| Rapid practice | Give concise, accurate answers | Feedback after each answer; short time budget |
-| Weak topic | Identify and repair gaps using earlier attempts | Due questions first, normal pool if no history; evaluate afterward |
-| Random practice | Identify the relevant concept in a varied selection | Configurable count and filters; evaluate afterward |
-| Oral exam simulation | Structure explanations within a time budget | Configurable count and filters; evaluate afterward |
-| Subject simulation | Sustain explanations across one subject | Configured exam duration; evaluate afterward |
-| Multiple subjects | Rehearse changing subject context | Two or three consecutive subject blocks; evaluate afterward |
+| Rapid practice | Give concise, accurate answers | Feedback after each answer; adjustable time budget |
+| Weak topic | Identify and repair gaps using earlier attempts | Due questions first, normal pool if no history; automatic evaluation afterward |
+| Random practice | Identify the relevant concept in a varied selection | Configurable count and filters; automatic evaluation afterward |
+| Oral exam simulation | Structure explanations within a time budget | Configurable count, filters and duration; automatic evaluation afterward |
+| Subject simulation | Sustain explanations across one subject | Duration selected in setup; automatic evaluation afterward |
+| Multiple subjects | Rehearse changing subject context | Two or three consecutive blocks; selected duration per subject; automatic evaluation after all blocks |
 | Full colloquium | Rehearse the complete three-subject format | Exactly three exams, 15 minutes per subject by default; adjustable time and automatic evaluation |
 
 The explanations draw on [retrieval-practice experiments (Roediger & Karpicke, 2006)](https://doi.org/10.1111/j.1467-9280.2006.01693.x), [a self-explanation meta-analysis (Bisra et al., 2018)](https://doi.org/10.1007/s10648-018-9434-x), [feedback research (Hattie & Timperley, 2007)](https://doi.org/10.3102/003465430298487), [a synthesis of distributed practice (Cepeda et al., 2006)](https://doi.org/10.1037/0033-2909.132.3.354), and [a classroom trial of interleaved mathematics practice (Rohrer et al., 2020)](https://doi.org/10.1037/edu0000367).

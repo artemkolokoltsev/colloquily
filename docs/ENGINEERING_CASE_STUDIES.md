@@ -1,0 +1,33 @@
+# Engineering case studies
+
+These describe the current 0.1.9 implementation. Alternatives below explain design trade-offs; they do not claim a benchmark or reconstruct an undocumented decision history. Observed verification is recorded in the [baseline](ENGINEERING_BASELINE.md).
+
+## 1. Admit supported questions into practice
+
+**Problem and constraints.** A fluent local model can invent facts, attach a real citation to an unsupported answer, or keep generating paraphrases of the same question. Small models and imperfect PDF extraction make these failures plausible. A source reference alone cannot establish that the reference supports every answer point.
+
+**Implementation.** [grounded_training.py](../backend/core/services/grounded_training.py) validates structured candidates, checks evidence membership and exact supporting quotes, rejects unsupported numbers and duplicate learning targets, and requests a separate local-model validation pass before activation. [question_evidence.py](../backend/core/services/question_evidence.py) and [knowledge_repository.py](../backend/core/services/knowledge_repository.py) keep eligibility tied to current accepted evidence. Course administration and outlines are filtered, including previously accepted units. Historical records are preserved.
+
+**Alternatives and trade-offs.** Trusting model-reported citations would cost less inference but miss fabricated support. Pure lexical matching is deterministic but cannot fully establish semantic entailment. Combining deterministic gates and model validation offers inspectable rejection reasons at additional latency and can reject useful candidates. The separate validation pass can use the same model family: it is not an independent authority or a proof of correctness. Empty results remain visible rather than being replaced with filler.
+
+**Validation.** [Generation-quality tests](../backend/tests/test_generation_quality.py) cover fake quotes, unsupported answers, invalid citations, semantic duplicates, false comparisons, outline exclusion and empty batches. [Domain quality tests](../tests/core/test_subject_quality_pipeline.py) cover evidence/review behavior. The [real-model workflow](../.github/workflows/learning-quality.yml) separately exercises synthetic material with actual local inference; it was not run for this documentation change. None of these checks validates educational outcomes.
+
+## 2. Keep Skip and asynchronous answers consistent
+
+**Problem and constraints.** A user can click twice, skip while an answer request is delayed, or close the process between saving an attempt and advancing a question. A delayed request must never grade the next question. Skip should remain useful when the model is unavailable.
+
+**Implementation.** [Practice.tsx](../frontend/src/features/Practice.tsx) guards submissions and uses a transition version to discard stale polling results. [API routes](../backend/api/routes.py) receive the expected question ID and [jobs.py](../backend/services/jobs.py) deduplicates background work. In [exam_state.py](../backend/core/services/exam_state.py), per-session locks serialize transitions within the process; expected-question checks reject stale work before evaluation. `BEGIN IMMEDIATE` groups attempt insertion and session advancement into one SQLite transaction. Skip records its status without invoking an evaluator. Deferred evaluation checkpoints each completed answer; [workflows.py](../backend/services/workflows.py) starts it after all blocks finish and exposes an explicit retry after failure.
+
+**Alternatives and trade-offs.** Disabling a button alone cannot protect against retried HTTP requests. Two separate database commits leave a crash window. A transactional transition protects durable consistency while process-local serialization keeps the single-user application simple. Locks and job handles do not provide distributed coordination: one backend process per workspace remains required. Process interruption can still require retrying incomplete work.
+
+**Validation.** [API tests](../backend/tests/test_api.py) cover duplicate Skip, deduplication per question, late answers after Skip, timeout evaluation and finishing. [State tests](../tests/core/test_exam_state.py) cover Skip completion and deferred evaluation checkpoints. [Automatic-evaluation tests](../backend/tests/test_automatic_evaluation.py) cover active-job reuse and explicit retry. These are targeted regressions, not exhaustive crash injection at every persistence boundary. Session grades include skipped questions in their denominator; mean evaluated-answer scores exclude them.
+
+## 3. Ship a local Python AI backend in a native desktop app
+
+**Problem and constraints.** The app needs Python's document/vector stack while offering installation without a Python development environment. Study data must survive app replacement, and an unrelated browser page must not gain access to the local API.
+
+**Implementation.** [build_sidecar.py](../scripts/build_sidecar.py) freezes the backend for the host OS/CPU. [Tauri main.rs](../src-tauri/src/main.rs) launches the sidecar with a random loopback port, per-launch token and parent-stdin lifecycle channel. [launcher.py](../backend/launcher.py) owns the local listener and [main.py](../backend/main.py) enforces request access checks. The [typed client](../frontend/src/api/client.ts) obtains connection details through Tauri and attaches the token, including for source reads. [app_paths.py](../backend/core/app_paths.py) separates immutable packaged resources from mutable OS application data.
+
+**Alternatives and trade-offs.** A hosted backend would reduce native packaging but introduce external document transfer and mandatory connectivity. Reimplementing the document stack in the browser would introduce a different compatibility burden. A frozen sidecar retains the Python domain layer at the cost of large artifacts, target-native builds and lifecycle coordination. Ollama and model weights remain separate installations. Updater signatures establish payload authenticity; OS publisher trust requires separate signing and native verification.
+
+**Validation.** [Sidecar smoke checks](../scripts/smoke_sidecar.py) exercise the frozen backend, while the [Chromium/WebKit smoke script](../scripts/smoke_pdf_reader.mjs) checks authenticated PDF access, rendering under the desktop CSP, notes, practice and error recovery using synthetic HTTP fixtures. Browser fixtures do not exercise a real sidecar or native installer. [Desktop CI](../.github/workflows/desktop.yml) builds Windows x64 and Apple Silicon/Intel macOS; clean-machine GUI acceptance remains a separate requirement. See [packaging](desktop.md) and [native trust](TRUSTED_RELEASES.md).

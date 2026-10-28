@@ -193,7 +193,7 @@ try {
               : [
                   {
                     id: 1,
-                    name: "PDF regression",
+                    name: "Quantum physics",
                     slug: "pdf-regression",
                     exam_duration_minutes: 15,
                   },
@@ -570,6 +570,8 @@ $$
       await page.locator('aside').waitFor({state:'visible'});
       assert.equal(await page.locator('aside').isVisible(), true);
       assert.equal(await page.locator('.mode-card').count(), 8);
+      await page.mouse.move(0, 0);
+      await page.screenshot({path:`output/playwright/practice-modes-ready-${name}.png`,fullPage:true,animations:'disabled'});
       for (const title of modeNames) {
         await page.locator('.mode-card').filter({has:page.locator('strong',{hasText:new RegExp(`^${title}$`)})}).click();
         if (['Multiple subjects','Full colloquium'].includes(title)) {

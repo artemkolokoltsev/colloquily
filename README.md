@@ -1,9 +1,10 @@
 # Colloquily
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![Desktop CI](https://github.com/artemkolokoltsev/colloquily/actions/workflows/ci.yml/badge.svg)](https://github.com/artemkolokoltsev/colloquily/actions/workflows/ci.yml)
 [![Desktop preview](https://img.shields.io/github/v/release/artemkolokoltsev/colloquily?include_prereleases&label=desktop%20preview)](https://github.com/artemkolokoltsev/colloquily/releases)
 
-[Download](https://github.com/artemkolokoltsev/colloquily/releases) · [User guide](docs/USER_GUIDE.md) · [Installation](docs/INSTALLATION.md) · [License information](docs/LICENSING.md) · [Privacy](docs/PRIVACY.md)
+[Download](https://github.com/artemkolokoltsev/colloquily/releases) · [User guide](docs/USER_GUIDE.md) · [Installation](docs/INSTALLATION.md) · [License information](docs/LICENSING.md) · [Privacy](docs/PRIVACY.md) · [Architecture](docs/ARCHITECTURE.md)
 
 Colloquily helps you prepare for university oral exams using your own course material. Create an exam, set its date, upload your lecture PDFs, and choose **Prepare my practice**. Colloquily checks the study text and prepares source-grounded questions so you can start practising without managing indexes or review queues.
 
@@ -11,19 +12,58 @@ Your dashboard shows a daily practice plan, topic progress, and activity. Proces
 
 Documents, indexes, answers, and evaluations stay on your computer. There is no analytics service, cloud account, or cloud LLM fallback. Internet access is needed to install the application and explicitly download AI models; inference uses local Ollama (existing LM Studio configurations remain supported by the Python core).
 
-![Create an exam in Colloquily](docs/screenshots/exam-creation-en.png)
+![Colloquily practice picker with eight illustrated learning modes](docs/screenshots/practice-modes-en.png)
 
-English and German can be switched without restarting. See the [English settings](docs/screenshots/settings-en.png) and [German settings](docs/screenshots/settings-de.png) captures, produced from the running browser build with a disposable synthetic workspace.
+*Current browser UI, captured with synthetic API fixtures. Screenshots demonstrate the interface, not measured AI quality. [Capture details and more views](docs/screenshots/README.md).*
+
+## Choose how to practise
+
+Create an exam → add PDFs or Markdown → **Prepare my practice** → open **Practice**.
+Each illustrated mode card opens a guide explaining its learning goal, method and session options. English and German are available without restarting.
+
+| Mode | Use it for | Feedback |
+| --- | --- | --- |
+| **Single question** | Explain one concept, its reasoning and an example | After your answer |
+| **Rapid practice** | Recall familiar ideas concisely in a quick round | After each answer |
+| **Weak topic** | Revisit questions due for review, then the remaining pool; uses the usual pool without history | After the run |
+| **Random practice** | Recognise the relevant concept across a mixed selection; set count and topic/difficulty/priority filters | After the run |
+| **Oral exam simulation** | Rehearse structured answers under time pressure with count and filters | After the run |
+| **Subject simulation** | Sustain explanations across one exam's question pool | After the run |
+| **Multiple subjects** | Practise switching between two or three exams in consecutive blocks | After all blocks |
+| **Full colloquium** | Rehearse exactly three exams; starts with 15 minutes per subject, adjustable in setup | After all blocks |
+
+Deferred evaluation starts automatically when the run finishes. Duration options range from 5 to 90 minutes; preparation counts toward the time limit, and multi-subject durations apply to each subject. Only submitted text is evaluated: speaking aloud is optional rehearsal, and an unsent draft is not submitted on timeout. **Skip** advances without an AI call or feedback; it remains recorded as skipped.
+
+<details>
+<summary>See focused practice and session review</summary>
+
+![Focused question view with written answer and session timer](docs/screenshots/practice-session-en.png)
+
+![Session results with question scores, submitted answer and source-grounded feedback](docs/screenshots/session-results-en.png)
+
+</details>
+
+Use source insights to check the original PDF page, then review submitted answers, scores and suggested follow-ups in the session summary. AI feedback can be wrong; scores are study aids, not predictions of a university grade. The guides explain retrieval practice and self-explanation, with research links and limits. See the [full practice guide](docs/USER_GUIDE.md#what-the-practice-modes-train).
+
+## Engineering highlights
+
+- **Evidence-gated questions:** schema, exact support-quote, numeric-claim and duplicate checks plus a separate local-model validation pass; insufficient support produces a visible failure or incomplete coverage.
+- **Exam isolation:** separate workspaces and FAISS indexes, with SQLite records and source provenance scoped to each exam.
+- **Durable practice:** transactional attempt/advance updates, expected-question checks for late requests, and idempotent Skip transitions.
+- **Local desktop runtime:** React/TypeScript → FastAPI/Python → SQLite/FAISS/Ollama, with Tauri/Rust managing a frozen backend on a token-protected loopback port.
+- **Verification and distribution:** deterministic API/domain regressions, frontend utilities and Chromium/WebKit smoke tests, separate real-model acceptance, and native packaging for Windows x64 and both macOS architectures.
+
+Read the [architecture](docs/ARCHITECTURE.md), [engineering case studies](docs/ENGINEERING_CASE_STUDIES.md), [measured baseline and specification review](docs/ENGINEERING_BASELINE.md), [engineering standards](docs/ENGINEERING_STANDARDS.md), and [contribution guide](CONTRIBUTING.md). Test and release limitations are documented alongside the implementation.
 
 ## Desktop installation
 
-Unsigned desktop previews are distributed through [GitHub Releases](https://github.com/artemkolokoltsev/colloquily/releases). Download the Windows x64 EXE or the DMG matching Apple Silicon/Intel macOS, and its matching `licenses-*.zip` bundle. Verify `SHA256SUMS.txt`. See [installation](docs/INSTALLATION.md), the [user guide](docs/USER_GUIDE.md), [updates](docs/UPDATES.md), and [privacy](docs/PRIVACY.md).
+Desktop previews are distributed through [GitHub Releases](https://github.com/artemkolokoltsev/colloquily/releases). Download the Windows x64 EXE or the DMG matching Apple Silicon/Intel macOS, and its matching `licenses-*.zip` bundle. Verify `SHA256SUMS.txt`. See [installation](docs/INSTALLATION.md), the [user guide](docs/USER_GUIDE.md), [updates](docs/UPDATES.md), and [privacy](docs/PRIVACY.md).
 
-**This is a prerelease, not a signed production release.** Windows, Apple Silicon, and Intel macOS native packaging and frozen-backend checks pass in CI. Clean-machine GUI installation and complete hardware coverage remain separate checks. Apple Developer ID/notarization, Windows Authenticode, and signed automatic updates are not configured for this preview. Operating-system security may warn or block installation; do not disable security globally.
+**Desktop previews have release-specific trust status.** Tauri updater signatures and operating-system publisher signing are separate controls. Signed update payloads have been supported since 0.1.6; Apple Developer ID/notarization and Windows Authenticode depend on the credentials and native verification for each release. Check the release assets and [native trust documentation](docs/TRUSTED_RELEASES.md). Packaging CI does not establish clean-machine GUI installation or complete hardware coverage. Operating-system security may warn or block installation; do not disable security globally.
 
 A desktop release contains the React UI, Tauri application, Python runtime, FastAPI backend, and native Python dependencies. End users will not need Python, Node.js, Docker, or a terminal. Install the macOS application or Windows installer, open Colloquily, and follow **AI setup**. The backend starts and stops with the desktop application.
 
-Ollama remains a separate installation. Install it from [Ollama](https://ollama.com/download) and start it. In 0.1.1, Colloquily checks memory and disk space, reuses suitable installed models, and automatically prepares missing selected models with progress, cancellation and retry. Existing exam-specific task and embedding choices are preserved. Advanced users can change them under **AI setup**. The older 0.1.0 preview uses explicit download controls.
+Ollama remains a separate installation. Install it from [Ollama](https://ollama.com/download) and start it. Colloquily checks memory and disk space, reuses suitable installed models, and automatically prepares missing selected models with progress, cancellation and retry. Existing exam-specific task and embedding choices are preserved. Advanced users can change them under **AI setup**.
 
 New-exam defaults range from `qwen2.5:1.5b` on limited hardware to `qwen3:4b` or `qwen3:8b` when resources allow, with `embeddinggemma:latest` for embeddings unless already configured otherwise. Small models can fail quality or coverage checks; the app reports this instead of inserting filler questions. Model weights are not bundled and retain their separate upstream terms. Retry interrupted downloads to reuse cached layers, and keep sufficient free disk space.
 
@@ -135,10 +175,10 @@ python scripts/test_core.py
 python -m unittest discover -s backend/tests -v
 npm test
 npm run build
-cargo check --manifest-path src-tauri/Cargo.toml
+cargo check --locked --manifest-path src-tauri/Cargo.toml
 ```
 
-`make test` runs both Python suites. Native checking requires the generated sidecar and icons. The end-to-end verifier is available with `make smoke` and requires configured local inference models. Architecture smoke tests use disposable data and mock model availability; they do not download models.
+`make test` runs the frontend checks and both Python suites. `npm run test:pdf` builds the frontend and runs the synthetic Chromium/WebKit interaction smoke test under the desktop content-security policy; install its browsers with `npx playwright install chromium webkit` first. This test uses HTTP fixtures and needs no inference models. Native checking requires the generated sidecar and icons. The end-to-end verifier is available with `make smoke` and requires configured local inference models. Architecture smoke tests use disposable data and mock model availability; they do not download models.
 
 ## Repository layout
 
