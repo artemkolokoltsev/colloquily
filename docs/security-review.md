@@ -35,8 +35,7 @@ particular SEC-001 predates implemented frozen/target license inventories:
 `scripts/release_notices.py` and release workflow artifact steps now produce them.
 This review does not independently approve every published native dependency.
 
-Review used the
-[security-best-practices skill](/Users/artem.kolokoltsev/.codex/skills/security-best-practices/SKILL.md).
+Review used the security-best-practices skill's FastAPI, React and browser guidance.
 
 ## Executive summary
 
