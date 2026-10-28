@@ -108,7 +108,7 @@ class StorageSafetyTests(unittest.TestCase):
                 connection.execute("INSERT INTO subjects (slug,name,description,language,exam_duration_minutes,local_llm_config_json,embedding_config_json,active_index_profile,created_at,updated_at) VALUES ('test','Test','', 'de',15,'{}','{}','default','now','now')")
                 connection.commit()
             init_db(seed_admin=False)
-            self.assertTrue((Path(directory) / "backups" / "migrations" / f"colloquily-schema-9-before-{CURRENT_SCHEMA_VERSION}.db").exists())
+            self.assertTrue((Path(directory) / "backups" / "migrations" / f"colloquily-schema-{CURRENT_SCHEMA_VERSION - 1}-before-{CURRENT_SCHEMA_VERSION}.db").exists())
             with closing(sqlite3.connect(config.DB_PATH)) as connection:
                 self.assertEqual(connection.execute("SELECT language FROM subjects WHERE slug='test'").fetchone()[0], "de")
 

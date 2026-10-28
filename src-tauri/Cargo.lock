@@ -500,7 +500,7 @@ dependencies = [
 
 [[package]]
 name = "colloquily"
-version = "0.1.1"
+version = "0.1.10"
 dependencies = [
  "reqwest 0.12.28",
  "serde",

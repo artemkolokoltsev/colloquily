@@ -6,6 +6,7 @@ PyInstaller analysis, then this directory is included in the desktop installer.
 from __future__ import annotations
 
 import importlib.metadata as metadata
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -23,6 +24,22 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / 'build/release-notices'
 AGPL = re.compile(r'AGPL|Affero', re.I)
 AGPL_TEXT = re.compile(r'^\s*GNU AFFERO GENERAL PUBLIC LICENSE\s*$|SPDX-License-Identifier:\s*AGPL-', re.I | re.M)
+FRONTEND_NOTICE_REVISIONS = {
+    ('rehype-katex', '7.0.1'): '88a9497e1ede93b958237c85edbf5651faeca7af',
+    ('remark-math', '6.0.0'): 'd5d0660b150810a535bbb07eac6cc96a4510aa24',
+}
+
+def reviewed_frontend_notice(name, version, license_expression):
+    revision = FRONTEND_NOTICE_REVISIONS.get((name, version))
+    if revision is None:
+        return []
+    path = ROOT/'licenses/overrides/remark-math-MIT.txt'
+    # Normalize checkout line endings before checking the reviewed text.
+    content = path.read_text(encoding='utf-8')
+    if license_expression != 'MIT' or hashlib.sha256(content.encode('utf-8')).hexdigest() != 'cb992262f361a5359e6771c28740d33c7041e15332ae8537fae40538992591a9':
+        raise RuntimeError(f'Reviewed frontend notice no longer matches {name} {version}')
+    url = f'https://raw.githubusercontent.com/remarkjs/remark-math/{revision}/license'
+    return [(path.relative_to(ROOT), content + f'\nSource: {url}\n')]
 
 @lru_cache(maxsize=512)
 def upstream_text(url):
@@ -93,6 +110,8 @@ def append_notices(name, version, license_expression, directory, notices, invent
     found = list(license_files(directory))
     if not found and package:
         found = upstream_license(package)
+    if not found and package is None:
+        found = reviewed_frontend_notice(name, version, license_expression)
     if not found:
         raise RuntimeError(f'No copyright/license text found for {name} {version}')
     inventory.append({'name': name, 'version': version, 'license': license_expression})
@@ -122,7 +141,15 @@ def main(target):
         name = path.rsplit('node_modules/', 1)[-1]
         if details.get('dev') and name not in {'vite', 'rollup', 'esbuild', 'typescript'}:
             continue
+        # PDF.js uses browser canvas in Vite. Its optional Node-only native
+        # canvas packages are neither imported nor copied into the desktop app.
+        if name == '@napi-rs/canvas' or name.startswith('@napi-rs/canvas-'):
+            continue
         directory = ROOT/path
+        if not (directory/'package.json').exists() and details.get('optional'):
+            # npm lockfiles include native optional packages for other OSes.
+            # They are not installed or shipped in this target's bundle.
+            continue
         manifest = json.loads((directory/'package.json').read_text(encoding='utf-8'))
         append_notices(manifest['name'], manifest['version'], manifest.get('license') or details.get('license'), directory, frontend, js_inventory)
     cargo = cargo_metadata(target)

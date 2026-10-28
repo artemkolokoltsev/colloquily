@@ -17,6 +17,7 @@ export async function api<T>(
   path: string,
   method = "GET",
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
   const headers: Record<string, string> = {};
   headers["Accept-Language"] = i18n.resolvedLanguage || "en";
@@ -26,6 +27,7 @@ export async function api<T>(
   const response = await fetch(`${base}/api${path}`, {
     method,
     headers,
+    signal,
     body:
       body === undefined
         ? undefined
@@ -38,8 +40,17 @@ export async function api<T>(
       .json()
       .catch(() => ({ detail: response.statusText }));
     const code = error.error?.code;
-    const translated = code && i18n.exists(`errors.${code}`) ? i18n.t(`errors.${code}`, { defaultValue: i18n.t('errors.unknown') }) : undefined;
-    throw new Error(translated || error.error?.message || (typeof error.detail === "string" ? error.detail : JSON.stringify(error.detail)));
+    const translated =
+      code && i18n.exists(`errors.${code}`)
+        ? i18n.t(`errors.${code}`, { defaultValue: i18n.t("errors.unknown") })
+        : undefined;
+    throw new Error(
+      translated ||
+        error.error?.message ||
+        (typeof error.detail === "string"
+          ? error.detail
+          : JSON.stringify(error.detail)),
+    );
   }
   return response.json();
 }
@@ -47,32 +58,49 @@ export async function operation<T>(
   path: string,
   body: unknown,
   update: (job: Job) => void,
+  signal?: AbortSignal,
 ): Promise<T> {
-  let job = await api<Job>(path, "POST", body);
+  let job = await api<Job>(path, "POST", body, signal);
   update(job);
   while (job.status === "queued" || job.status === "running") {
     await new Promise((resolve) => setTimeout(resolve, 700));
-    job = await api<Job>(`/jobs/${job.id}`);
+    signal?.throwIfAborted();
+    job = await api<Job>(`/jobs/${job.id}`, "GET", undefined, signal);
     update(job);
   }
   if (job.status !== "completed")
     throw new Error(job.error || i18n.t("common.operationFailed"));
   return job.result as T;
 }
-export async function sourceBlob(exam: number, filename: string) {
+async function sourceResponse(exam: number, filename: string) {
   const response = await fetch(
     `${base}/api/exams/${exam}/sources/${filename.split("/").map(encodeURIComponent).join("/")}`,
     { headers: token ? { "X-Colloquily-Token": token } : {} },
   );
-  if (!response.ok) throw new Error("Unable to open source");
+  if (!response.ok) throw new Error(i18n.t("ui.pdfError"));
+  return response;
+}
+
+export async function sourceBytes(exam: number, filename: string) {
+  const response = await sourceResponse(exam, filename);
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+export async function sourceBlob(exam: number, filename: string) {
+  const response = await sourceResponse(exam, filename);
   return URL.createObjectURL(await response.blob());
 }
 
 export async function downloadBackup(filename: string) {
-  const response = await fetch(`${base}/api/backups/${encodeURIComponent(filename)}`, { headers: token ? { 'X-Colloquily-Token': token } : {} });
-  if (!response.ok) throw new Error(i18n.t('errors.unknown'));
+  const response = await fetch(
+    `${base}/api/backups/${encodeURIComponent(filename)}`,
+    { headers: token ? { "X-Colloquily-Token": token } : {} },
+  );
+  if (!response.ok) throw new Error(i18n.t("errors.unknown"));
   const url = URL.createObjectURL(await response.blob());
-  const anchor = document.createElement('a');
-  anchor.href = url; anchor.download = filename; anchor.click();
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }

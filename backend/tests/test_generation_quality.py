@@ -283,3 +283,70 @@ class GenerationQualityTests(unittest.TestCase):
         self.assertEqual(question_quality_problems(payload,evidence,[]), [])
         payload['expected_core_points'] = [point(graph)]
         self.assertIn('comparison_missing_expected_side', question_quality_problems(payload,evidence,[]))
+
+    def test_course_administration_and_outlines_are_not_study_evidence(self):
+        from services.study_content import study_content_problem
+        examples = [
+            'How many different versions of slides will be available on Moodle?',
+            'What is the minimum percentage of exercise points required to take the exam?',
+            'Two versions of the slides will be available on Moodle.',
+            'Course objectives A course on the mathematical foundations of learning on graphs. Understand graph kernels, Weisfeiler–Leman refinement, and message-passing graph neural networks.',
+            'Outline of the course Foundations Chapters 1–3 Graphs and notation; formal learning setup; permutation symmetry.',
+            'Prüfungszulassung: Mindestens 50 Prozent der Übungspunkte sind erforderlich.',
+        ]
+        for text in examples:
+            with self.subTest(text=text):
+                self.assertIsNotNone(study_content_problem(text))
+                result = deterministic_cleanup({'raw_content':text, 'source_location':'page 1'})
+                self.assertNotEqual(result['recommended_status'], 'accepted')
+        for text in ['Graph kernels compare graphs by mapping them into a feature space.',
+                     'A decision threshold controls the trade-off between precision and recall.',
+                     'A canvas is a drawing surface used by the graphics renderer.',
+                     'Learning objectives describe measurable outcomes in instructional design.']:
+            self.assertIsNone(study_content_problem(text))
+
+    def test_legacy_accepted_outline_and_its_questions_are_excluded_without_deletion(self):
+        from contextlib import closing
+        from services.database import _connect
+        from services.training_repository import create_question, get_question
+        from services.knowledge_repository import accepted_units
+        question = create_question(self.subject['id'], dict(self.payload, review_status='accepted'))
+        with closing(_connect()) as connection:
+            connection.execute("UPDATE knowledge_units SET content='Course objectives: Understand graph kernels and Weisfeiler–Leman refinement.' WHERE id=?", (self.evidence,))
+            connection.commit()
+        self.assertNotIn(self.evidence, accepted_evidence_map(self.subject['id']))
+        self.assertNotIn(self.evidence, accepted_evidence_map(self.subject['id'], compact=True))
+        self.assertEqual(accepted_units(self.subject['id']), [])
+        self.assertEqual(list_questions(self.subject['id'], accepted_only=True), [])
+        self.assertIsNotNone(get_question(question['id']))
+
+    def test_named_concepts_in_objectives_cannot_support_comparison(self):
+        source = 'Course objectives: Understand graph kernels and Weisfeiler–Leman refinement and compare their expressive power.'
+        payload = dict(self.payload, question_text='How do graph kernels and Weisfeiler–Leman refinement differ in their approach to graph learning?', evidence_ids=[1])
+        payload['expected_core_points'] = [{'text':source, 'source_quote':source, 'evidence_ids':[1]}]
+        self.assertIn('non_instructional_evidence', question_quality_problems(payload, {1:{'content':source}}, []))
+        with self.assertRaisesRegex(ValueError, 'No accepted evidence'):
+            generate_grounded_questions(self.subject, evidence_units=[{'id':1,'content':source}], llm_client=self.client())
+
+    def test_and_differ_comparison_requires_both_sides(self):
+        source = 'Graph kernels compare graphs using similarities between feature vectors.'
+        payload = dict(self.payload, question_text='How do graph kernels and Weisfeiler–Leman refinement differ?', evidence_ids=[1])
+        payload['expected_core_points'] = [{'text':source, 'source_quote':source, 'evidence_ids':[1]}]
+        self.assertIn('comparison_missing_expected_side', question_quality_problems(payload,{1:{'content':source}},[]))
+
+    def test_retrieval_fills_results_from_one_document(self):
+        import numpy as np
+        from services.subject_index import SubjectIndex
+        from unittest.mock import Mock
+        index = SubjectIndex(self.subject['id'], embedder=Mock())
+        index.embedder.embed.return_value = np.array([[1.,0.]], dtype=np.float32)
+        index.index = Mock(ntotal=3)
+        index.index.search.return_value = (np.array([[.99,.98,.97]]),np.array([[0,1,2]]))
+        index.metadata = [{'knowledge_unit_id':i,'document_id':1,'content':f'Graph learning representation number {i}','topic_id':None} for i in range(3)]
+        with patch('services.subject_index.accepted_units',return_value=[{'id':i,'content':item['content']} for i,item in enumerate(index.metadata)]):
+            self.assertEqual(len(index.search('Graph learning', k=3)),3)
+
+    def test_pending_or_unreliable_evaluations_have_no_grade(self):
+        from services.exam_state import _evaluation_report
+        for status in ['pending','needs_review','internal_error']:
+            self.assertIsNone(_evaluation_report([{'status':status,'score':0}])['german_grade'])

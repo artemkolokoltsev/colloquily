@@ -1,3 +1,4 @@
+import appPackage from "../../../package.json";
 import { useEffect, useState } from "react";
 import { api, connect } from "../api/client";
 import type { Exam } from "../types";
@@ -10,20 +11,20 @@ import { Materials } from "../features/Materials";
 import { Questions } from "../features/Questions";
 import { Practice } from "../features/Practice";
 import { Study, StudyPlan } from "../features/Study";
+import { About } from "../features/About";
 import { Settings } from "../features/Settings";
 import { Dashboard } from "../features/Dashboard";
 import { useTranslation } from "react-i18next";
-import { checkForUpdate } from "../update";
+import { UpdateNotice } from "../components/UpdateNotice";
 import { ExamPicker } from "../components/ExamPicker";
-import { operation } from "../api/client";
 import { Progress } from "../components/Common";
 import type { Job } from "../types";
 const pages = [
   "Dashboard",
   "Materials",
-  "Questions",
   "Practice",
-  "Progress",
+  "Study",
+  "Advanced settings",
 ] as const;
 const pageLabels = {
   Dashboard: "nav.dashboard",
@@ -31,15 +32,34 @@ const pageLabels = {
   Questions: "nav.questions",
   Practice: "nav.practice",
   Progress: "nav.progress",
+  Study: "nav.ask",
+  "Advanced settings": "nav.settings",
 } as const;
 const advancedPages = [
+  "Questions",
   "Reported questions",
   "Study plan",
   "Local AI",
-  "Advanced settings",
 ];
 export default function App() {
   const { t, i18n } = useTranslation();
+  const [aboutOpen, setAboutOpen] = useState(false);
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let active = true;
+    let stop: (() => void) | undefined;
+    void import("@tauri-apps/api/event")
+      .then(({ listen }) => listen("show-about", () => setAboutOpen(true)))
+      .then((unlisten) => {
+        if (active) stop = unlisten;
+        else unlisten();
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      stop?.();
+    };
+  }, []);
   const [welcomed, setWelcomed] = useState(
     () => localStorage.getItem("colloquily.welcomed") === "true",
   );
@@ -64,33 +84,63 @@ export default function App() {
   const [aiRetry, setAiRetry] = useState(0);
   function switchExam(id: number) {
     setSelected(id);
+    setAiJob(null);
+    setAiError("");
+    setAiSetup(false);
     setTopic("");
     setPracticeCount(10);
+    setAiRetry(0);
   }
+  useEffect(() => {
+    if (!aiJob || !["queued", "running"].includes(aiJob.status)) return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      void api<Job>(`/jobs/${aiJob.id}`)
+        .then((job) => {
+          if (!active) return;
+          setAiJob(job);
+          if (!["queued", "running"].includes(job.status))
+            setAiRetry((value) => value + 1);
+        })
+        .catch(() => undefined);
+    }, 2000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [aiJob?.id, aiJob?.status]);
   useEffect(() => {
     if (!ready || !selected) return;
     let current = true;
+    const controller = new AbortController();
     setAiError("");
+    setAiSetup(false);
     setAiJob(null);
-    void Promise.all([
-      api<{ ollama: string }>("/models/status"),
-      api<{ backend: string }>(`/exams/${selected}/models`),
-    ])
-      .then(async ([status, settings]) => {
+    void api<{ state: string }>(
+      `/exams/${selected}/models/readiness`,
+      "GET",
+      undefined,
+      controller.signal,
+    )
+      .then(async (status) => {
         if (!current) return;
-        if (settings.backend !== "ollama") {
-          setAiSetup(false);
-          return;
-        }
-        if (status.ollama !== "available") {
+        setAiSetup(false);
+        if (status.state === "ready") return;
+        if (status.state === "ollama_unavailable") {
           setAiSetup(true);
           return;
         }
-        setAiSetup(false);
-        await operation(`/exams/${selected}/models/prepare`, {}, (job) => {
-          if (current) setAiJob(job);
-        });
-        if (current) setAiSetup(false);
+        if (status.state === "insufficient_storage") {
+          setAiError(t("ui.aiStorage"));
+          return;
+        }
+        if (status.state === "failed" && aiRetry === 0) {
+          setAiError(t("ui.aiFailed"));
+          return;
+        }
+        setAiSetup(true);
+        if (status.state === "preparing" && "job" in status)
+          setAiJob((status as { job: Job }).job);
       })
       .catch((error) => {
         if (current) {
@@ -100,6 +150,7 @@ export default function App() {
       });
     return () => {
       current = false;
+      controller.abort();
     };
   }, [ready, selected, aiRetry]);
   async function refresh() {
@@ -120,16 +171,21 @@ export default function App() {
         });
       const existing = await refresh();
       if (!existing.length) setPage("Exams");
-      else if (existing.length === 1 && existing[0].slug === "imported-exam") {
+      else {
         const [files, prep] = await Promise.all([
           api<{ raw: string[] }>(`/exams/${existing[0].id}/documents`),
           api<{ questions: number }>(`/exams/${existing[0].id}/preparation`),
         ]);
-        if (!files.raw.length && !prep.questions) setPage("Exams");
+        if (
+          existing.length === 1 &&
+          existing[0].slug === "imported-exam" &&
+          !files.raw.length &&
+          !prep.questions
+        )
+          setPage("Exams");
+        else if (!prep.questions) setPage("Materials");
       }
       setReady(true);
-      // Update checks are best-effort and never block local study.
-      void checkForUpdate().catch(() => undefined);
     } catch (e) {
       setError(String(e));
     }
@@ -145,11 +201,13 @@ export default function App() {
         language: i18n.resolvedLanguage || "en",
       });
       const exam = await api<Exam>("/exams", "POST", {
-        name,
+        name: name.trim(),
         exam_date: examDate || null,
         language: i18n.resolvedLanguage || "en",
       });
       await refresh();
+      localStorage.setItem("colloquily.welcomed", "true");
+      setWelcomed(true);
       setSelected(exam.id);
       setName("");
       setExamDate("");
@@ -186,47 +244,83 @@ export default function App() {
           onSelect={switchExam}
           onCreate={() => navigate("Exams")}
         />
-        <nav aria-label="Your learning">
-          {pages.map((p) => (
-            <button
-              className={p === page ? "active" : ""}
-              key={p}
-              aria-current={p === page ? "page" : undefined}
-              onClick={() => navigate(p)}
-            >
-              {t(pageLabels[p])}
-            </button>
-          ))}
-          <button
-            className={page === "Study" ? "active" : ""}
-            onClick={() => navigate("Study")}
-          >
-            {t("nav.ask")}
-          </button>
-        </nav>
-        <details className="advanced-nav">
-          <summary>{t("nav.advanced")}</summary>
-          <nav aria-label="Advanced tools">
-            {advancedPages.map((p) => (
+        <div className="sidebar-navigation">
+          <nav aria-label="Your learning">
+            {pages.map((p) => (
               <button
+                className={
+                  p === page || (p === "Dashboard" && page === "Progress")
+                    ? "active"
+                    : ""
+                }
                 key={p}
-                className={page === p ? "active" : ""}
+                aria-current={
+                  p === page || (p === "Dashboard" && page === "Progress")
+                    ? "page"
+                    : undefined
+                }
+                disabled={!selected && p !== "Advanced settings"}
                 onClick={() => navigate(p)}
               >
-                {p === "Local AI"
-                  ? t("nav.ai")
-                  : p === "Reported questions"
-                    ? t("nav.reported")
-                    : p === "Study plan"
-                      ? t("nav.plan")
-                      : t("nav.settings")}
+                {t(pageLabels[p])}
               </button>
             ))}
           </nav>
-        </details>
-        <small>{t("app.localPromise")}</small>
+          <details className="advanced-nav">
+            <summary>{t("nav.advanced")}</summary>
+            <nav aria-label="Advanced tools">
+              {advancedPages.map((p) => (
+                <button
+                  key={p}
+                  className={page === p ? "active" : ""}
+                  disabled={!selected}
+                  onClick={() => navigate(p)}
+                >
+                  {p === "Questions"
+                    ? t("ui.manageQuestions")
+                    : p === "Local AI"
+                      ? t("nav.ai")
+                      : p === "Reported questions"
+                        ? t("nav.reported")
+                        : p === "Study plan"
+                          ? t("nav.plan")
+                          : t("nav.settings")}
+                </button>
+              ))}
+            </nav>
+          </details>
+        </div>
+        <footer className="sidebar-footer">
+          <button
+            className="about-trigger"
+            onClick={() => setAboutOpen(true)}
+            aria-label={t("ui.aboutTitle")}
+          >
+            <strong>
+              Colloquily <span>v{appPackage.version}</span>
+            </strong>
+          </button>
+          <small>
+            © {new Date().getFullYear()} Colloquily. {t("ui.rightsReserved")}
+          </small>
+        </footer>
       </aside>
+      <About
+        open={aboutOpen}
+        close={() => setAboutOpen(false)}
+        version={appPackage.version}
+      />
       <main>
+        <UpdateNotice
+          visible={aboutOpen}
+          home={
+            page === "Dashboard" &&
+            !!selected &&
+            !aiSetup &&
+            !busy &&
+            !aboutOpen
+          }
+        />
         <header className="window-toolbar">
           <strong>
             {exams.find((exam) => exam.id === selected)?.name || "Colloquily"}
@@ -267,19 +361,11 @@ export default function App() {
               </select>
             </label>
             <p>{t("release.privacy")}</p>
-            <button
-              onClick={() => {
-                localStorage.setItem("colloquily.welcomed", "true");
-                setWelcomed(true);
-              }}
-            >
-              {t("release.continue")}
-            </button>
           </section>
         )}
-        {aiSetup && page !== "Local AI" && (
-          <div className="setup-notice">
-            {t("setup.notice")}{" "}
+        {aiSetup && page === "Dashboard" && (
+          <div className="setup-inline">
+            <span>{t("ui.setupCompact")}</span>{" "}
             <button onClick={() => navigate("Local AI")}>
               {t("setup.action")}
             </button>
@@ -345,14 +431,22 @@ export default function App() {
         )}
         {page === "Local AI" && (
           <Models
+            key={selected}
+            exam={selected}
             onReady={() => {
               setAiSetup(false);
+              setAiError("");
+              setAiRetry((value) => value + 1);
               navigate("Materials");
             }}
           />
         )}
         {page === "Advanced settings" && (
-          <Settings key={selected} exam={selected} />
+          <Settings
+            key={selected}
+            exam={selected}
+            onAbout={() => setAboutOpen(true)}
+          />
         )}
         {selected > 0 && (
           <div key={`${page}:${selected}`}>
@@ -386,7 +480,14 @@ export default function App() {
                 initialCount={practiceCount}
               />
             )}{" "}
-            {page === "Progress" && <ProgressPage exam={selected} />}{" "}
+            {page === "Progress" && (
+              <>
+                <button onClick={() => navigate("Dashboard")}>
+                  {t("ui.backHome")}
+                </button>
+                <ProgressPage exam={selected} />
+              </>
+            )}{" "}
             {page === "Study plan" && <StudyPlan exam={selected} />}{" "}
           </div>
         )}

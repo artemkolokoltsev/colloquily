@@ -7,7 +7,7 @@ import config
 from backend.models.api import (Record, Exam, ExamInput, NewExamInput, ReviewInput, ProcessInput, Job, RunInput,
     AnswerInput, AskInput, GenerateInput, PullInput, Health, ModelStatus, SettingsInput, ModelsInput)
 from backend.services.jobs import jobs
-from backend.services.models import OllamaProvider
+from backend.services.models import OllamaProvider, pull_model
 from backend.services import workflows as flow
 from services import database as db, exam_state, knowledge_repository as knowledge, processing_jobs
 from services import training_repository as training, question_pools, runtime_settings
@@ -54,15 +54,26 @@ def health():
 def model_status():
     return OllamaProvider().status()
 
+@router.post('/models/start', response_model=Job, status_code=202)
+def start_local_runtime():
+    from backend.services.ollama_runtime import start
+    return jobs.submit('ollama-start', 'Starting local AI', start)
+
+@router.post('/exams/{ident}/models/verify', response_model=Job, status_code=202)
+def verify_local_runtime(ident: int):
+    from backend.services.models import verify_exam
+    subject = flow.exam(ident)
+    return jobs.submit(f'ai-verify:{ident}', 'Testing local AI', lambda progress: verify_exam(subject, progress))
+
 @router.post("/models/pull", response_model=Job, status_code=202)
 def pull(body: PullInput):
     return jobs.submit("model:" + body.model, "Downloading " + body.model,
-        lambda progress: OllamaProvider().pull(body.model, progress))
+        lambda progress: pull_model(body.model, progress))
 
 @router.get('/exams/{ident}/models/recommendation', response_model=Record)
 def model_recommendation(ident: int):
     from backend.services.models import model_plan
-    return model_plan(flow.exam(ident))
+    return model_plan(flow.exam(ident), allow_offline=True)
 
 @router.post('/exams/{ident}/models/prepare', response_model=Job, status_code=202)
 def prepare_models(ident: int):
@@ -120,10 +131,25 @@ def documents(ident: int):
     import json
     workspace = workspace_for(flow.exam(ident))
     raw = workspace.discover_sources()
+    known = {item['relative_path'] for item in knowledge.list_documents(ident)}
+    for entry in raw:
+        if entry['relative_path'] not in known:
+            knowledge.upsert_document(ident, entry)
     items = knowledge.list_documents(ident)
     for document in items:
         report = workspace.folder('reports') / f"document-{document['id']}-extraction.json"
-        document['extraction'] = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+        try:
+            document['extraction'] = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+        except (OSError, ValueError):
+            document['extraction'] = {}
+        if document['source_type'] == 'pdf' and not document['extraction'].get('pages_total'):
+            import pypdfium2 as pdfium
+            from services.pdf_runtime import PDFIUM_LOCK
+            try:
+                with PDFIUM_LOCK, pdfium.PdfDocument(str(flow.source_path(ident, document['relative_path']))) as pdf:
+                    document['extraction']['pages_total'] = len(pdf)
+            except (OSError, RuntimeError, ValueError):
+                document['extraction']['state'] = 'extraction_failed'
     return {"documents": items, "raw": [s["relative_path"] for s in raw],
         "processing": processing_jobs.latest_processing_job(ident)}
 
@@ -184,9 +210,9 @@ def index(ident: int):
     return jobs.submit(f"index:{ident}", "Building accepted-evidence FAISS index", lambda _: flow.build_index(ident))
 
 @router.get("/exams/{ident}/review", response_model=list[Record])
-def review(ident: int):
+def review(ident: int, document_id: int | None = None):
     flow.exam(ident)
-    return knowledge.list_review_units(ident)
+    return knowledge.list_review_units(ident, document_id=document_id)
 
 @router.patch("/exams/{ident}/review/{unit_id}", response_model=Record)
 def review_one(ident: int, unit_id: int, body: ReviewInput):
@@ -203,7 +229,7 @@ def questions(ident: int):
 def generate(ident: int, body: GenerateInput):
     subject = flow.exam(ident)
     return jobs.submit(f"questions:{ident}", "Generating grounded questions", lambda _: generate_grounded_questions(subject, body.count,
-        llm_client=subject_task_llm(subject, "question_generation")))
+        llm_client=subject_task_llm(subject, "question_generation"), validator_client=subject_task_llm(subject, "answering")))
 
 @router.patch("/exams/{ident}/questions/{question_id}", response_model=Record)
 def review_question(ident: int, question_id: int, body: ReviewInput):
@@ -223,7 +249,7 @@ def import_questions(ident: int, file: UploadFile = File(...)):
 @router.post("/exams/{ident}/ask", response_model=Job, status_code=202)
 def ask(ident: int, body: AskInput):
     flow.exam(ident)
-    return jobs.submit(f"ask:{ident}", "Retrieving evidence and composing an answer", lambda _: flow.ask(ident, body.question))
+    return jobs.submit(f"ask:{ident}", "Retrieving evidence and composing an answer", lambda _: flow.ask(ident, body.question, include_notes=body.include_notes, history_ids=body.history_ids))
 
 @router.get("/exams/{ident}/history", response_model=list[Record])
 def history(ident: int):
@@ -277,17 +303,23 @@ def start(body: RunInput):
 @router.get("/practice/{ident}", response_model=Record)
 @router.get("/mock-exams/{ident}", response_model=Record)
 def run(ident: int):
-    return flow.run(ident)
+    existing = flow.run(ident)
+    for part in existing['sessions']:
+        exam_state.expire_exam_session(part['id'])
+    return flow.automatic_evaluation(ident)
 
 @router.post("/practice/{ident}/evaluate", response_model=Job, status_code=202)
 def evaluate_run(ident: int):
-    flow.run(ident)
+    current = flow.run(ident)
+    if not all(part['status'] in exam_state.FINISHED_STATUSES for part in current['sessions']):
+        raise ValueError('Finish all practice sessions before evaluating the run')
     return jobs.submit(f"evaluate:{ident}", "Evaluating stored answers", lambda _: exam_state.evaluate_exam_run(ident, flow.local_user_id(), flow.evaluate))
 
 @router.get("/sessions/{ident}", response_model=Record)
 def session(ident: int):
     flow.session(ident)
     result = exam_state.expire_exam_session(ident)
+    flow.automatic_evaluation(result["exam_run_id"])
     question = result.get("current_question") or {}
     result["sources"] = list(training.accepted_evidence_map(result["subject_id"], question.get("evidence_ids", [])).values())
     return result
@@ -418,12 +450,8 @@ def cancel_update():
 @router.post('/practice/{ident}/finish', response_model=Record)
 def finish_practice(ident: int):
     flow.run(ident)
-    from contextlib import closing
-    with closing(db._connect()) as database:
-        database.execute("UPDATE exam_sessions SET status='completed', deadline_at=NULL WHERE exam_run_id=? AND status NOT IN ('completed','expired')", (ident,))
-        database.execute("UPDATE exam_runs SET status='completed' WHERE id=?", (ident,))
-        database.commit()
-    return flow.run(ident)
+    exam_state.finish_exam_run(ident, flow.local_user_id())
+    return flow.automatic_evaluation(ident)
 
 @router.get('/backups/{filename}')
 def download_backup(filename: str):
@@ -497,3 +525,104 @@ def prepare(ident: int):
         raise ValueError("Upload your PDFs first, then prepare your practice.")
     from backend.services.preparation import prepare_exam
     return jobs.submit(f"prepare:{ident}", "Preparing your practice", lambda progress: prepare_exam(ident, progress))
+
+from pydantic import BaseModel, Field
+class PageNoteInput(BaseModel):
+    content: str = Field(max_length=100000)
+
+@router.get('/exams/{ident}/documents/{document_id}/notes')
+def page_notes(ident: int, document_id: int):
+    from backend.services.page_notes import notes
+    flow.exam(ident)
+    return notes(ident, document_id)
+
+@router.put('/exams/{ident}/documents/{document_id}/notes/{page}')
+def write_page_note(ident: int, document_id: int, page: int, body: PageNoteInput):
+    from backend.services.page_notes import save_note
+    from backend.services.page_notes import document
+    flow.exam(ident)
+    doc = document(ident, document_id)
+    path = flow.source_path(ident, doc['relative_path'])
+    import pypdfium2 as pdfium
+    from services.pdf_runtime import PDFIUM_LOCK
+    with PDFIUM_LOCK, pdfium.PdfDocument(str(path)) as pdf:
+        if not 1 <= page <= len(pdf):
+            raise ValueError('Invalid PDF page')
+    return save_note(ident, document_id, page, body.content)
+
+@router.post('/exams/{ident}/questions/reclassify', status_code=202)
+def reclassify_questions(ident: int):
+    from services.question_topics import reclassify
+    flow.exam(ident)
+    return jobs.submit(f'topics:{ident}', 'Classifying questions', lambda progress: reclassify(ident))
+
+class QuestionTopicInput(BaseModel):
+    topic_id: int | None = None
+
+@router.patch('/exams/{ident}/questions/{question_id}/topic')
+def assign_question_topic(ident: int, question_id: int, body: QuestionTopicInput):
+    from services.question_topics import assign
+    flow.exam(ident)
+    return assign(ident, question_id, body.topic_id)
+
+@router.get('/exams/{ident}/models/readiness')
+def model_readiness(ident: int):
+    from backend.services.models import model_plan
+    subject = flow.exam(ident)
+    if merged_model_config(subject)['backend'] != 'ollama':
+        return {'state':'ready', 'manual_backend':True}
+    active = jobs.latest(f'ai-setup:{ident}')
+    if active and active['status'] in {'queued','running'}:
+        return {'state':'preparing', 'job':active}
+    try:
+        plan = model_plan(subject)
+    except Exception as exc:
+        import requests
+        if isinstance(exc, requests.RequestException):
+            return {'state':'ollama_unavailable'}
+        raise
+    if not plan['missing']:
+        from backend.services.models import apply_plan
+        apply_plan(subject, plan)
+        return {'state':'ready'}
+    if not plan['disk_ok']:
+        return {'state':'insufficient_storage'}
+    if active and active['status'] == 'failed':
+        return {'state':'failed', 'job':active}
+    return {'state':'models_missing'}
+
+@router.get('/exams/{ident}/topics')
+def exam_topics(ident: int):
+    flow.exam(ident)
+    from contextlib import closing
+    with closing(db._connect()) as connection:
+        return [dict(row) for row in connection.execute('SELECT id,name FROM topics WHERE subject_id=? ORDER BY name', (ident,))]
+
+@router.get('/exams/{ident}/summary')
+def exam_summary(ident: int):
+    import json
+    from contextlib import closing
+    flow.exam(ident)
+    user = flow.local_user_id()
+    with closing(db._connect()) as connection:
+        goal = connection.execute('SELECT settings_json FROM learning_goals WHERE subject_id=? AND user_id=?', (ident,user)).fetchone()
+        row = connection.execute("""SELECT COUNT(DISTINCT q.id) AS questions,
+            COUNT(DISTINCT CASE WHEN json_extract(a.evaluation_json,'$.score') IS NOT NULL
+                AND COALESCE(json_extract(a.evaluation_json,'$.status'),'evaluated') NOT IN ('skipped','pending','needs_review') THEN q.id END) AS practised
+            FROM questions q LEFT JOIN attempts a ON a.question_id=q.id AND a.user_id=? AND a.subject_id=?
+            WHERE q.subject_id=?""", (user,ident,ident)).fetchone()
+    return {**dict(row), 'date':json.loads(goal[0]).get('exam_date') if goal else None}
+
+@router.get('/exams/{ident}/attempts')
+def answer_history(ident: int, before: int | None = None):
+    from services.progress import attempt_history
+    flow.exam(ident)
+    return attempt_history(flow.local_user_id(),ident,before=before)
+
+@router.get('/exams/{ident}/questions/{question_id}/sources')
+def question_sources(ident: int, question_id: int):
+    flow.exam(ident)
+    question=training.get_question(question_id)
+    if not question or question['subject_id'] != ident:
+        raise HTTPException(404,'Question not found')
+    return list(training.accepted_evidence_map(ident,question.get('evidence_ids',[])).values())

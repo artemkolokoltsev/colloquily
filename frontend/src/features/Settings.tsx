@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, downloadBackup } from "../api/client";
 import { ErrorNotice } from "../components/Common";
 import { useTranslation } from "react-i18next";
-import { checkForUpdate, installPendingUpdate } from "../update";
+
 interface SettingsData {
   values: Record<string, string | number | boolean>;
   data_directory: string;
@@ -11,7 +11,13 @@ interface SettingsData {
     fields: { key: string; label: string; type: string; options?: string[] }[];
   }[];
 }
-export function Settings({ exam }: { exam: number }) {
+export function Settings({
+  exam,
+  onAbout,
+}: {
+  exam: number;
+  onAbout: () => void;
+}) {
   const { t, i18n } = useTranslation();
   const [data, setData] = useState<SettingsData>();
   const [models, setModels] = useState<{
@@ -19,10 +25,9 @@ export function Settings({ exam }: { exam: number }) {
     embedding_config: { model: string };
   }>();
   const [error, setError] = useState("");
+  const [languageBusy, setLanguageBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [version, setVersion] = useState("0.1.1");
-  const [updateVersion, setUpdateVersion] = useState("");
-  const [updateProgress, setUpdateProgress] = useState<number | null>();
+  const [version, setVersion] = useState("0.1.10");
   const [backupFile, setBackupFile] = useState<File>();
   const [backupPreview, setBackupPreview] = useState<{
     created_at: string;
@@ -30,7 +35,6 @@ export function Settings({ exam }: { exam: number }) {
     files: Record<string, string>;
   }>();
   const [busy, setBusy] = useState(false);
-  const [notes, setNotes] = useState("");
   async function inspect(file: File) {
     setError("");
     setBackupPreview(undefined);
@@ -72,7 +76,9 @@ export function Settings({ exam }: { exam: number }) {
     if ("__TAURI_INTERNALS__" in window)
       import("@tauri-apps/api/app")
         .then(({ getVersion }) => getVersion())
-        .then(setVersion)
+        .then((value) => {
+          if (typeof value === "string" && value) setVersion(value);
+        })
         .catch(() => undefined);
   }, []);
   async function save() {
@@ -90,29 +96,47 @@ export function Settings({ exam }: { exam: number }) {
     }
   }
   return (
-    <section>
+    <section className="settings-page">
       <h2>{t("settings.title")}</h2>
       <p>{t("settings.intro")}</p>
       <ErrorNotice error={error} />
       <p role="status">{message}</p>
-      <label>
-        {t("settings.language")}
-        <select
-          value={i18n.resolvedLanguage || "en"}
-          onChange={(event) => {
-            const language = event.target.value;
-            void api("/preferences", "PATCH", { language })
-              .then(() => i18n.changeLanguage(language))
-              .catch((e) => setError(String(e)));
-          }}
+      <section className="settings-card">
+        <h3>{t("settings.language")}</h3>
+        <p className="muted">{t("ui.languageHelp")}</p>
+        <div
+          className="language-cards"
+          role="group"
+          aria-label={t("settings.language")}
         >
-          <option value="de">{t("settings.german")}</option>
-          <option value="en">{t("settings.english")}</option>
-        </select>
-      </label>
-      <p>
-        {t("settings.dataDirectory", { path: data?.data_directory || "…" })}
-      </p>
+          {[
+            ["en", "English"],
+            ["de", "Deutsch"],
+          ].map(([language, label]) => (
+            <button
+              key={language}
+              disabled={languageBusy}
+              aria-pressed={(i18n.resolvedLanguage || "en") === language}
+              onClick={async () => {
+                setLanguageBusy(true);
+                setError("");
+                try {
+                  await api("/preferences", "PATCH", { language });
+                  await i18n.changeLanguage(language);
+                  setMessage(i18n.t("common.languageChanged"));
+                } catch (error) {
+                  setError(String(error));
+                } finally {
+                  setLanguageBusy(false);
+                }
+              }}
+            >
+              <strong>{label}</strong>
+              <span>{language.toUpperCase()}</span>
+            </button>
+          ))}
+        </div>
+      </section>
       <fieldset>
         <legend>{t("settings.backup")}</legend>
         <button
@@ -163,139 +187,101 @@ export function Settings({ exam }: { exam: number }) {
       <fieldset>
         <legend>{t("settings.updates")}</legend>
         <p>{t("settings.currentVersion", { version })}</p>
-        <button
-          disabled={busy}
-          onClick={() => {
-            setError("");
-            if (!("__TAURI_INTERNALS__" in window)) {
-              setMessage(t("release.unavailable"));
-              return;
-            }
-            void checkForUpdate()
-              .then((update) => {
-                setUpdateVersion(update?.version || "");
-                setNotes(update?.body || "");
-                setMessage(
-                  update
-                    ? t("settings.updateAvailable", { version: update.version })
-                    : t("settings.noUpdate"),
-                );
-              })
-              .catch(() => setError(t("settings.updateFailed")));
-          }}
-        >
-          {t("settings.checkUpdates")}
-        </button>
-        {notes && (
-          <article>
-            <h3>{t("release.notes")}</h3>
-            <p className="prose">{notes}</p>
-          </article>
-        )}
-        {updateVersion && (
-          <button
-            disabled={busy}
-            onClick={() => {
-              setBusy(true);
-              void installPendingUpdate(setUpdateProgress)
-                .catch((e) => setError(String(e)))
-                .finally(() => setBusy(false));
-            }}
-          >
-            {t("settings.installUpdate")}
-          </button>
-        )}
-        {updateProgress !== undefined && (
-          <progress max={100} value={updateProgress ?? undefined} />
-        )}
+        <button onClick={onAbout}>{t("ui.aboutTitle")}</button>
       </fieldset>
-      {models && (
-        <fieldset>
-          <legend>{t("settings.models")}</legend>
-          {Object.entries(models.task_models).map(([task, value]) => (
-            <label key={task}>
-              {t(`dynamic.${task}`, {
-                defaultValue: task.replaceAll("_", " "),
-              })}
+      <details>
+        <summary>{t("nav.advanced")}</summary>
+        <p className="storage-path">
+          {t("settings.dataDirectory", { path: data?.data_directory || "…" })}
+        </p>
+        {models && (
+          <fieldset>
+            <legend>{t("settings.models")}</legend>
+            {Object.entries(models.task_models).map(([task, value]) => (
+              <label key={task}>
+                {t(`dynamic.${task}`, {
+                  defaultValue: task.replaceAll("_", " "),
+                })}
+                <input
+                  value={value}
+                  onChange={(e) =>
+                    setModels({
+                      ...models,
+                      task_models: {
+                        ...models.task_models,
+                        [task]: e.target.value,
+                      },
+                    })
+                  }
+                />
+              </label>
+            ))}
+            <label>
+              {t("settings.embedding")}
               <input
-                value={value}
+                value={models.embedding_config.model}
                 onChange={(e) =>
                   setModels({
                     ...models,
-                    task_models: {
-                      ...models.task_models,
-                      [task]: e.target.value,
-                    },
+                    embedding_config: { model: e.target.value },
                   })
                 }
               />
             </label>
-          ))}
-          <label>
-            {t("settings.embedding")}
-            <input
-              value={models.embedding_config.model}
-              onChange={(e) =>
-                setModels({
-                  ...models,
-                  embedding_config: { model: e.target.value },
-                })
-              }
-            />
-          </label>
-        </fieldset>
-      )}
-      {data?.sections.map((s) => (
-        <details key={s.section}>
-          <summary>
-            {t(`dynamic.${s.section}`, { defaultValue: s.section })}
-          </summary>
-          {s.fields
-            .filter((f) => f.key !== "ST_ALLOW_DOWNLOAD")
-            .map((f) => (
-              <label key={f.key}>
-                {f.label}
-                {f.type === "bool" ? (
-                  <input
-                    type="checkbox"
-                    checked={!!data.values[f.key]}
-                    onChange={(e) =>
-                      setData({
-                        ...data,
-                        values: { ...data.values, [f.key]: e.target.checked },
-                      })
-                    }
-                  />
-                ) : f.type === "select" ? (
-                  <select
-                    value={String(data.values[f.key])}
-                    onChange={(e) =>
-                      setData({
-                        ...data,
-                        values: { ...data.values, [f.key]: e.target.value },
-                      })
-                    }
-                  >
-                    {f.options?.map((v) => (
-                      <option key={v}>{v}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    value={String(data.values[f.key] ?? "")}
-                    onChange={(e) =>
-                      setData({
-                        ...data,
-                        values: { ...data.values, [f.key]: e.target.value },
-                      })
-                    }
-                  />
-                )}
-              </label>
-            ))}
-        </details>
-      ))}
-      <button onClick={save}>{t("settings.save")}</button>
+          </fieldset>
+        )}
+        {data?.sections.map((s) => (
+          <details key={s.section}>
+            <summary>
+              {t(`dynamic.${s.section}`, { defaultValue: s.section })}
+            </summary>
+            {s.fields
+              .filter((f) => f.key !== "ST_ALLOW_DOWNLOAD")
+              .map((f) => (
+                <label key={f.key}>
+                  {f.label}
+                  {f.type === "bool" ? (
+                    <input
+                      type="checkbox"
+                      checked={!!data.values[f.key]}
+                      onChange={(e) =>
+                        setData({
+                          ...data,
+                          values: { ...data.values, [f.key]: e.target.checked },
+                        })
+                      }
+                    />
+                  ) : f.type === "select" ? (
+                    <select
+                      value={String(data.values[f.key])}
+                      onChange={(e) =>
+                        setData({
+                          ...data,
+                          values: { ...data.values, [f.key]: e.target.value },
+                        })
+                      }
+                    >
+                      {f.options?.map((v) => (
+                        <option key={v}>{v}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={String(data.values[f.key] ?? "")}
+                      onChange={(e) =>
+                        setData({
+                          ...data,
+                          values: { ...data.values, [f.key]: e.target.value },
+                        })
+                      }
+                    />
+                  )}
+                </label>
+              ))}
+          </details>
+        ))}
+        <button onClick={save}>{t("settings.save")}</button>
+      </details>
     </section>
   );
 }

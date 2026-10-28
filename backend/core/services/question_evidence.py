@@ -5,6 +5,7 @@ from contextlib import closing
 from pathlib import Path
 
 from services.database import _connect
+from services.study_content import study_evidence
 
 
 STOP_WORDS = {
@@ -60,7 +61,7 @@ def _source_rows(subject_id: int, source_file: str) -> list[dict]:
                 ORDER BY ku.source_start,ku.id""",
             document_ids,
         ).fetchall()
-        return [dict(row) for row in rows]
+        return [dict(row) for row in rows if study_evidence(dict(row))]
 
 
 def _page(item: dict) -> int | None:

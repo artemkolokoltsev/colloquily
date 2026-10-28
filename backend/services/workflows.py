@@ -44,9 +44,12 @@ def run(ident):
 
 def evaluate(subject_id, question_id, answer, duration):
     subject = exam(subject_id)
-    return evaluate_grounded_answer(subject_id, question_id, answer, duration,
+    result = evaluate_grounded_answer(subject_id, question_id, answer, duration,
         llm_client=subject_task_llm(subject, "answer_evaluation"),
         quality_llm_client=subject_task_llm(subject, "answering"))
+    from services.training_repository import get_question
+    result['expected_core_points'] = (get_question(question_id) or {}).get('expected_core_points', [])
+    return result
 
 
 def build_index(ident):
@@ -55,8 +58,12 @@ def build_index(ident):
     return result
 
 
-def ask(ident, question):
-    result = answer_subject_question(ident, question)
+def ask(ident, question, *, include_notes=False, history_ids=None):
+    allowed = set(history_ids or [])
+    history = [item for item in db.list_conversation_history(local_user_id(), subject_id=ident) if item['id'] in allowed]
+    history = sorted(history, key=lambda item: item['id'])[-4:]
+    conversation = [{'user': item['input_text'][:1000], 'assistant': item['output_text'][:2000]} for item in history]
+    result = answer_subject_question(ident, question, include_notes=include_notes, conversation=conversation)
     db.store_request(local_user_id(), result["request_entry"], subject_id=ident)
     return result
 
@@ -88,4 +95,36 @@ def submit(ident, answer, duration, *, skipped=False, expected_question_id=None)
         subject_id = result["session"]["subject_id"]
         evaluation["sources"] = list(accepted_evidence_map(subject_id, evaluation.get("evidence_ids", [])).values())
         evaluation["subject_id"] = subject_id
+    automatic_evaluation(result['session']['exam_run_id'])
+    return result
+
+
+def automatic_evaluation(ident, *, retry=False):
+    """Schedule deferred grading once a complete run is finished; survive UI reloads."""
+    from backend.services.jobs import jobs
+    result = run(ident)
+    if not all(part['status'] in exam_state.FINISHED_STATUSES for part in result['sessions']):
+        result['evaluation_status'] = 'waiting'
+        return result
+    key = f'evaluate:{ident}'
+    job = jobs.latest(key)
+    if job and job['status'] in {'queued', 'running'}:
+        result['evaluation_status'] = job['status']
+        result['evaluation_job'] = job
+        return result
+    if job and job['status'] == 'completed':
+        # The worker may have committed final reports after the first snapshot.
+        result = run(ident)
+    pending = any(attempt['evaluation'].get('status') == 'pending'
+                  for part in result['sessions'] for attempt in part.get('attempts', []))
+    if not pending:
+        result['evaluation_status'] = 'completed'
+        return result
+    if job is None or retry or job['status'] == 'completed':
+        job = jobs.submit(key, 'Evaluating completed practice',
+                          lambda _: exam_state.evaluate_exam_run(ident, local_user_id(), evaluate))
+    if job['status'] == 'completed':
+        result = run(ident)
+    result['evaluation_status'] = job['status']
+    result['evaluation_job'] = job
     return result

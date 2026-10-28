@@ -5,6 +5,7 @@ from contextlib import closing
 from datetime import datetime
 
 from services.database import _connect
+from services.study_content import study_evidence
 from services.topic_normalization import normalize_topic_titles, single_topic_title
 
 
@@ -19,7 +20,7 @@ def upsert_document(subject_id: int, source: dict) -> tuple[dict, bool]:
         if existing is None:
             cursor = connection.execute(
                 """
-                INSERT INTO documents (
+                INSERT OR IGNORE INTO documents (
                     subject_id, title, relative_path, source_type, source_hash,
                     processing_status, quality_status, enabled_for_training, created_at, updated_at
                 ) VALUES (?, ?, ?, ?, ?, 'raw', 'needs_review', 0, ?, ?)
@@ -29,7 +30,7 @@ def upsert_document(subject_id: int, source: dict) -> tuple[dict, bool]:
                     source["source_hash"], now, now,
                 ),
             )
-            document_id = int(cursor.lastrowid)
+            document_id = int(connection.execute("SELECT id FROM documents WHERE subject_id=? AND relative_path=?", (subject_id, source["relative_path"])).fetchone()["id"])
         else:
             document_id = int(existing["id"])
             if changed:
@@ -194,18 +195,8 @@ def insert_knowledge_units(subject_id: int, document_id: int, units: list[dict])
             if unit.get("recommended_status") in {"quarantined", "rejected"}:
                 detected_topic = None
             if detected_topic:
-                connection.execute(
-                    """
-                    INSERT OR IGNORE INTO topics (subject_id, name, description, review_status)
-                    VALUES (?, ?, '', 'needs_review')
-                    """,
-                    (subject_id, detected_topic[:160]),
-                )
-                topic_row = connection.execute(
-                    "SELECT id FROM topics WHERE subject_id = ? AND name = ?",
-                    (subject_id, detected_topic[:160]),
-                ).fetchone()
-                topic_id = int(topic_row["id"])
+                from services.question_topics import resolve_topic
+                topic_id = resolve_topic(connection, subject_id, detected_topic)
             cursor = connection.execute(
                 """
                 INSERT INTO knowledge_units (
@@ -334,7 +325,7 @@ def accepted_units(subject_id: int) -> list[dict]:
             """,
             (subject_id,),
         ).fetchall()
-        return [dict(row) for row in rows]
+        return [dict(row) for row in rows if study_evidence(dict(row))]
 
 
 def list_review_units(

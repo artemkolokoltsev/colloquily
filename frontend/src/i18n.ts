@@ -1,18 +1,25 @@
 import i18n from "i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
 import { initReactI18next } from "react-i18next";
+import setupFlow from './locales/setup-flow.json';
+import updates from './locales/updates.json';
 import release from './locales/release.json';
 import uiEn from './locales/ui-en.json';
 import uiDe from './locales/ui-de.json';
 import dynamic from './locales/dynamic.json';
+import practiceEn from './locales/practice-en.json';
+import practiceDe from './locales/practice-de.json';
 
 export const en = {
   translation: {
     release: release.en,
+    updates: updates.en,
+    setupFlow: setupFlow.en,
     ui: uiEn,
     dynamic: dynamic.en,
-    app: { tagline: "Your local oral-exam workspace", currentExam: "Current exam", createExam: "Create an exam", localPromise: "Local files. Local inference. No cloud account." },
-    nav: { dashboard: "Dashboard", materials: "Materials", questions: "Questions", practice: "Practice", progress: "Progress", ask: "Ask your materials", reported: "Reported questions", plan: "Study plan", ai: "AI setup", settings: "Settings", advanced: "Advanced tools" },
+    practiceLearning: practiceEn,
+    app: { tagline: "Exam workspace", currentExam: "Current exam", createExam: "Create an exam", localPromise: "Local files. Local inference. No cloud account." },
+    nav: { dashboard: "Home", materials: "Materials", questions: "Questions", practice: "Practice", progress: "Progress", ask: "Chat", reported: "Reported questions", plan: "Study plan", ai: "AI setup", settings: "Settings", advanced: "Advanced tools" },
     startup: { starting: "Starting your local study workspace…", retry: "Retry connection" },
     setup: { notice: "One-time setup: your local AI needs to be ready before we can prepare questions.", action: "Set up AI" },
     exam: { eyebrow: "Prepare with evidence", title: "What are you preparing for?", intro: "Name your exam, choose a date, then add your lecture PDFs. We’ll prepare your first practice questions.", name: "New exam name", placeholder: "e.g. Quantum physics", date: "Exam date", optional: "optional", create: "Create exam & add PDFs →", defaultDescription: "PDF and Markdown sources, isolated evidence and practice.", minutes: "{{count}}-minute mock exam", open: "Open materials" },
@@ -24,10 +31,13 @@ export const en = {
 
 const de = { translation: {
   release: release.de,
+    updates: updates.de,
+    setupFlow: setupFlow.de,
   ui: uiDe,
   dynamic: dynamic.de,
-  app: { tagline: "Dein lokaler Arbeitsbereich für mündliche Prüfungen", currentExam: "Aktuelle Prüfung", createExam: "Prüfung erstellen", localPromise: "Lokale Dateien. Lokale KI. Kein Cloud-Konto." },
-  nav: { dashboard: "Übersicht", materials: "Materialien", questions: "Fragen", practice: "Üben", progress: "Fortschritt", ask: "Materialien befragen", reported: "Prüfungsprotokollfragen", plan: "Lernplan", ai: "KI einrichten", settings: "Einstellungen", advanced: "Erweiterte Werkzeuge" },
+  practiceLearning: practiceDe,
+  app: { tagline: "Prüfungsarbeitsbereich", currentExam: "Aktuelle Prüfung", createExam: "Prüfung erstellen", localPromise: "Lokale Dateien. Lokale KI. Kein Cloud-Konto." },
+  nav: { dashboard: "Start", materials: "Materialien", questions: "Fragen", practice: "Üben", progress: "Fortschritt", ask: "Chat", reported: "Prüfungsprotokollfragen", plan: "Lernplan", ai: "KI einrichten", settings: "Einstellungen", advanced: "Erweiterte Werkzeuge" },
   startup: { starting: "Dein lokaler Lernbereich wird gestartet…", retry: "Verbindung erneut versuchen" },
   setup: { notice: "Einmalige Einrichtung: Die lokale KI muss bereit sein, bevor Fragen erstellt werden können.", action: "KI einrichten" },
   exam: { eyebrow: "Mit Quellen lernen", title: "Auf welche Prüfung bereitest du dich vor?", intro: "Benenne die Prüfung, wähle optional ein Datum und füge deine Vorlesungsunterlagen hinzu.", name: "Name der neuen Prüfung", placeholder: "z. B. Quantenphysik", date: "Prüfungsdatum", optional: "optional", create: "Prüfung erstellen & PDFs hinzufügen →", defaultDescription: "PDF- und Markdown-Quellen, isolierte Belege und Übungen.", minutes: "{{count}} Minuten Prüfungssimulation", open: "Materialien öffnen" },

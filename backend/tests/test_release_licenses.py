@@ -10,6 +10,38 @@ import zipfile
 from scripts.release_notices import append_notices, archive_source, upstream_license, cargo_metadata
 
 class ReleaseLicenseTests(unittest.TestCase):
+    def test_reviewed_math_notice_handles_windows_checkout_line_endings(self):
+        original = Path(__file__).resolve().parents[2]/'licenses/overrides/remark-math-MIT.txt'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            notice = root/'licenses/overrides/remark-math-MIT.txt'
+            notice.parent.mkdir(parents=True)
+            notice.write_bytes(original.read_text(encoding='utf-8').replace('\n', '\r\n').encode('utf-8'))
+            package = root/'package'
+            package.mkdir()
+            with patch('scripts.release_notices.ROOT', root):
+                notices = []
+                append_notices('rehype-katex', '7.0.1', 'MIT', package, notices, [])
+            self.assertIn('Copyright (c) 2017 Junyoung Choi', ''.join(notices))
+
+    def test_omitted_math_notices_preserve_exact_upstream_text_and_provenance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for name, version in [('rehype-katex', '7.0.1'), ('remark-math', '6.0.0')]:
+                with self.subTest(package=name):
+                    notices, inventory = [], []
+                    append_notices(name, version, 'MIT', Path(directory), notices, inventory)
+                    self.assertIn('Copyright (c) 2017 Junyoung Choi', ''.join(notices))
+                    self.assertIn('Permission is hereby granted', ''.join(notices))
+                    self.assertIn('Source: https://raw.githubusercontent.com/remarkjs/remark-math/', ''.join(notices))
+                    self.assertEqual(inventory[0]['version'], version)
+
+    def test_reviewed_math_notice_cannot_cover_new_version_or_changed_license(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, 'No copyright'):
+                append_notices('rehype-katex', '7.0.2', 'MIT', Path(directory), [], [])
+            with self.assertRaisesRegex(RuntimeError, 'no longer matches'):
+                append_notices('rehype-katex', '7.0.1', 'Apache-2.0', Path(directory), [], [])
+
     def test_cargo_metadata_decodes_unicode_independently_of_windows_locale(self):
         with patch('scripts.release_notices.subprocess.check_output', return_value='{"author":"東京"}') as command:
             self.assertEqual(cargo_metadata('x86_64-pc-windows-msvc'), {'author':'東京'})

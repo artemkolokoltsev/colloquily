@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::{sync::Mutex, time::Duration};
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 use tauri_plugin_shell::{process::{CommandChild, CommandEvent}, ShellExt};
 
 #[derive(Clone, serde::Serialize)]
@@ -28,6 +28,21 @@ fn open_ollama_download(app: tauri::AppHandle) -> Result<(), String> {
     app.shell().open("https://ollama.com/download", None).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn open_learning_reference(app: tauri::AppHandle, reference: &str) -> Result<(), String> {
+    // Open only the research references bundled with the practice guide.
+    let url = match reference {
+        "retrieval" => "https://doi.org/10.1111/j.1467-9280.2006.01693.x",
+        "explanation" => "https://doi.org/10.1007/s10648-018-9434-x",
+        "feedback" => "https://doi.org/10.3102/003465430298487",
+        "spacing" => "https://doi.org/10.1037/0033-2909.132.3.354",
+        "interleaving" => "https://doi.org/10.1037/edu0000367",
+        _ => return Err("Unknown learning reference".into()),
+    };
+    #[allow(deprecated)]
+    app.shell().open(url, None).map_err(|e| e.to_string())
+}
+
 fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
@@ -37,8 +52,29 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(Backend { child: Mutex::new(None), connection: Mutex::new(Err("starting".into())) })
-        .invoke_handler(tauri::generate_handler![backend_connection, open_ollama_download])
+        .invoke_handler(tauri::generate_handler![backend_connection, open_ollama_download, open_learning_reference])
+        .on_menu_event(|app, event| {
+            if event.id().as_ref() == "about-colloquily" {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    let _ = window.emit("show-about", ());
+                }
+            }
+        })
         .setup(|app| {
+            let menu = tauri::menu::Menu::default(app.handle())?;
+            for (index, item) in menu.items()?.iter().enumerate() {
+                if let Some(submenu) = item.as_submenu() {
+                    let about_menu = if cfg!(target_os = "macos") { index == 0 } else { submenu.text()? == "Help" };
+                    if about_menu {
+                        submenu.remove_at(0)?;
+                        let about = tauri::menu::MenuItem::with_id(app, "about-colloquily", "About Colloquily", true, None::<&str>)?;
+                        submenu.insert(&about, 0)?;
+                    }
+                }
+            }
+            app.set_menu(menu)?;
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let result = launch(&handle).await;

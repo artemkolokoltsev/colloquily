@@ -47,6 +47,8 @@ export interface Question {
   expected_core_points?: { text: string }[];
 }
 export interface Evaluation {
+  status?: string;
+  expected_core_points?: {text: string}[];
   sources?: Source[];
   subject_id?: number;
   score?: number;
@@ -72,6 +74,8 @@ export interface Session {
   evaluation?: { percent_correct?: number; german_grade?: number };
 }
 export interface Run {
+  evaluation_status?: string;
+  evaluation_job?: Job;
   id: number;
   status: string;
   mode: string;
@@ -90,6 +94,8 @@ export interface LearningTopic {
   mastery_reason: string;
 }
 export interface LearningData {
+  average_score: number | null;
+  practised_questions: number;
   goal: {
     exam_date: string | null;
     repetitions: number;
@@ -99,6 +105,8 @@ export interface LearningData {
   assessed_answers: number;
   streak: number;
   today_answers: number;
+  today_target: number;
+  today_completed: number;
   activity: { date: string; answers: number }[];
   plan: {
     days_left: number | null;

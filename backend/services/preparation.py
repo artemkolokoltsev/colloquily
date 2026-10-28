@@ -38,7 +38,7 @@ def prepare_exam(ident, progress):
         if status['ollama'] != 'available':
             raise ValueError('Local AI needs setup. Open AI setup, finish installation, then try again.')
         from backend.services.models import setup_exam
-        setup_exam(subject, progress)
+        setup_exam(subject, progress, allow_downloads=False)
         subject = flow.exam(ident)
     progress(message='Reading your materials…')
     job = processing_jobs.create_processing_job(ident, {'mode': 'deterministic', 'retry_failed': True})
@@ -84,7 +84,7 @@ def prepare_exam(ident, progress):
                                  'rejected': rejected_total + batch_rejected,
                                  'candidates': generated + rejected_total + values.get('candidates', 0)}))
         try:
-            questions = generate_grounded_questions(subject, needed, llm_client=subject_task_llm(subject, 'question_generation'), evidence_units=evidence, progress=generation_progress, activate_validated=True)
+            questions = generate_grounded_questions(subject, needed, llm_client=subject_task_llm(subject, 'question_generation'), evidence_units=evidence, progress=generation_progress, activate_validated=True, validator_client=subject_task_llm(subject, 'answering'))
             for question in questions:
                 training.review_question(question['id'], 'accepted', subject_id=ident)
             existing.extend(questions)
