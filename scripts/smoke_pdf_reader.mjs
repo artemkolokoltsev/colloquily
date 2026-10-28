@@ -572,6 +572,38 @@ $$
       assert.equal(await page.locator('.mode-card').count(), 8);
       await page.mouse.move(0, 0);
       await page.screenshot({path:`output/playwright/practice-modes-ready-${name}.png`,fullPage:true,animations:'disabled'});
+      // Long workspace pages must not push navigation or About below the window.
+      await page.locator('.shell > main').evaluate((main) => {
+        const content = document.createElement('div');
+        content.dataset.sidebarRegression = '';
+        content.style.height = '2000px';
+        main.append(content);
+      });
+      for (const size of [{width:1280,height:800}, {width:1024,height:600}]) {
+        await page.setViewportSize(size);
+        await page.evaluate(() => window.scrollTo(0, 500));
+        await page.waitForFunction(() => window.scrollY >= 500);
+        const bounds = await page.locator('.shell > aside').boundingBox();
+        assert.ok(Math.abs(bounds.y) <= 1, 'sidebar stays at the viewport top while content scrolls');
+        assert.ok(Math.abs(bounds.height - size.height) <= 1, 'sidebar fits the window height');
+        const footer = await page.locator('.sidebar-footer').boundingBox();
+        assert.ok(footer.y >= 0 && footer.y + footer.height <= size.height + 1, 'About stays visible');
+      }
+      await page.setViewportSize({width:1024,height:420});
+      await page.locator('.advanced-nav > summary').click();
+      await page.getByRole('navigation', {name:'Advanced tools'}).getByRole('button').last().scrollIntoViewIfNeeded();
+      assert.ok(await page.locator('.sidebar-navigation').evaluate((nav) => nav.scrollTop > 0), 'short windows can scroll sidebar controls');
+      const shortFooter = await page.locator('.sidebar-footer').boundingBox();
+      assert.ok(shortFooter.y >= 0 && shortFooter.y + shortFooter.height <= 421, 'About remains reachable in short windows');
+      await page.locator('.advanced-nav > summary').click();
+      await page.setViewportSize({width:390,height:900});
+      await page.evaluate(() => window.scrollTo(0, 0));
+      assert.equal(await page.locator('.shell > aside').evaluate((aside) => getComputedStyle(aside).position), 'static', 'narrow navigation stays in normal document flow');
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+      await page.locator('[data-sidebar-regression]').evaluate((content) => content.remove());
+      await page.setViewportSize({width:1280,height:1000});
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.locator('.sidebar-navigation').evaluate((nav) => { nav.scrollTop = 0; });
       for (const title of modeNames) {
         await page.locator('.mode-card').filter({has:page.locator('strong',{hasText:new RegExp(`^${title}$`)})}).click();
         if (['Multiple subjects','Full colloquium'].includes(title)) {

@@ -244,50 +244,52 @@ export default function App() {
           onSelect={switchExam}
           onCreate={() => navigate("Exams")}
         />
-        <nav aria-label="Your learning">
-          {pages.map((p) => (
-            <button
-              className={
-                p === page || (p === "Dashboard" && page === "Progress")
-                  ? "active"
-                  : ""
-              }
-              key={p}
-              aria-current={
-                p === page || (p === "Dashboard" && page === "Progress")
-                  ? "page"
-                  : undefined
-              }
-              disabled={!selected && p !== "Advanced settings"}
-              onClick={() => navigate(p)}
-            >
-              {t(pageLabels[p])}
-            </button>
-          ))}
-        </nav>
-        <details className="advanced-nav">
-          <summary>{t("nav.advanced")}</summary>
-          <nav aria-label="Advanced tools">
-            {advancedPages.map((p) => (
+        <div className="sidebar-navigation">
+          <nav aria-label="Your learning">
+            {pages.map((p) => (
               <button
+                className={
+                  p === page || (p === "Dashboard" && page === "Progress")
+                    ? "active"
+                    : ""
+                }
                 key={p}
-                className={page === p ? "active" : ""}
-                disabled={!selected}
+                aria-current={
+                  p === page || (p === "Dashboard" && page === "Progress")
+                    ? "page"
+                    : undefined
+                }
+                disabled={!selected && p !== "Advanced settings"}
                 onClick={() => navigate(p)}
               >
-                {p === "Questions"
-                  ? t("ui.manageQuestions")
-                  : p === "Local AI"
-                    ? t("nav.ai")
-                    : p === "Reported questions"
-                      ? t("nav.reported")
-                      : p === "Study plan"
-                        ? t("nav.plan")
-                        : t("nav.settings")}
+                {t(pageLabels[p])}
               </button>
             ))}
           </nav>
-        </details>
+          <details className="advanced-nav">
+            <summary>{t("nav.advanced")}</summary>
+            <nav aria-label="Advanced tools">
+              {advancedPages.map((p) => (
+                <button
+                  key={p}
+                  className={page === p ? "active" : ""}
+                  disabled={!selected}
+                  onClick={() => navigate(p)}
+                >
+                  {p === "Questions"
+                    ? t("ui.manageQuestions")
+                    : p === "Local AI"
+                      ? t("nav.ai")
+                      : p === "Reported questions"
+                        ? t("nav.reported")
+                        : p === "Study plan"
+                          ? t("nav.plan")
+                          : t("nav.settings")}
+                </button>
+              ))}
+            </nav>
+          </details>
+        </div>
         <footer className="sidebar-footer">
           <button
             className="about-trigger"

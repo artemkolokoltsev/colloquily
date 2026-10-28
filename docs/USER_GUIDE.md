@@ -141,6 +141,8 @@ Deferred evaluation starts automatically after the last question or timer expiry
 
 The left sidebar footer shows Colloquily, the installed version, and a copyright notice with the current year. It is hidden with the sidebar during focused practice.
 
+At desktop widths, the sidebar fits the window and stays visible while the main page scrolls. In short windows, scroll within the sidebar to reach additional controls. Narrow layouts keep navigation above the page content.
+
 
 ### Study evidence, insights and session review
 
