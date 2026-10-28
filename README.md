@@ -1,6 +1,7 @@
 # Colloquily
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![Desktop CI](https://github.com/artemkolokoltsev/colloquily/actions/workflows/ci.yml/badge.svg)](https://github.com/artemkolokoltsev/colloquily/actions/workflows/ci.yml)
 [![Desktop preview](https://img.shields.io/github/v/release/artemkolokoltsev/colloquily?include_prereleases&label=desktop%20preview)](https://github.com/artemkolokoltsev/colloquily/releases)
 
 [Download](https://github.com/artemkolokoltsev/colloquily/releases) · [User guide](docs/USER_GUIDE.md) · [Installation](docs/INSTALLATION.md) · [License information](docs/LICENSING.md) · [Privacy](docs/PRIVACY.md)
@@ -42,6 +43,12 @@ Tauri v2 → bundled PyInstaller backend → loopback-only listener
 The frontend contains presentation and API calls, not RAG or persistence logic. FastAPI adapters reuse `backend/core/services/` and the existing database schema. Ingestion retains durable checkpoints; indexing, generation, evaluation, and downloads run as background operations with status polling. Other operation handles are process-local: after a restart, retry the action; completed exam attempts and evaluations remain in SQLite.
 
 The desktop uses a random loopback port and a per-launch API token. Foreign browser origins are rejected. Both the desktop and browser applications open without a login. Existing owner records are reused to preserve progress; new databases use a local identity with a random unused password. Advanced settings provide parsing, chunking, retrieval, and model controls for RAG experiments.
+
+## For engineers and contributors
+
+Colloquily is designed as a reviewable engineering system, not just a desktop demo. Start with the [architecture and data-flow guide](docs/ARCHITECTURE.md), [engineering standards and verification ladder](docs/ENGINEERING_STANDARDS.md), and [ADR 0001: local-first, evidence-gated learning](docs/adr/0001-local-first-and-evidence-gated-learning.md). The [contributing guide](CONTRIBUTING.md) and [coding-agent instructions](AGENTS.md) document safe change practices.
+
+Key design constraints are **exam-specific source provenance**, **explicit acceptance of evidence before generation**, **durable practice transitions**, and **local data/inference boundaries**. The docs also disclose trade-offs (large core modules, a preserved import-compatibility layer, and unsigned desktop previews) instead of claiming production readiness that has not been verified.
 
 ## Development
 
