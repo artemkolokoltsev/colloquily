@@ -20,18 +20,27 @@
     "test:translations": "node scripts/check_translations.mjs",
     "test": "node scripts/check_version.mjs && npm run test:translations && npm run test:frontend",
     "test:frontend": "node --experimental-strip-types --test tests/frontend/*.test.mjs",
-    "test:pdf": "npm run build && node scripts/smoke_pdf_reader.mjs"
+    "test:pdf": "npm run build && node scripts/smoke_pdf_reader.mjs",
+    "lint": "python scripts/check_quality.py lint",
+    "format-check": "python scripts/check_quality.py format",
+    "typecheck": "tsc -p frontend/tsconfig.json --noEmit",
+    "test:quality": "python -m unittest discover -s tests/tooling -v"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
     "@tauri-apps/cli": "^2.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
     "concurrently": "^9.0.0",
+    "eslint": "10.13.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.13.0",
     "playwright": "^1.64.1",
-    "prettier": "^3.9.8",
+    "prettier": "3.9.8",
     "typescript": "^5.7.0",
+    "typescript-eslint": "8.72.1",
     "vite": "^6.0.0"
   },
   "dependencies": {
@@ -52,5 +61,8 @@
   },
   "overrides": {
     "katex": "$katex"
+  },
+  "engines": {
+    "node": ">=22.13.0 <23 || >=24"
   }
 }
