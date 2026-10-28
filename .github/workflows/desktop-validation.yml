@@ -1,0 +1,41 @@
+name: Desktop runtime validation
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src-tauri/**'
+      - 'backend/launcher.py'
+      - 'backend/main.py'
+      - 'backend/requirements*.txt'
+      - 'scripts/build_sidecar.py'
+      - 'scripts/smoke_sidecar.py'
+      - 'rust-toolchain.toml'
+      - '.github/workflows/desktop-validation.yml'
+permissions:
+  contents: read
+concurrency:
+  group: desktop-runtime-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  runtime:
+    # Intel avoids the ARM hosted-runner capacity failure observed during rollout.
+    # Full ARM/Intel/Windows installer coverage remains in desktop.yml.
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with: { python-version: '3.11', cache: pip }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with: { node-version: '22', cache: npm }
+      - uses: dtolnay/rust-toolchain@1.90.0
+        with:
+          components: rustfmt, clippy
+      - run: python -m pip install -r backend/requirements.txt
+      - run: npm ci
+      - run: npm run build
+      - run: npm run build:sidecar
+      - run: python scripts/smoke_sidecar.py
+      - run: cargo fmt --all --manifest-path src-tauri/Cargo.toml -- --check
+      - run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - run: cargo check --locked --manifest-path src-tauri/Cargo.toml

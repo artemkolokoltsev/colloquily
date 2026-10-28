@@ -3,15 +3,6 @@ on:
   workflow_dispatch:
   push:
     tags: ['v*-rc.*']
-  pull_request:
-    paths:
-      - 'backend/**'
-      - 'scripts/**'
-      - 'frontend/**'
-      - 'tests/**'
-      - 'src-tauri/**'
-      - '.github/workflows/desktop.yml'
-      - 'package*.json'
 permissions:
   contents: read
 concurrency:
@@ -51,12 +42,12 @@ jobs:
       WINDOWS_CERTIFICATE: ${{ github.event_name != 'pull_request' && secrets.WINDOWS_CERTIFICATE || '' }}
       WINDOWS_CERTIFICATE_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.WINDOWS_CERTIFICATE_PASSWORD || '' }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.11'
           check-latest: true
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '22'
           cache: npm
@@ -75,7 +66,7 @@ jobs:
         run: python scripts/signing_preflight.py
       - name: Import Developer ID
         if: runner.os == 'macOS' && steps.native-signing.outputs.enabled == 'true'
-        uses: apple-actions/import-codesign-certs@v3
+        uses: apple-actions/import-codesign-certs@63fff01cd422d4b7b855d40ca1e9d34d2de9427d # v3
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -121,12 +112,12 @@ jobs:
         if: steps.native-signing.outputs.enabled != 'true'
         run: python scripts/verify_native_signing.py src-tauri/target/${{ matrix.target }}/release/bundle ${{ matrix.target }}
       - run: python scripts/checksums.py src-tauri/target/${{ matrix.target }}/release/bundle ${{ matrix.target }}
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: colloquily-${{ matrix.target }}-unsigned
           path: src-tauri/target/${{ matrix.target }}/release/bundle/
           if-no-files-found: error
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: licenses-${{ matrix.target }}
           path: build/release-notices/
@@ -142,12 +133,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: colloquily-*-unsigned
           path: release-assets/installers
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: licenses-*
           path: release-assets/licenses
