@@ -27,7 +27,7 @@ export function Settings({
   const [error, setError] = useState("");
   const [languageBusy, setLanguageBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [version, setVersion] = useState("0.1.9");
+  const [version, setVersion] = useState("0.1.10");
   const [backupFile, setBackupFile] = useState<File>();
   const [backupPreview, setBackupPreview] = useState<{
     created_at: string;

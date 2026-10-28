@@ -7,6 +7,7 @@ import { chromium, webkit } from "playwright";
 
 await mkdir("output/playwright", { recursive: true });
 const root = resolve("frontend/dist");
+const appVersion = JSON.parse(await readFile("package.json", "utf8")).version;
 const policy = JSON.parse(await readFile("src-tauri/tauri.conf.json", "utf8"))
   .app.security.csp;
 const pdf = await readFile("tests/frontend/fixtures/reader.pdf");
@@ -704,7 +705,7 @@ $$
         .waitFor();
       assert.equal(await page.locator('.setup-steps').count(), 0);
       assert.equal(await page.getByRole('navigation', {name: 'Your learning'}).getByRole('button', {name:'Materials', exact:true}).getAttribute('aria-current'), 'page');
-      assert.match(await page.locator('aside .sidebar-footer').innerText(), /Colloquily v0\.1\.9/);
+      assert.ok((await page.locator('aside .sidebar-footer').innerText()).includes(`Colloquily v${appVersion}`));
       assert.ok((await page.locator('aside .sidebar-footer').innerText()).includes(`© ${new Date().getFullYear()} Colloquily. All rights reserved.`));
       assert.equal(await page.locator('.app-stamp').count(), 0);
       assert.deepEqual(crashes, []);

@@ -28,14 +28,11 @@ this metadata indefinitely. The app's update feed is **latest.json**, not
 
 `https://github.com/artemkolokoltsev/colloquily/releases/download/latest/latest.json`
 
-The download channel currently serves **v0.1.6-rc.1**, including its signed update
-feed. Versions through 0.1.5 contain a placeholder trust key and need one manual
-upgrade. The 0.1.7 update adds optional native publisher signing and verified trust
-metadata; it is separate from the already-published 0.1.6 release.
+The rolling channel is updated only after a release workflow successfully publishes and promotes its assets. Inspect `downloads.json` for the currently served version. Versions through 0.1.5 need one manual upgrade to join the signed update channel. Native publisher trust is reported separately for each platform.
 
 ## Publishing and recovery
 
-Pushing `v0.1.7-rc.1` triggers the three-platform preview workflow. Once native
+Pushing a version-matching RC tag such as `v0.1.10-rc.1` triggers the three-platform preview workflow. Once native
 builds, browser checks and learning acceptance pass, it publishes immutable
 version assets, the signed-update manifest, notices and checksums, then promotes
 the website channel. Update signatures are separate from Apple notarization and
