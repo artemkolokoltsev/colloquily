@@ -8,6 +8,8 @@ Affected layers, API/data changes, migrations, and any relevant ADR:
 
 ## Verification performed
 
+- [ ] `make check` (lint, formatting, strict types, deterministic tests and build)
+
 - [ ] `npm test`
 - [ ] `npm run test:api`
 - [ ] `python scripts/test_core.py`

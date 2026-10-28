@@ -43,6 +43,10 @@ as superseded only after synchronization reaches main. No branch is deleted.
 
 ## Administrator handoff
 
+The proposed policy follows GitHub's [ruleset documentation](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets).
+The `verify` source is GitHub Actions (app ID 15368), observed on the tooling PR.
+No administrator settings have been applied through the connected tools.
+
 Run only after the synchronization and tooling PRs have green checks on main.
 Inspect the actual check-run name before activating required checks:
 

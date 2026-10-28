@@ -1,6 +1,6 @@
 # Engineering case studies
 
-These describe the current 0.1.9 implementation. Alternatives below explain design trade-offs; they do not claim a benchmark or reconstruct an undocumented decision history. Observed verification is recorded in the [baseline](ENGINEERING_BASELINE.md).
+These describe the current 0.1.10 implementation. Alternatives below explain design trade-offs; they do not claim a benchmark or reconstruct an undocumented decision history. Observed verification is recorded in the [baseline](ENGINEERING_BASELINE.md).
 
 ## 1. Admit supported questions into practice
 

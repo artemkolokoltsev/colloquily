@@ -10,7 +10,12 @@ For most contributions: open a focused issue or pull request, explain the expect
 
 ## Set up and test
 
-Use Python 3.11 and Node.js 22+; Rust and platform prerequisites are required for native desktop work. See [README development setup](README.md#development).
+Use Python 3.11 and Node.js 22.13+ (22 LTS) or 24+; Rust and platform prerequisites are required for native desktop work. See [README development setup](README.md#development).
+
+Install `requirements-dev.txt` in your activated Python environment. Run
+`make check` for deterministic verification; individual lint/format/type/test
+commands, baseline rules and troubleshooting are in [developer verification](docs/DEVELOPMENT.md).
+Real-model acceptance and native packaging remain separate checks.
 
 ```bash
 npm ci
@@ -38,5 +43,9 @@ Explain the problem, behavior changed, affected architecture layers, test eviden
 Describe reproduction steps, OS/application version, expected and actual behavior, and sanitized logs if needed. **Never attach source course PDFs, private study answers, database files, API tokens or model credentials.** If a report could expose a security issue, avoid publishing exploit details or sensitive data in a public issue.
 
 ## Review standard
+
+Follow [SECURITY.md](SECURITY.md) for private vulnerability reporting. Use short-lived
+branches and PRs into `main`; releases tag the verified integrated commit. Never
+move a published version tag or delete historical release artifacts.
 
 The objective is a small, understandable, tested change that leaves users' existing local workspaces intact. An agent-generated patch receives the same scrutiny as a human-authored one. See [engineering standards](docs/ENGINEERING_STANDARDS.md) for required invariants and the verification ladder.

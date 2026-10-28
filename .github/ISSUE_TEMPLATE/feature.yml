@@ -1,0 +1,11 @@
+name: Feature request
+description: Explain a study or developer workflow that could improve.
+body:
+  - type: textarea
+    id: problem
+    attributes: { label: What problem are you trying to solve?, description: Describe the workflow without personal study content. }
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes: { label: Proposed behavior and alternatives, description: Explain how this fits a local-first single-user app. }
+    validations: { required: true }
