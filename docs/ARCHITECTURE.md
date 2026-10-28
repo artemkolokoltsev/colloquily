@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the **implemented** Colloquily 0.1.9 design, not an aspirational service architecture. Start with the [README](../README.md) for installation and the [engineering standards](ENGINEERING_STANDARDS.md) for change invariants.
+This document describes the **implemented** Colloquily 0.1.10 design, not an aspirational service architecture. Start with the [README](../README.md) for installation and the [engineering standards](ENGINEERING_STANDARDS.md) for change invariants.
 
 ## Context and responsibilities
 

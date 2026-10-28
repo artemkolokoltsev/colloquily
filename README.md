@@ -1,7 +1,7 @@
 # Colloquily
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-[![Desktop CI](https://github.com/artemkolokoltsev/colloquily/actions/workflows/ci.yml/badge.svg)](https://github.com/artemkolokoltsev/colloquily/actions/workflows/ci.yml)
+[![Deterministic CI](https://github.com/artemkolokoltsev/colloquily/actions/workflows/ci.yml/badge.svg)](https://github.com/artemkolokoltsev/colloquily/actions/workflows/ci.yml)
 [![Desktop preview](https://img.shields.io/github/v/release/artemkolokoltsev/colloquily?include_prereleases&label=desktop%20preview)](https://github.com/artemkolokoltsev/colloquily/releases)
 
 [Download](https://github.com/artemkolokoltsev/colloquily/releases) · [User guide](docs/USER_GUIDE.md) · [Installation](docs/INSTALLATION.md) · [License information](docs/LICENSING.md) · [Privacy](docs/PRIVACY.md) · [Architecture](docs/ARCHITECTURE.md)
@@ -85,14 +85,14 @@ The desktop uses a random loopback port and a per-launch API token. Foreign brow
 
 ## Development
 
-Requirements: Python 3.11, Node.js 22+, and Ollama for inference. Desktop development additionally needs Rust (pinned in `rust-toolchain.toml`) and the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/), including Xcode Command Line Tools on macOS or Microsoft C++ Build Tools/WebView2 on Windows.
+Requirements: Python 3.11, Node.js 22.13+ (22 LTS) or 24+, and Ollama for inference. Desktop development additionally needs Rust (pinned in `rust-toolchain.toml`) and the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/), including Xcode Command Line Tools on macOS or Microsoft C++ Build Tools/WebView2 on Windows.
 
 macOS shell:
 
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r backend/requirements.txt
+python -m pip install -r requirements-dev.txt
 npm ci
 npm run dev:all
 ```
@@ -102,7 +102,7 @@ Windows PowerShell:
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r backend/requirements.txt
+python -m pip install -r requirements-dev.txt
 npm ci
 npm run dev:all
 ```
@@ -169,6 +169,11 @@ Settings can create a validated `.colloquily-backup` archive using SQLite's onli
 ## Checks
 
 With the Python environment active:
+
+`make check` runs deterministic lint, format, strict TypeScript, tests and build.
+See [developer verification](docs/DEVELOPMENT.md) for the incremental legacy
+baseline, focused commands and troubleshooting. Repository policy and branch
+lifecycle are recorded in [maintenance](docs/REPOSITORY_MAINTENANCE.md).
 
 ```bash
 python scripts/test_core.py

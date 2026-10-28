@@ -22,7 +22,10 @@ This file is an engineering contract for changes to Colloquily. Read [docs/ARCHI
 
 ## Standard checks
 
-With Python 3.11 environment active and Node.js 22+ installed:
+With the Python 3.11 environment active (`requirements-dev.txt` installed) and
+Node.js 22.13+ on 22 LTS or 24+ installed, `make check` is the deterministic gate.
+Do not regenerate `scripts/quality-baseline.json` to conceal new violations.
+Individual checks:
 
 ```bash
 npm ci
