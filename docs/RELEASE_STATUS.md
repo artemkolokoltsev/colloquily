@@ -1,10 +1,11 @@
 # Release status
 
 Release candidate: **0.1.10 — Sidebar sized to your window**.
-Branch `release/0.1.10`; tag `v0.1.10-rc.1`.
+Branch `release/0.1.10`; tag `v0.1.10-rc.2`.
 
 Contains the viewport-height sidebar fix and documentation changes described in
-[release notes](RELEASE_NOTES_0.1.10.md). No database schema or AI behavior changes.
+[release notes](RELEASE_NOTES_0.1.10.md). Also fixes an evaluation-completion response race found by the first tagged build.
+No database schema or AI generation/grading rules change.
 
 Publication is authorized. The tag runs all three native installer builds,
 browser regressions and real-model acceptance. Publication and permanent-download

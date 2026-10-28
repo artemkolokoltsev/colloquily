@@ -112,6 +112,9 @@ def automatic_evaluation(ident, *, retry=False):
         result['evaluation_status'] = job['status']
         result['evaluation_job'] = job
         return result
+    if job and job['status'] == 'completed':
+        # The worker may have committed final reports after the first snapshot.
+        result = run(ident)
     pending = any(attempt['evaluation'].get('status') == 'pending'
                   for part in result['sessions'] for attempt in part.get('attempts', []))
     if not pending:
@@ -120,6 +123,8 @@ def automatic_evaluation(ident, *, retry=False):
     if job is None or retry or job['status'] == 'completed':
         job = jobs.submit(key, 'Evaluating completed practice',
                           lambda _: exam_state.evaluate_exam_run(ident, local_user_id(), evaluate))
+    if job['status'] == 'completed':
+        result = run(ident)
     result['evaluation_status'] = job['status']
     result['evaluation_job'] = job
     return result
