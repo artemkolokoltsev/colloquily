@@ -54,7 +54,7 @@ These are maintainability opportunities, not release-blocking bugs established b
 1. Several core service files contain multiple responsibilities (notably `database.py`, `grounded_training.py`, and `exam_state.py`). Extract behind tested behavior rather than creating a parallel rewrite.
 2. The preserved core's import-path compatibility in `backend/__init__.py` deserves an explicit migration plan before reorganizing packages.
 3. Expand automated frontend interaction/accessibility coverage beyond current utility-level regressions.
-4. Standardize Python formatting and static analysis only after establishing a clean baseline and agreeing on enforced checks.
+4. Reduce the measured legacy Ruff/ESLint/format baseline incrementally; new violations and modified unformatted files fail the [developer quality gate](DEVELOPMENT.md).
 5. Add clean-machine native release evidence and signing for production distribution. See `desktop.md`.
 
 Making a decision record for one of these improvements is often more valuable than introducing a new library.

@@ -75,6 +75,12 @@ a concrete moderation/use case.
 
 ## Release and branch lifecycle
 
+Synchronization PR #6 merged as `5beee1c` after local deterministic verification
+and hosted verify, Chromium/WebKit, all three native packaging targets and
+synthetic real-model acceptance passed. Main now contains the latest released
+implementation and both histories. Subsequent tooling/governance/reliability
+changes are separated into PRs #7, #8 and #9 (consult GitHub for merge status).
+
 Use short-lived `feat/`, `fix/`, `docs/`, `refactor/`, `chore/` branches, reviewed
 PRs into main, then immutable version tags on the intended integrated commit.
 Housekeeping does not bump versions. Existing `latest` is a legacy moving download
