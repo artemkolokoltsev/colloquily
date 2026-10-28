@@ -142,9 +142,9 @@ new deliverable branches; assess them separately after their PRs merge.
 | Local browsers | Chromium and WebKit production-CSP suite passed, including stale exam response, duplicate submission and keyboard/focus regressions |
 | Report extraction | Five characterization tests passed before and after extraction; historical import names preserved |
 | Synchronization hosted CI | PR #6: verify, PDF readers, all three native packaging targets and real-model synthetic-learning passed before merge |
-| Tooling hosted CI | Deterministic aggregate, PDF smoke and model acceptance passed on initial head; ARM runtime job failed before acquiring a runner. Retried, then moved selective validation to Intel; inspect final PR checks |
-| Governance hosted CI | PR #8 deterministic aggregate passed |
-| Reliability hosted CI | Inspect PR #9 for final hosted results; local verification above is complete |
+| Tooling hosted CI | PR #7 final head `abc7ad9`: deterministic aggregate, PDF smoke, Intel native runtime and repeated real-model acceptance all passed. The initial ARM capacity failure occurred before any steps ran. Merged as `124b145` |
+| Governance hosted CI | PR #8 deterministic aggregate passed; merged as `0e0699e` |
+| Reliability hosted CI | PR #9 head `5071f1e`: deterministic aggregate, Chromium/WebKit and native runtime all passed; the final documentation-only update retains this implementation |
 | Not performed | Clean-machine GUI installation, current OS publisher-signing approval, full fresh Python/Cargo advisory audit |
 
 The frontend bundle retains Vite's existing >500 kB chunk warning. Python still
@@ -189,6 +189,7 @@ changed view; it is not an application rewrite in the maintenance PRs.
 - `backend/core/services/practice_report.py`
 - `docs/ARCHITECTURE.md`
 - `docs/DEVELOPMENT.md`
+- `docs/ENGINEERING_BASELINE.md`
 - `docs/ENGINEERING_CASE_STUDIES.md`
 - `docs/ENGINEERING_STANDARDS.md`
 - `docs/REPOSITORY_MAINTENANCE.md`
