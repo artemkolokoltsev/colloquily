@@ -51,7 +51,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - uses: dtolnay/rust-toolchain@1.90.0
+      - uses: dtolnay/rust-toolchain@1.120.0
       - name: Require updater signing for published previews
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
@@ -66,7 +66,7 @@ jobs:
         run: python scripts/signing_preflight.py
       - name: Import Developer ID
         if: runner.os == 'macOS' && steps.native-signing.outputs.enabled == 'true'
-        uses: apple-actions/import-codesign-certs@63fff01cd422d4b7b855d40ca1e9d34d2de9427d # v3
+        uses: apple-actions/import-codesign-certs@77ba2a2a8f5cfc8c405ebf3159f767c323e238f9 # v7.1.0
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
