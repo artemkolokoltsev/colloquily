@@ -30,7 +30,7 @@ The browser development mode talks directly to the loopback FastAPI service. Des
 | Exam workflows | `backend/services/workflows.py`, `backend/services/preparation.py`, `backend/services/jobs.py` | Compose domain operations and expose progress |
 | Ingestion and evidence quality | `backend/core/services/quality_pipeline.py`, `knowledge_repository.py`, `processing_jobs.py` | Parse, normalize, review, checkpoint and approve evidence |
 | Retrieval and generated questions | `subject_index.py`, `subject_rag.py`, `grounded_training.py`, `question_evidence.py` | Per-exam retrieval, source validation, duplicate/quality gates |
-| Practice, mastery and planning | `exam_state.py`, `progress.py`, `study_plan.py` | Durable attempts, evaluation and derived progress |
+| Practice, mastery and planning | `exam_state.py`, `practice_report.py`, `progress.py`, `study_plan.py` | Durable attempts, pure grade/report calculations and derived progress |
 | Persistent storage | `database.py`, `subject_workspace.py`, `backend/services/backups.py` | SQLite migrations/transactions, exam folders, backups |
 | Local AI adapters | `local_models.py`, `llm/`, `embeddings/`, `backend/services/models.py` | Model selection, local requests and setup |
 | Presentation | `frontend/src/features/`, `components/`, `app/App.tsx` | Student workflows, advanced tools, accessibility and navigation |

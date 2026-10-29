@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { readFile, mkdir } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import { chromium, webkit } from "playwright";
+import { verifyExamSwitch, verifyModeKeyboard, verifySingleSubmission } from "../tests/frontend/browserReliability.mjs";
 
 await mkdir("output/playwright", { recursive: true });
 const root = resolve("frontend/dist");
@@ -275,7 +276,7 @@ try {
         }
         throw new Error("Unexpected regression request: " + path);
       });
-      await page.goto(origin);
+      await verifyExamSwitch(page, origin);
       await page
         .getByRole("navigation", { name: "Your learning" })
         .getByRole("button", { name: "Materials", exact: true })
@@ -442,6 +443,7 @@ $$
       await page.getByRole("navigation", { name: "Your learning" }).getByRole("button", { name: "Practice", exact: true }).click();
       await page.locator(".mode-card").first().waitFor();
       assert.equal(await page.locator(".mode-card").count(), 8);
+      await verifyModeKeyboard(page);
       await page.screenshot({
         path: `output/playwright/practice-modes-${name}.png`,
         fullPage: true,
@@ -550,7 +552,7 @@ $$
       await page.emulateMedia({colorScheme:'dark'});
       await page.screenshot({path:`output/playwright/practice-ambient-dark-${name}.png`, fullPage:true});
       await page.emulateMedia({colorScheme:'light'});
-      await page.getByRole('button', {name:'Submit answer', exact:true}).click();
+      await verifySingleSubmission(page);
       await page.getByRole('heading', {name:'A moment to reflect', exact:true}).waitFor();
       assert.equal(await page.locator('.session-question').count(), 0);
       assert.ok((await page.locator('.submitted-answer').innerText()).includes('Mass is a form of energy.'));

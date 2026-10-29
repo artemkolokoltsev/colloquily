@@ -75,6 +75,12 @@ a concrete moderation/use case.
 
 ## Release and branch lifecycle
 
+Synchronization PR #6 merged as `5beee1c` after local deterministic verification
+and hosted verify, Chromium/WebKit, all three native packaging targets and
+synthetic real-model acceptance passed. Main now contains the latest released
+implementation and both histories. Subsequent tooling/governance/reliability
+changes are separated into PRs #7, #8 and #9 (consult GitHub for merge status).
+
 Use short-lived `feat/`, `fix/`, `docs/`, `refactor/`, `chore/` branches, reviewed
 PRs into main, then immutable version tags on the intended integrated commit.
 Housekeeping does not bump versions. Existing `latest` is a legacy moving download
@@ -97,21 +103,109 @@ quality need their own validation; deterministic checks do not establish them.
 
 ## Branch inventory before synchronization
 
-| Branch | Head | In integration baseline | Version tag preserving head | Action after merge |
-| --- | --- | --- | --- | --- |
-| `cleanup-desktop` | `d42fd3d` | yes | — | Review explicit retirement approval |
-| `docs/engineering-contracts-2026-10` | `7334c36` | no | — | Preserve; unique ancestry (PR #4 content adopted) |
-| `docs/ui-practice-engineering` | `f0f0862` | yes | — | Review explicit retirement approval |
-| `fix/windows-sqlite-handles` | `c745acc` | yes | — | Review explicit retirement approval |
-| `main` | `26add3e` | yes | latest, v0.1.1-rc.1 | Keep permanently |
-| `release-v0.1.0` | `c809f0f` | no | — | Preserve; inspect unique work |
-| `release/0.1.1-readiness` | `a791863` | yes | — | Review explicit retirement approval |
-| `release/0.1.10` | `e61ae25` | yes | — | Review explicit retirement approval |
-| `release/0.1.2` | `1d3c7b5` | yes | v0.1.2-rc.1 | Review explicit retirement approval |
-| `release/0.1.3` | `93aa7c4` | yes | v0.1.3-rc.1 | Review explicit retirement approval |
-| `release/0.1.4` | `24fab98` | yes | v0.1.4-rc.1 | Review explicit retirement approval |
-| `release/0.1.5` | `060d6b9` | yes | v0.1.5-rc.1 | Review explicit retirement approval |
-| `release/0.1.6` | `392241b` | yes | v0.1.6-rc.1 | Review explicit retirement approval |
-| `release/0.1.7` | `722f07a` | yes | v0.1.7-rc.1 | Review explicit retirement approval |
-| `release/0.1.8` | `336296d` | yes | v0.1.8-rc.1 | Review explicit retirement approval |
-| `release/0.1.9` | `c04562a` | yes | v0.1.9-rc.1 | Review explicit retirement approval |
+| Branch | Head | In integration baseline | Version tag preserving head | Associated PR/release | Action after merge |
+| --- | --- | --- | --- | --- | --- |
+| `cleanup-desktop` | `d42fd3d` | yes | — | #1 (merged) | Review explicit retirement approval |
+| `docs/engineering-contracts-2026-10` | `7334c36` | no | — | #4 (closed as superseded) | Preserve; unique ancestry (PR #4 content adopted) |
+| `docs/ui-practice-engineering` | `f0f0862` | yes | — | #5 (closed as integrated) | Review explicit retirement approval |
+| `fix/windows-sqlite-handles` | `c745acc` | yes | — | #2 (merged) | Review explicit retirement approval |
+| `main` | `26add3e` | yes | latest, v0.1.1-rc.1 | Default branch | Keep permanently |
+| `release-v0.1.0` | `c809f0f` | no | — | Historical branch; no matching head tag | Preserve; inspect unique work |
+| `release/0.1.1-readiness` | `a791863` | yes | — | #3 (merged) | Review explicit retirement approval |
+| `release/0.1.10` | `e61ae25` | yes | — | v0.1.10-rc.2 (ancestor of head) | Review explicit retirement approval |
+| `release/0.1.2` | `1d3c7b5` | yes | v0.1.2-rc.1 | v0.1.2-rc.1 | Review explicit retirement approval |
+| `release/0.1.3` | `93aa7c4` | yes | v0.1.3-rc.1 | v0.1.3-rc.1 | Review explicit retirement approval |
+| `release/0.1.4` | `24fab98` | yes | v0.1.4-rc.1 | v0.1.4-rc.1 | Review explicit retirement approval |
+| `release/0.1.5` | `060d6b9` | yes | v0.1.5-rc.1 | v0.1.5-rc.1 | Review explicit retirement approval |
+| `release/0.1.6` | `392241b` | yes | v0.1.6-rc.1 | v0.1.6-rc.1 | Review explicit retirement approval |
+| `release/0.1.7` | `722f07a` | yes | v0.1.7-rc.1 | v0.1.7-rc.1 | Review explicit retirement approval |
+| `release/0.1.8` | `336296d` | yes | v0.1.8-rc.1 | v0.1.8-rc.1 | Review explicit retirement approval |
+| `release/0.1.9` | `c04562a` | yes | v0.1.9-rc.1 | v0.1.9-rc.1 | Review explicit retirement approval |
+
+## Post-synchronization retirement assessment
+
+Rechecked against fetched main `5beee1c`: thirteen original non-main branch heads
+are reachable and are retirement candidates requiring explicit approval (all rows
+marked “yes” except main). `docs/engineering-contracts-2026-10` has one unique
+commit, and `release-v0.1.0` has eleven unique commits with no containing version
+tag. Preserve both; adopted/squashed content is not sufficient deletion evidence.
+PRs #4/#5 were closed only after content/ancestry checks against synchronized main.
+No original remote branch has been deleted. The four maintenance branches are
+new deliverable branches; assess them separately after their PRs merge.
+
+## Delivery verification
+
+| Scope | Evidence |
+| --- | --- |
+| Local deterministic | `make check` on Python 3.11 / Node 22.14 passed: 70 domain, 126 API, 17 frontend and 4 tooling tests; lint/format ratchets, strict TypeScript, version/translation parity and build |
+| Local Rust | `make desktop-check` passed: rustfmt, Clippy with warnings denied, locked compilation |
+| Local browsers | Chromium and WebKit production-CSP suite passed, including stale exam response, duplicate submission and keyboard/focus regressions |
+| Report extraction | Five characterization tests passed before and after extraction; historical import names preserved |
+| Synchronization hosted CI | PR #6: verify, PDF readers, all three native packaging targets and real-model synthetic-learning passed before merge |
+| Tooling hosted CI | PR #7 final head `abc7ad9`: deterministic aggregate, PDF smoke, Intel native runtime and repeated real-model acceptance all passed. The initial ARM capacity failure occurred before any steps ran. Merged as `124b145` |
+| Governance hosted CI | PR #8 deterministic aggregate passed; merged as `0e0699e` |
+| Reliability hosted CI | PR #9 head `5071f1e`: deterministic aggregate, Chromium/WebKit and native runtime all passed; the final documentation-only update retains this implementation |
+| Not performed | Clean-machine GUI installation, current OS publisher-signing approval, full fresh Python/Cargo advisory audit |
+
+The frontend bundle retains Vite's existing >500 kB chunk warning. Python still
+has bounded requirements rather than a full resolved lock. Legacy diagnostic
+fingerprints remain (106 at rollout); formatting debt drops from 111 to 110 files
+with the practice extraction. Broad Python typing and React component tooling
+were evaluated and deferred: strict TypeScript and existing real-browser tests
+provide the immediate gate without introducing a duplicate interaction stack.
+
+Priorities after this delivery: activate/recheck administrator settings; review
+branch retirement approval; maintain and reduce the quality baseline; add a
+reproducible Python dependency lock with native/license validation; collect
+clean-machine installation evidence. Additional async failure scenarios can
+extend the reusable browser helpers; avoid rewriting the domain layers.
+
+## Maintenance file manifest
+
+The following paths changed relative to release baseline `e61ae25`. The larger
+release-to-main source integration is separately reviewable in PR #6's Files
+changed view; it is not an application rewrite in the maintenance PRs.
+
+- `.github/ISSUE_TEMPLATE/bug.yml`
+- `.github/ISSUE_TEMPLATE/feature.yml`
+- `.github/PULL_REQUEST_TEMPLATE.md`
+- `.github/dependabot.yml`
+- `.github/protect-main.json`
+- `.github/repository-topics.json`
+- `.github/workflows/ci.yml`
+- `.github/workflows/desktop-validation.yml`
+- `.github/workflows/desktop.yml`
+- `.github/workflows/download-channel.yml`
+- `.github/workflows/learning-quality.yml`
+- `.github/workflows/pdf-reader.yml`
+- `.github/workflows/release.yml`
+- `.prettierignore`
+- `AGENTS.md`
+- `CONTRIBUTING.md`
+- `Makefile`
+- `README.md`
+- `SECURITY.md`
+- `backend/core/services/exam_state.py`
+- `backend/core/services/practice_report.py`
+- `docs/ARCHITECTURE.md`
+- `docs/DEVELOPMENT.md`
+- `docs/ENGINEERING_BASELINE.md`
+- `docs/ENGINEERING_CASE_STUDIES.md`
+- `docs/ENGINEERING_STANDARDS.md`
+- `docs/REPOSITORY_MAINTENANCE.md`
+- `docs/adr/0002-pure-practice-report.md`
+- `docs/security-review.md`
+- `eslint.config.mjs`
+- `package-lock.json`
+- `package.json`
+- `pyproject.toml`
+- `requirements-dev.txt`
+- `rust-toolchain.toml`
+- `scripts/check_quality.py`
+- `scripts/quality-baseline.json`
+- `scripts/smoke_pdf_reader.mjs`
+- `src-tauri/build.rs`
+- `src-tauri/src/main.rs`
+- `tests/core/test_practice_report.py`
+- `tests/frontend/browserReliability.mjs`
+- `tests/tooling/test_quality.py`
