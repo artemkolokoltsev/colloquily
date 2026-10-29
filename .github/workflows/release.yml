@@ -62,7 +62,13 @@ jobs:
         run: ./scripts/configure_windows_signing.ps1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with: { node-version: "22", cache: npm }
-      - uses: dtolnay/rust-toolchain@1.120.0
+      - name: Read project Rust toolchain
+        id: project-rust
+        shell: bash
+        run: python -c "import tomllib; print('toolchain=' + tomllib.load(open('rust-toolchain.toml', 'rb'))['toolchain']['channel'])" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ steps.project-rust.outputs.toolchain }}
       - name: Import Developer ID before signing Python libraries
         if: runner.os == 'macOS'
         uses: apple-actions/import-codesign-certs@77ba2a2a8f5cfc8c405ebf3159f767c323e238f9 # v7.1.0

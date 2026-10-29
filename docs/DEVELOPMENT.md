@@ -43,6 +43,10 @@ deferred until legacy import aliases and domain contracts have a measured scope;
 strict frontend typing is enforced now. Rust formatting is normalized in the
 tooling change, and Clippy currently passes with warnings denied.
 
+Native workflows read the compiler from `rust-toolchain.toml` and pass it to an
+independently pinned setup action. Action updates must not select a different
+compiler; tooling tests exercise this contract for every native workflow.
+
 CI reads the Ruff pin from `requirements-dev.txt`, matching local development.
 The formatter gate consumes Ruff's JSON diagnostics and rejects parse errors;
 human-readable output is not a stable interface across Ruff versions.
