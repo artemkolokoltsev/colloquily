@@ -1,5 +1,10 @@
 # Engineering baseline and specification review
 
+This is the historical pre-tooling measurement. Subsequent implementation and
+verification are tracked in [repository maintenance](REPOSITORY_MAINTENANCE.md)
+and [developer verification](DEVELOPMENT.md); the gaps recorded below should not
+be read as a description of the updated quality gate.
+
 Observed on **2026-10-28**, starting from `release/0.1.9` at version 0.1.9. This change is on `docs/ui-practice-engineering`. Results below are local observations, not a claim that a new GitHub workflow or release has passed.
 
 ## Scope and documentation contracts

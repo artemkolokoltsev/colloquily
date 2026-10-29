@@ -11,6 +11,10 @@ from threading import RLock
 from functools import wraps
 
 from services.database import _connect, get_subject
+from services.practice_report import (
+    german_grade as german_grade,
+    _evaluation_report as _evaluation_report,
+)
 from services.training_repository import create_attempt, get_question, list_questions
 
 
@@ -27,31 +31,8 @@ def serialized_transition(function):
             lock = _transition_locks.setdefault(session_id, RLock())
         with lock:
             return function(session_id, *args, **kwargs)
+
     return wrapped
-
-
-def german_grade(percent_correct: float) -> float:
-    percent = max(0.0, min(100.0, float(percent_correct)))
-    for threshold, grade in ((92, 1.0), (87, 1.3), (82, 1.7), (76, 2.0), (71, 2.3), (65, 2.7), (60, 3.0), (55, 3.3), (50, 4.0)):
-        if percent >= threshold:
-            return grade
-    return 5.0
-
-
-def _evaluation_report(evaluations: list[dict]) -> dict:
-    scores = [float(item["score"]) for item in evaluations if item.get("score") is not None and item.get("status") not in {"skipped", "pending", "needs_review", "internal_error"}]
-    # Pending/unreliable answers have no grade. Skips retain the documented
-    # session-level penalty but are never represented as evaluated answers.
-    skipped_count = sum(item.get('status') == 'skipped' for item in evaluations)
-    denominator = len(scores) + skipped_count
-    percent = round(sum(scores) / (denominator * 5) * 100, 1) if denominator else None
-    grade = german_grade(percent) if percent is not None else None
-    return {
-        "answers": len(evaluations), "average_score": round(sum(scores) / len(scores), 2) if scores else None,
-        "percent_correct": percent, "german_grade": grade, "passed": grade is not None and grade <= 4.0,
-        "evaluations": evaluations,
-        "skipped": skipped_count,
-    }
 
 
 def utc_now() -> datetime:
@@ -70,13 +51,26 @@ def _decode_session(row) -> dict | None:
     if not row:
         return None
     item = dict(row)
-    for key in ("question_order_json", "used_question_ids_json", "topics_covered_json", "topics_skipped_json"):
+    for key in (
+        "question_order_json",
+        "used_question_ids_json",
+        "topics_covered_json",
+        "topics_skipped_json",
+    ):
         item[key.removesuffix("_json")] = json.loads(item.pop(key) or "[]")
     item["evaluation"] = json.loads(item.pop("evaluation_json") or "null")
     item["countdown_visible"] = bool(item["countdown_visible"])
-    item["current_question"] = get_question(item["current_question_id"]) if item["current_question_id"] else None
+    item["current_question"] = (
+        get_question(item["current_question_id"])
+        if item["current_question_id"]
+        else None
+    )
     deadline = _parse(item["deadline_at"])
-    item["remaining_seconds"] = max(0, int((deadline - utc_now()).total_seconds())) if deadline else item["duration_seconds"]
+    item["remaining_seconds"] = (
+        max(0, int((deadline - utc_now()).total_seconds()))
+        if deadline
+        else item["duration_seconds"]
+    )
     if item["status"] in FINISHED_STATUSES:
         item["remaining_seconds"] = 0
         item["current_question"] = None
@@ -85,21 +79,30 @@ def _decode_session(row) -> dict | None:
 
 def get_exam_session(session_id: int) -> dict | None:
     with closing(_connect()) as connection:
-        return _decode_session(connection.execute("SELECT * FROM exam_sessions WHERE id = ?", (session_id,)).fetchone())
+        return _decode_session(
+            connection.execute(
+                "SELECT * FROM exam_sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+        )
 
 
 def get_exam_run(run_id: int) -> dict | None:
     with closing(_connect()) as connection:
-        row = connection.execute("SELECT * FROM exam_runs WHERE id = ?", (run_id,)).fetchone()
+        row = connection.execute(
+            "SELECT * FROM exam_runs WHERE id = ?", (run_id,)
+        ).fetchone()
         if not row:
             return None
         item = dict(row)
         item["subject_order"] = json.loads(item.pop("subject_order_json"))
-        item["overall_evaluation"] = json.loads(item.pop("overall_evaluation_json") or "null")
+        item["overall_evaluation"] = json.loads(
+            item.pop("overall_evaluation_json") or "null"
+        )
         item["sessions"] = [
             _decode_session(session)
             for session in connection.execute(
-                "SELECT * FROM exam_sessions WHERE exam_run_id = ? ORDER BY id", (run_id,)
+                "SELECT * FROM exam_sessions WHERE exam_run_id = ? ORDER BY id",
+                (run_id,),
             ).fetchall()
         ]
         for session in item["sessions"]:
@@ -112,10 +115,22 @@ def get_exam_run(run_id: int) -> dict | None:
             session["attempts"] = []
             for attempt in attempts:
                 decoded = dict(attempt)
-                decoded["evaluation"] = json.loads(decoded.pop("evaluation_json") or "{}")
-                if decoded['evaluation'].get('status') == 'skipped':
-                    decoded['evaluation'] = {**decoded['evaluation'], 'score':0, 'expected_core_points':decoded['evaluation'].get('expected_core_points') or json.loads(decoded.get('expected_core_points_json') or '[]')}
-                decoded["evaluation"].setdefault("expected_core_points", json.loads(decoded.get("expected_core_points_json") or "[]"))
+                decoded["evaluation"] = json.loads(
+                    decoded.pop("evaluation_json") or "{}"
+                )
+                if decoded["evaluation"].get("status") == "skipped":
+                    decoded["evaluation"] = {
+                        **decoded["evaluation"],
+                        "score": 0,
+                        "expected_core_points": decoded["evaluation"].get(
+                            "expected_core_points"
+                        )
+                        or json.loads(decoded.get("expected_core_points_json") or "[]"),
+                    }
+                decoded["evaluation"].setdefault(
+                    "expected_core_points",
+                    json.loads(decoded.get("expected_core_points_json") or "[]"),
+                )
                 session["attempts"].append(decoded)
         return item
 
@@ -132,11 +147,25 @@ def mock_question_target(duration_seconds: int) -> int:
 def question_concept_key(question: dict) -> str:
     if question.get("concept_id"):
         return f"concept:{str(question['concept_id']).casefold()}"
-    source = re.sub(r"[^a-z0-9]+", "", str(question.get("source_file") or "").casefold().rsplit(".", 1)[0])
-    slides = sorted(int(item) for item in question.get("source_slides", []) if str(item).isdigit())
+    source = re.sub(
+        r"[^a-z0-9]+",
+        "",
+        str(question.get("source_file") or "").casefold().rsplit(".", 1)[0],
+    )
+    slides = sorted(
+        int(item) for item in question.get("source_slides", []) if str(item).isdigit()
+    )
     if source and slides:
         return f"source:{source}:{min(slides)}-{max(slides)}"
-    acronyms = sorted(set(re.findall(r"\b(?:vr|ar|mr|xr|lms|mooc)s?\b", question.get("question_text", ""), re.I)))
+    acronyms = sorted(
+        set(
+            re.findall(
+                r"\b(?:vr|ar|mr|xr|lms|mooc)s?\b",
+                question.get("question_text", ""),
+                re.I,
+            )
+        )
+    )
     if len(acronyms) >= 2:
         return "acronyms:" + ",".join(item.casefold() for item in acronyms)
     if question.get("external_id"):
@@ -144,15 +173,33 @@ def question_concept_key(question: dict) -> str:
     if not question.get("question_text"):
         return f"question:{question.get('id')}"
     tokens = {
-        token.casefold() for token in re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ0-9]{3,}", question.get("question_text", ""))
-        if token.casefold() not in {"what", "which", "explain", "difference", "differences", "between", "wie", "was", "und", "sind", "lassen", "sich"}
+        token.casefold()
+        for token in re.findall(
+            r"[A-Za-zÀ-ÖØ-öø-ÿ0-9]{3,}", question.get("question_text", "")
+        )
+        if token.casefold()
+        not in {
+            "what",
+            "which",
+            "explain",
+            "difference",
+            "differences",
+            "between",
+            "wie",
+            "was",
+            "und",
+            "sind",
+            "lassen",
+            "sich",
+        }
     }
     return "terms:" + ",".join(sorted(tokens)[:8])
 
 
 def eligible_mock_questions(subject_id: int) -> list[dict]:
     questions = [
-        item for item in list_questions(subject_id, accepted_only=True)
+        item
+        for item in list_questions(subject_id, accepted_only=True)
         if item["review_status"] == "accepted"
         and item.get("enabled", True)
         and item.get("expected_core_points")
@@ -161,7 +208,13 @@ def eligible_mock_questions(subject_id: int) -> list[dict]:
     curated = [item for item in questions if item.get("question_pool_id")]
     if curated:
         questions = curated
-    questions.sort(key=lambda item: (item["review_status"] != "accepted", -item["quality_score"], item["id"]))
+    questions.sort(
+        key=lambda item: (
+            item["review_status"] != "accepted",
+            -item["quality_score"],
+            item["id"],
+        )
+    )
     deduplicated, concepts = [], set()
     for question in questions:
         concept = question_concept_key(question)
@@ -172,12 +225,34 @@ def eligible_mock_questions(subject_id: int) -> list[dict]:
     return deduplicated
 
 
-def _question_order(subject_id: int, *, weak_question_ids: list[int] | None = None, target: int | None = None, randomize: bool = False) -> list[int]:
-    questions = eligible_mock_questions(subject_id) if target else list_questions(subject_id, accepted_only=True)
+def _question_order(
+    subject_id: int,
+    *,
+    weak_question_ids: list[int] | None = None,
+    target: int | None = None,
+    randomize: bool = False,
+) -> list[int]:
+    questions = (
+        eligible_mock_questions(subject_id)
+        if target
+        else list_questions(subject_id, accepted_only=True)
+    )
     if not questions:
         raise ValueError(f"Subject {subject_id} has no accepted question pool")
-    rank = {"explanation": 0, "definition": 1, "connection": 2, "comparison": 3, "application": 4}
-    questions.sort(key=lambda item: (rank.get(item["question_type"], 5), -item["quality_score"], item["id"]))
+    rank = {
+        "explanation": 0,
+        "definition": 1,
+        "connection": 2,
+        "comparison": 3,
+        "application": 4,
+    }
+    questions.sort(
+        key=lambda item: (
+            rank.get(item["question_type"], 5),
+            -item["quality_score"],
+            item["id"],
+        )
+    )
     ordered = [int(item["id"]) for item in questions]
     if weak_question_ids:
         weak = [item for item in weak_question_ids if item in ordered]
@@ -199,9 +274,15 @@ def create_exam_run(
     session_duration_seconds: int | None = None,
     selected_question_ids: dict[int, list[int]] | None = None,
 ) -> dict:
-    if session_duration_seconds is not None and not 60 <= session_duration_seconds <= 5400:
+    if (
+        session_duration_seconds is not None
+        and not 60 <= session_duration_seconds <= 5400
+    ):
         raise ValueError("Session duration must be between 1 and 90 minutes")
-    if session_duration_seconds is not None and preparation_seconds >= session_duration_seconds:
+    if (
+        session_duration_seconds is not None
+        and preparation_seconds >= session_duration_seconds
+    ):
         raise ValueError("Preparation must be shorter than the session duration")
     unique_subjects = list(dict.fromkeys(int(item) for item in subject_ids))
     if not 1 <= len(unique_subjects) <= 3:
@@ -212,15 +293,26 @@ def create_exam_run(
         raise ValueError("Multi-subject mode requires at least two subjects")
     if mode not in {"multi_subject", "full_colloquium"} and len(unique_subjects) != 1:
         raise ValueError("This mode requires exactly one subject")
-    timed_mock = mode in {"subject_simulation", "multi_subject", "full_colloquium", "oral_exam_simulation"}
+    timed_mock = mode in {
+        "subject_simulation",
+        "multi_subject",
+        "full_colloquium",
+        "oral_exam_simulation",
+    }
     for subject_id in unique_subjects:
         if not get_subject(subject_id):
             raise ValueError("Subject not found")
         subject = get_subject(subject_id)
-        planned = session_duration_seconds or (15 * 60 if mode == "full_colloquium" else int(subject["exam_duration_minutes"]) * 60)
+        planned = session_duration_seconds or (
+            15 * 60
+            if mode == "full_colloquium"
+            else int(subject["exam_duration_minutes"]) * 60
+        )
         selected = (selected_question_ids or {}).get(subject_id)
         if not selected:
-            _question_order(subject_id, target=mock_question_target(planned) if timed_mock else None)
+            _question_order(
+                subject_id, target=mock_question_target(planned) if timed_mock else None
+            )
     if random_order:
         random.SystemRandom().shuffle(unique_subjects)
     created_at = _iso(utc_now())
@@ -240,10 +332,21 @@ def create_exam_run(
             weak_ids = None
             if mode == "weak_topic":
                 from services.progress import subject_progress
-                weak_ids = [item["question_id"] for item in subject_progress(user_id, subject_id)["due_questions"]]
-            planned = session_duration_seconds or (15 * 60 if mode == "full_colloquium" else int(subject["exam_duration_minutes"]) * 60)
-            question_order = (selected_question_ids or {}).get(subject_id) or _question_order(
-                subject_id, weak_question_ids=weak_ids,
+
+                weak_ids = [
+                    item["question_id"]
+                    for item in subject_progress(user_id, subject_id)["due_questions"]
+                ]
+            planned = session_duration_seconds or (
+                15 * 60
+                if mode == "full_colloquium"
+                else int(subject["exam_duration_minutes"]) * 60
+            )
+            question_order = (selected_question_ids or {}).get(
+                subject_id
+            ) or _question_order(
+                subject_id,
+                weak_question_ids=weak_ids,
                 target=mock_question_target(planned) if timed_mock else None,
                 randomize=timed_mock,
             )
@@ -256,9 +359,13 @@ def create_exam_run(
             elif mode in {"random_practice", "oral_exam_simulation"}:
                 duration_seconds = max(30, int(answer_seconds)) * len(question_order)
             elif mode == "rapid_practice":
-                duration_seconds = max(30, int(answer_seconds)) * min(10, len(question_order))
+                duration_seconds = max(30, int(answer_seconds)) * min(
+                    10, len(question_order)
+                )
             elif mode == "weak_topic":
-                duration_seconds = max(30, int(answer_seconds)) * min(10, len(question_order))
+                duration_seconds = max(30, int(answer_seconds)) * min(
+                    10, len(question_order)
+                )
             else:
                 duration_seconds = max(15, int(answer_seconds))
             connection.execute(
@@ -270,9 +377,17 @@ def create_exam_run(
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    user_id, subject_id, run_id, mode, "created" if position == 0 else "queued",
-                    duration_seconds, json.dumps(question_order), max(0, int(preparation_seconds)),
-                    max(15, int(answer_seconds)), int(countdown_visible), created_at,
+                    user_id,
+                    subject_id,
+                    run_id,
+                    mode,
+                    "created" if position == 0 else "queued",
+                    duration_seconds,
+                    json.dumps(question_order),
+                    max(0, int(preparation_seconds)),
+                    max(15, int(answer_seconds)),
+                    int(countdown_visible),
+                    created_at,
                 ),
             )
         connection.commit()
@@ -315,14 +430,17 @@ def begin_answering(session_id: int) -> dict:
     if not session or session["status"] != "preparing":
         raise ValueError("Session is not preparing")
     with closing(_connect()) as connection:
-        connection.execute("UPDATE exam_sessions SET status = 'answering' WHERE id = ?", (session_id,))
+        connection.execute(
+            "UPDATE exam_sessions SET status = 'answering' WHERE id = ?", (session_id,)
+        )
         connection.commit()
     return get_exam_session(session_id)
 
 
 def _finish_session(connection, session: dict, status: str, now: datetime) -> None:
     attempts = connection.execute(
-        "SELECT evaluation_json FROM attempts WHERE exam_session_id = ? ORDER BY id", (session["id"],)
+        "SELECT evaluation_json FROM attempts WHERE exam_session_id = ? ORDER BY id",
+        (session["id"],),
     ).fetchall()
     evaluations = [json.loads(row[0]) for row in attempts if row[0]]
     report = _evaluation_report(evaluations)
@@ -336,7 +454,9 @@ def _finish_session(connection, session: dict, status: str, now: datetime) -> No
     ).fetchall()
     if remaining:
         next_id = int(remaining[0]["id"])
-        connection.execute("UPDATE exam_sessions SET status = 'transition' WHERE id = ?", (next_id,))
+        connection.execute(
+            "UPDATE exam_sessions SET status = 'transition' WHERE id = ?", (next_id,)
+        )
         connection.execute(
             "UPDATE exam_runs SET status = 'transition', current_position = current_position + 1 WHERE id = ?",
             (session["exam_run_id"],),
@@ -347,16 +467,36 @@ def _finish_session(connection, session: dict, status: str, now: datetime) -> No
             (session["exam_run_id"],),
         ).fetchall()
         subject_reports = [
-                {"subject_id": row["subject_id"], "report": json.loads(row["evaluation_json"] or "null")}
-                for row in session_reports
-            ]
-        grades = [item["report"].get("german_grade") for item in subject_reports if item.get("report") and item["report"].get("german_grade") is not None]
-        all_passed = len(grades) == len(subject_reports) and all(grade <= 4.0 for grade in grades)
-        overall = {"subjects": subject_reports, "all_passed": all_passed,
-                   "german_grade": float(statistics.median(grades)) if all_passed and grades else 5.0 if grades else None}
+            {
+                "subject_id": row["subject_id"],
+                "report": json.loads(row["evaluation_json"] or "null"),
+            }
+            for row in session_reports
+        ]
+        grades = [
+            item["report"].get("german_grade")
+            for item in subject_reports
+            if item.get("report") and item["report"].get("german_grade") is not None
+        ]
+        all_passed = len(grades) == len(subject_reports) and all(
+            grade <= 4.0 for grade in grades
+        )
+        overall = {
+            "subjects": subject_reports,
+            "all_passed": all_passed,
+            "german_grade": float(statistics.median(grades))
+            if all_passed and grades
+            else 5.0
+            if grades
+            else None,
+        }
         connection.execute(
             "UPDATE exam_runs SET status = 'completed', ended_at = ?, overall_evaluation_json = ? WHERE id = ?",
-            (_iso(now), json.dumps(overall, ensure_ascii=False), session["exam_run_id"]),
+            (
+                _iso(now),
+                json.dumps(overall, ensure_ascii=False),
+                session["exam_run_id"],
+            ),
         )
 
 
@@ -373,10 +513,19 @@ def submit_exam_answer(
 ) -> dict:
     now = now or utc_now()
     session = get_exam_session(session_id)
-    if session and expected_question_id is not None and session['current_question_id'] != expected_question_id:
-        return {'session': session, 'evaluation': None, 'show_evaluation': False}
-    if session and expected_question_id is not None and expected_question_id in session['used_question_ids'] and session['status'] in FINISHED_STATUSES:
-        return {'session': session, 'evaluation': None, 'show_evaluation': False}
+    if (
+        session
+        and expected_question_id is not None
+        and session["current_question_id"] != expected_question_id
+    ):
+        return {"session": session, "evaluation": None, "show_evaluation": False}
+    if (
+        session
+        and expected_question_id is not None
+        and expected_question_id in session["used_question_ids"]
+        and session["status"] in FINISHED_STATUSES
+    ):
+        return {"session": session, "evaluation": None, "show_evaluation": False}
     if not session or session["status"] not in ACTIVE_STATUSES:
         raise ValueError("Exam session is not accepting answers")
     deadline = _parse(session["deadline_at"])
@@ -384,54 +533,113 @@ def submit_exam_answer(
         with closing(_connect()) as connection:
             _finish_session(connection, session, "time_expired", now)
             connection.commit()
-        return {"session": get_exam_session(session_id), "evaluation": None, "show_evaluation": False}
+        return {
+            "session": get_exam_session(session_id),
+            "evaluation": None,
+            "show_evaluation": False,
+        }
     question_id = int(session["current_question_id"])
     current_question = get_question(question_id)
     immediate_feedback = session["mode"] in {"single_question", "rapid_practice"}
     if skipped:
-        evaluation = {"status": "skipped", "score": 0, "scores": {},
-                      "expected_core_points": current_question.get("expected_core_points", []),
-                      "evidence_ids": [], "evaluation_not_applicable": True}
+        evaluation = {
+            "status": "skipped",
+            "score": 0,
+            "scores": {},
+            "expected_core_points": current_question.get("expected_core_points", []),
+            "evidence_ids": [],
+            "evaluation_not_applicable": True,
+        }
     elif immediate_feedback:
-        evaluation = evaluator(session["subject_id"], question_id, answer.strip(), int(response_duration_seconds))
+        evaluation = evaluator(
+            session["subject_id"],
+            question_id,
+            answer.strip(),
+            int(response_duration_seconds),
+        )
     else:
         evaluation = {
-            "status": "pending", "score": None, "correct": [], "missing": [],
-            "incorrect": [], "unsupported": [], "better_oral_answer": "",
-            "evidence_ids": list((get_question(question_id) or {}).get("evidence_ids", [])),
+            "status": "pending",
+            "score": None,
+            "correct": [],
+            "missing": [],
+            "incorrect": [],
+            "unsupported": [],
+            "better_oral_answer": "",
+            "evidence_ids": list(
+                (get_question(question_id) or {}).get("evidence_ids", [])
+            ),
             "scores": {},
         }
     used = list(dict.fromkeys(session["used_question_ids"] + [question_id]))
     current_question = get_question(question_id)
-    covered = list(dict.fromkeys(session["topics_covered"] + ([current_question["topic_id"]] if not skipped and current_question.get("topic_id") else [])))
-    skipped_topics = list(dict.fromkeys(session['topics_skipped'] + ([current_question['topic_id']] if skipped and current_question.get('topic_id') else [])))
+    covered = list(
+        dict.fromkeys(
+            session["topics_covered"]
+            + (
+                [current_question["topic_id"]]
+                if not skipped and current_question.get("topic_id")
+                else []
+            )
+        )
+    )
+    skipped_topics = list(
+        dict.fromkeys(
+            session["topics_skipped"]
+            + (
+                [current_question["topic_id"]]
+                if skipped and current_question.get("topic_id")
+                else []
+            )
+        )
+    )
     missing_evidence = {
-        evidence_id for claim in evaluation.get("missing", []) for evidence_id in claim.get("evidence_ids", [])
+        evidence_id
+        for claim in evaluation.get("missing", [])
+        for evidence_id in claim.get("evidence_ids", [])
     }
-    remaining_questions = [get_question(item) for item in session["question_order"] if item not in used]
+    remaining_questions = [
+        get_question(item) for item in session["question_order"] if item not in used
+    ]
     adaptive = next(
         (
-            item for item in remaining_questions
+            item
+            for item in remaining_questions
             if item and missing_evidence.intersection(item.get("evidence_ids", []))
         ),
         None,
     )
-    next_question = adaptive or next((item for item in remaining_questions if item), None)
+    next_question = adaptive or next(
+        (item for item in remaining_questions if item), None
+    )
     single_done = session["mode"] == "single_question"
     with closing(_connect()) as connection:
-        connection.execute('BEGIN IMMEDIATE')
+        connection.execute("BEGIN IMMEDIATE")
         # Persist the attempt and transition together: interruption cannot leave
         # a saved skip pointing at the same current question on restart.
         attempt_id = create_attempt(
-            session['user_id'], session['subject_id'], question_id, '' if skipped else answer,
-            response_duration_seconds, evaluation, exam_session_id=session_id,
-            parent_attempt_id=session.get('last_attempt_id'), transaction=connection)
+            session["user_id"],
+            session["subject_id"],
+            question_id,
+            "" if skipped else answer,
+            response_duration_seconds,
+            evaluation,
+            exam_session_id=session_id,
+            parent_attempt_id=session.get("last_attempt_id"),
+            transaction=connection,
+        )
         connection.execute(
             """
             UPDATE exam_sessions SET used_question_ids_json = ?, topics_covered_json = ?,
                 last_attempt_id = ?, topics_skipped_json = ? WHERE id = ?
             """,
-            (json.dumps(used), json.dumps(covered), attempt_id, json.dumps(skipped_topics), session_id),
+            (
+                json.dumps(used),
+                json.dumps(covered),
+                attempt_id,
+                json.dumps(skipped_topics),
+                session_id,
+            ),
         )
         if single_done or not next_question:
             _finish_session(connection, session, "completed", now)
@@ -445,10 +653,16 @@ def submit_exam_answer(
             )
         connection.commit()
     show_evaluation = immediate_feedback and not skipped
-    return {"session": get_exam_session(session_id), "evaluation": evaluation if show_evaluation else None, "show_evaluation": show_evaluation}
+    return {
+        "session": get_exam_session(session_id),
+        "evaluation": evaluation if show_evaluation else None,
+        "show_evaluation": show_evaluation,
+    }
 
 
-def evaluate_exam_run(run_id: int, user_id: int, evaluator: Callable[[int, int, str, int], dict]) -> dict:
+def evaluate_exam_run(
+    run_id: int, user_id: int, evaluator: Callable[[int, int, str, int], dict]
+) -> dict:
     """Evaluate stored timed-exam answers after the run, never during it."""
     run = get_exam_run(run_id)
     if not run or int(run["user_id"]) != int(user_id):
@@ -466,15 +680,21 @@ def evaluate_exam_run(run_id: int, user_id: int, evaluator: Callable[[int, int, 
         if current.get("status") != "pending":
             continue
         evaluation = evaluator(
-            int(row["subject_id"]), int(row["question_id"]),
-            row["answer_text"], int(row["duration_seconds"]),
+            int(row["subject_id"]),
+            int(row["question_id"]),
+            row["answer_text"],
+            int(row["duration_seconds"]),
         )
         # Use an independent short transaction for each result. The database
         # connection is never held open while Ollama is generating.
         with closing(_connect()) as connection:
             connection.execute(
                 "UPDATE attempts SET evaluation_json=?, scores_json=? WHERE id=?",
-                (json.dumps(evaluation, ensure_ascii=False), json.dumps(evaluation.get("scores", {})), row["id"]),
+                (
+                    json.dumps(evaluation, ensure_ascii=False),
+                    json.dumps(evaluation.get("scores", {})),
+                    row["id"],
+                ),
             )
             connection.commit()
     with closing(_connect()) as connection:
@@ -490,16 +710,37 @@ def evaluate_exam_run(run_id: int, user_id: int, evaluator: Callable[[int, int, 
                 (json.dumps(report, ensure_ascii=False), session["id"]),
             )
         reports = connection.execute(
-            "SELECT subject_id,evaluation_json FROM exam_sessions WHERE exam_run_id=? ORDER BY id", (run_id,)
+            "SELECT subject_id,evaluation_json FROM exam_sessions WHERE exam_run_id=? ORDER BY id",
+            (run_id,),
         ).fetchall()
-        subjects = [{"subject_id": row["subject_id"], "report": json.loads(row["evaluation_json"] or "{}")}
-                    for row in reports]
-        grades = [item["report"].get("german_grade") for item in subjects if item["report"].get("german_grade") is not None]
-        all_passed = len(grades) == len(subjects) and all(grade <= 4.0 for grade in grades)
-        overall = {"subjects": subjects, "all_passed": all_passed,
-                   "german_grade": float(statistics.median(grades)) if all_passed and grades else 5.0 if grades else None}
-        connection.execute("UPDATE exam_runs SET overall_evaluation_json=? WHERE id=?",
-                           (json.dumps(overall, ensure_ascii=False), run_id))
+        subjects = [
+            {
+                "subject_id": row["subject_id"],
+                "report": json.loads(row["evaluation_json"] or "{}"),
+            }
+            for row in reports
+        ]
+        grades = [
+            item["report"].get("german_grade")
+            for item in subjects
+            if item["report"].get("german_grade") is not None
+        ]
+        all_passed = len(grades) == len(subjects) and all(
+            grade <= 4.0 for grade in grades
+        )
+        overall = {
+            "subjects": subjects,
+            "all_passed": all_passed,
+            "german_grade": float(statistics.median(grades))
+            if all_passed and grades
+            else 5.0
+            if grades
+            else None,
+        }
+        connection.execute(
+            "UPDATE exam_runs SET overall_evaluation_json=? WHERE id=?",
+            (json.dumps(overall, ensure_ascii=False), run_id),
+        )
         connection.commit()
     return get_exam_run(run_id)
 
@@ -521,17 +762,17 @@ def expire_exam_session(session_id: int, *, now: datetime | None = None) -> dict
 @serialized_transition
 def end_exam_session(session_id: int) -> None:
     session = get_exam_session(session_id)
-    if not session or session['status'] in FINISHED_STATUSES:
+    if not session or session["status"] in FINISHED_STATUSES:
         return
     with closing(_connect()) as connection:
-        _finish_session(connection, session, 'completed', utc_now())
+        _finish_session(connection, session, "completed", utc_now())
         connection.commit()
 
 
 def finish_exam_run(run_id: int, user_id: int) -> dict:
     run = get_exam_run(run_id)
-    if not run or run['user_id'] != user_id:
-        raise ValueError('Exam run not found')
-    for session in run['sessions']:
-        end_exam_session(session['id'])
+    if not run or run["user_id"] != user_id:
+        raise ValueError("Exam run not found")
+    for session in run["sessions"]:
+        end_exam_session(session["id"])
     return get_exam_run(run_id)

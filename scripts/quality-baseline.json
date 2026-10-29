@@ -10,7 +10,6 @@
     "backend/core/services/embeddings/lmstudio_embedder.py": "d0588b50a3a3928bb25bc3c863faac83bbf96c52e15c97aaf2cb5907a2f424a5",
     "backend/core/services/embeddings/ollama_embedder.py": "863dd9f4f53ee33aa14749bf98ce788d92e6e2056c8af13190e5a8f841911d85",
     "backend/core/services/exam_packs.py": "061c0444d7123e6d6bc3c8873766802c1251c77c79a1f701a2ec8a20f34160d6",
-    "backend/core/services/exam_state.py": "3b025fb5867bbbee435e88e3cdae3370a80c0eaa7f274fb941503c98252754e6",
     "backend/core/services/factory.py": "3ca8fd338606bfa32a755576a35103fe0cd0fff82d09ba3e8e824978309a253e",
     "backend/core/services/grounded_training.py": "754cac3a34df77f6666455d4cc4ea30716f9cb9f74fbafdb59c61e2c7438b266",
     "backend/core/services/images/__init__.py": "31153060270386d4a5b8580ce6fbbdfcefd21696c2840f81055377afad3055e8",
