@@ -26,7 +26,8 @@ files. `scripts/quality-baseline.json` records existing debt, not exemptions for
 all future edits to those files. Lint fingerprints include file, rule, message,
 source line and multiplicity; moving a line does not create a violation, but a
 new or duplicated violation does. Syntax/parser errors cannot be baselined.
-Formatting exceptions match the exact file bytes. Editing an unformatted legacy
+Formatting exceptions match UTF-8 file contents after normalizing line endings
+for Windows compatibility. Editing an unformatted legacy
 file requires formatting that file. New files must pass outright. Removed/fixed
 entries are allowed; remove their stale baseline entries during maintenance.
 
@@ -42,13 +43,19 @@ deferred until legacy import aliases and domain contracts have a measured scope;
 strict frontend typing is enforced now. Rust formatting is normalized in the
 tooling change, and Clippy currently passes with warnings denied.
 
+CI reads the Ruff pin from `requirements-dev.txt`, matching local development.
+The formatter gate consumes Ruff's JSON diagnostics and rejects parse errors;
+human-readable output is not a stable interface across Ruff versions.
+
 ## CI responsibilities
 
 `ci.yml` runs Python and frontend checks independently, with an always-running
 `verify` aggregate. Only this unconditional aggregate is suitable as a required
 check. `desktop-validation.yml` selectively packages/smokes the runtime and
 checks Rust for runtime/build changes; dispatch it for other desktop risks.
-`desktop.yml` preserves the three-target preview builds for tags and dispatch,
+Selective runtime validation uses macOS Intel after hosted ARM runner-capacity
+failures during rollout; this does not replace architecture coverage in release
+builds. `desktop.yml` preserves the three-target preview builds for tags and dispatch,
 and no longer builds all installers on every frontend PR. PDF browser smoke
 retains its selective PR trigger. Model acceptance runs on model/evidence paths,
 explicit dispatch, and release candidates; it is not a required routine check.

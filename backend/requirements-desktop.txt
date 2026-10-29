@@ -11,7 +11,8 @@ requests>=2.32.5,<3
 pypdfium2>=5,<6
 pillow>=12,<13
 reportlab>=4.4,<6
+# Preserve Intel macOS 14 support; 1.15.1's Intel wheel requires macOS 15.
 faiss-cpu==1.13.2
 numpy>=1.26,<3
 pyinstaller>=6.22,<7
-tqdm>=4.67,<5
+tqdm>=4.70.1,<5
