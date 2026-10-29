@@ -61,22 +61,24 @@ def lint() -> dict[str, int]:
 
 
 def formatting() -> dict[str, str]:
-    paths = run(
-        [
-            sys.executable,
-            "-m",
-            "ruff",
-            "format",
-            ".",
-            "--check",
-            "--output-format=concise",
-        ]
+    diagnostics = json.loads(
+        run(
+            [
+                sys.executable,
+                "-m",
+                "ruff",
+                "format",
+                ".",
+                "--check",
+                "--output-format=json",
+            ]
+        )
     )
-    files = [
-        line.removeprefix("Would reformat: ")
-        for line in paths.splitlines()
-        if line.startswith("Would reformat: ")
-    ]
+    files = []
+    for diagnostic in diagnostics:
+        if diagnostic["code"] != "unformatted":
+            raise RuntimeError(f"Ruff format failed: {diagnostic['message']}")
+        files.append(relative(diagnostic["filename"]))
     prettier = shutil.which("prettier", path=str(ROOT / "node_modules/.bin"))
     if not prettier:
         raise RuntimeError("Prettier missing; run npm ci")

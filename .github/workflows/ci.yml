@@ -34,7 +34,9 @@ jobs:
         with: { python-version: '3.11' }
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with: { node-version: '22', cache: npm }
-      - run: python -m pip install ruff==0.14.2
+      - name: Install the same Ruff pin as local development
+        shell: bash
+        run: python -m pip install -r <(sed -n '/^ruff==/p' requirements-dev.txt)
       - run: npm ci
       - run: npm run lint
       - run: npm run format-check
