@@ -1,2 +1,2 @@
 -r backend/requirements.txt
-ruff==0.14.2
+ruff==0.17.2

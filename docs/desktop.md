@@ -12,6 +12,12 @@ Build design follows [Tauri v2 sidecars](https://v2.tauri.app/develop/sidecar/),
 
 The current macOS bundle requires macOS 14 or newer, matching the FAISS and NumPy wheels used for packaging.
 
+Keep FAISS 1.13.2 until its replacement supports that same minimum on Intel.
+The published 1.15.1 Intel wheel and its native library require macOS 15, even
+though the Apple Silicon wheel still supports macOS 14. A successful build on
+macOS 15 does not establish compatibility with macOS 14. See the
+[published wheel metadata](https://pypi.org/project/faiss-cpu/1.15.1/#files).
+
 Run the exact build commands in the root README on each native OS. The optional manual GitHub Actions workflow builds these targets without publishing releases. Configuration alone is not evidence of a working installer: run installation, startup, PDF import, indexing, practice, exit and relaunch checks on clean machines without Python or Node.
 
 ## Lifecycle

@@ -43,6 +43,10 @@ deferred until legacy import aliases and domain contracts have a measured scope;
 strict frontend typing is enforced now. Rust formatting is normalized in the
 tooling change, and Clippy currently passes with warnings denied.
 
+CI reads the Ruff pin from `requirements-dev.txt`, matching local development.
+The formatter gate consumes Ruff's JSON diagnostics and rejects parse errors;
+human-readable output is not a stable interface across Ruff versions.
+
 ## CI responsibilities
 
 `ci.yml` runs Python and frontend checks independently, with an always-running
