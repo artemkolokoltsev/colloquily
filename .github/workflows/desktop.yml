@@ -72,7 +72,7 @@ jobs:
         run: python scripts/signing_preflight.py
       - name: Import Developer ID
         if: runner.os == 'macOS' && steps.native-signing.outputs.enabled == 'true'
-        uses: apple-actions/import-codesign-certs@77ba2a2a8f5cfc8c405ebf3159f767c323e238f9 # v7.1.0
+        uses: apple-actions/import-codesign-certs@288b8ec97b82c66b6f2a6baaf7acc8dfbcbe331c # v7.2.0
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
