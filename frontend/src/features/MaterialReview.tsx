@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { materialReviewPage } from "../api/client";
 import { ErrorNotice, Sources } from "../components/Common";
@@ -13,31 +13,30 @@ export function MaterialReview({
   busy,
   save,
   technical = false,
+  drafts,
+  onDraftChange,
+  offsets,
+  onOffsetChange,
 }: {
   exam: number;
   documentId?: number;
   revision: number;
   busy: boolean;
   technical?: boolean;
+  drafts: ReadonlyMap<number, string>;
+  onDraftChange: (id: number, content: string | null) => void;
+  offsets: ReadonlyMap<number | "all", number>;
+  onOffsetChange: (id: number | "all", offset: number) => void;
   save: (unit: MaterialUnit, status: string, content: string) => Promise<void>;
 }) {
   const { t } = useTranslation();
-  const [offset, setOffset] = useState(0);
+  const offset = offsets.get(documentId ?? "all") || 0;
   const [page, setPage] = useState<MaterialReviewPage>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
-  const [dirty, setDirty] = useState<Set<number>>(new Set());
+  const dirty = page?.items.some((unit) => drafts.has(unit.id)) || false;
   const navigation = useRef<HTMLDivElement>(null);
-  const markDirty = useCallback((id: number, changed: boolean) => {
-    setDirty((previous) => {
-      if (previous.has(id) === changed) return previous;
-      const next = new Set(previous);
-      if (changed) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  }, []);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -46,7 +45,8 @@ export function MaterialReview({
       .then((value) => {
         if (controller.signal.aborted) return;
         if (offset && offset >= value.total) {
-          setOffset(
+          onOffsetChange(
+            documentId ?? "all",
             Math.max(0, Math.ceil(value.total / value.limit) - 1) * value.limit,
           );
         } else setPage(value);
@@ -58,10 +58,10 @@ export function MaterialReview({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [exam, documentId, offset, revision, retry]);
+  }, [exam, documentId, offset, revision, retry, onOffsetChange]);
   function navigate(next: number) {
     setPage(undefined);
-    setOffset(next);
+    onOffsetChange(documentId ?? "all", next);
     navigation.current?.scrollIntoView({ block: "start" });
     navigation.current?.focus({ preventScroll: true });
   }
@@ -75,7 +75,7 @@ export function MaterialReview({
         ref={navigation}
       >
         <button
-          disabled={busy || loading || !!dirty.size || !offset}
+          disabled={busy || loading || dirty || !offset}
           onClick={() => navigate(Math.max(0, offset - 10))}
         >
           {t("ui.materialPrevious")}
@@ -93,7 +93,7 @@ export function MaterialReview({
           disabled={
             busy ||
             loading ||
-            !!dirty.size ||
+            dirty ||
             !page ||
             offset + page.items.length >= page.total
           }
@@ -102,7 +102,7 @@ export function MaterialReview({
           {t("ui.materialNext")}
         </button>
       </div>
-      {!!dirty.size && <p role="status">{t("ui.materialUnsaved")}</p>}
+      {dirty && <p role="status">{t("ui.materialUnsaved")}</p>}
       <ErrorNotice error={error} />
       {error && (
         <button onClick={() => setRetry((value) => value + 1)}>
@@ -118,7 +118,8 @@ export function MaterialReview({
           exam={exam}
           busy={busy || loading}
           save={save}
-          markDirty={markDirty}
+          draft={drafts.get(unit.id)}
+          onDraftChange={onDraftChange}
           technical={technical}
         />
       ))}
@@ -131,7 +132,8 @@ function MaterialPassage({
   exam,
   busy,
   save,
-  markDirty,
+  draft,
+  onDraftChange,
   technical,
 }: {
   unit: MaterialUnit;
@@ -139,13 +141,20 @@ function MaterialPassage({
   busy: boolean;
   technical: boolean;
   save: (unit: MaterialUnit, status: string, content: string) => Promise<void>;
-  markDirty: (id: number, dirty: boolean) => void;
+  draft: string | undefined;
+  onDraftChange: (id: number, content: string | null) => void;
 }) {
   const { t } = useTranslation();
-  const [editing, setEditing] = useState(false);
-  const [content, setContent] = useState(unit.content);
+  const [editing, setEditing] = useState(
+    draft !== undefined && draft !== unit.content,
+  );
+  const content = draft ?? unit.content;
   const [sourceOpen, setSourceOpen] = useState(false);
-  useEffect(() => () => markDirty(unit.id, false), [unit.id, markDirty]);
+  useEffect(() => {
+    // Clear a correction only after a response confirms the persisted content.
+    if (draft !== undefined && draft === unit.content)
+      onDraftChange(unit.id, null);
+  }, [draft, unit.content, unit.id, onDraftChange]);
   const outline = unit.study_problem === "outline_without_explanation";
   const unusable =
     !!unit.study_problem ||
@@ -176,8 +185,10 @@ function MaterialPassage({
             value={content}
             disabled={busy}
             onChange={(event) => {
-              setContent(event.target.value);
-              markDirty(unit.id, event.target.value !== unit.content);
+              onDraftChange(
+                unit.id,
+                event.target.value === unit.content ? null : event.target.value,
+              );
             }}
           />
         </label>
@@ -209,8 +220,7 @@ function MaterialPassage({
           disabled={busy}
           onClick={() => {
             if (editing) {
-              setContent(unit.content);
-              markDirty(unit.id, false);
+              onDraftChange(unit.id, null);
             }
             setEditing(!editing);
           }}

@@ -101,6 +101,24 @@ export async function verifyMaterialReview(page, name, requests) {
     true,
     "changing pages must protect an edited draft",
   );
+  await card.locator(":scope > details > summary").click();
+  await review.waitFor({ state: "detached" });
+  await card.locator(":scope > details > summary").click();
+  await card
+    .getByRole("button", { name: "Review content", exact: true })
+    .click();
+  await second.getByRole("textbox").waitFor();
+  assert.equal(
+    await second.getByRole("textbox").inputValue(),
+    materialText + "\nMy unsaved correction.",
+    "closing Details preserves the correction outside the unmounted review",
+  );
+  assert.equal(
+    await review
+      .getByRole("button", { name: "Next passages", exact: true })
+      .isDisabled(),
+    true,
+  );
   await second
     .getByRole("button", { name: "Cancel editing", exact: true })
     .click();
@@ -126,6 +144,44 @@ export async function verifyMaterialReview(page, name, requests) {
     "11",
   );
   assert.equal(await page.locator("canvas").count(), 0);
+  const later = review.locator(".evidence-snippet").first();
+  const laterDraft = materialText + "\n\nSaved later-page correction.";
+  await later
+    .getByRole("button", { name: "Correct extracted text", exact: true })
+    .click();
+  await later.getByRole("textbox").fill(laterDraft);
+  await card.locator(":scope > details > summary").click();
+  await review.waitFor({ state: "detached" });
+  await card.locator(":scope > details > summary").click();
+  await card
+    .getByRole("button", { name: "Review content", exact: true })
+    .click();
+  await review.getByText("11–20 of 1000 passages", { exact: true }).waitFor();
+  await later.getByRole("textbox").waitFor();
+  assert.equal(
+    await later.getByRole("textbox").inputValue(),
+    laterDraft,
+    "Details restores both the later page and its draft",
+  );
+  requests.failNextSave();
+  await later
+    .getByRole("button", { name: "Confirm content is ready", exact: true })
+    .click();
+  await page
+    .getByRole("alert")
+    .filter({ hasText: "Temporary correction failure" })
+    .waitFor();
+  assert.equal(
+    await later.getByRole("textbox").inputValue(),
+    laterDraft,
+    "a failed save retains the correction",
+  );
+  await later
+    .getByRole("button", { name: "Confirm content is ready", exact: true })
+    .click();
+  await later
+    .getByText("Saved later-page correction.", { exact: true })
+    .waitFor();
   await review
     .getByRole("button", { name: "Previous passages", exact: true })
     .click();
@@ -136,13 +192,11 @@ export async function verifyMaterialReview(page, name, requests) {
   });
   await card.locator(":scope > details > summary").click();
   await page.locator(".material-review").waitFor({ state: "detached" });
-  const tools = page
-    .locator("details")
-    .filter({
-      has: page
-        .locator("summary")
-        .filter({ hasText: "Advanced tools · processing & source review" }),
-    });
+  const tools = page.locator("details").filter({
+    has: page
+      .locator("summary")
+      .filter({ hasText: "Advanced tools · processing & source review" }),
+  });
   await tools.locator(":scope > summary").click();
   await tools.getByText("1–10 of 1000 passages", { exact: true }).waitFor();
   assert.equal(
@@ -150,6 +204,25 @@ export async function verifyMaterialReview(page, name, requests) {
     10,
     "advanced review is also bounded",
   );
+  const advancedFirst = tools.locator(".evidence-snippet").first();
+  await advancedFirst
+    .getByRole("button", { name: "Correct extracted text", exact: true })
+    .click();
+  await advancedFirst
+    .getByRole("textbox")
+    .fill("My unsaved advanced correction.");
+  await tools.locator(":scope > summary").click();
+  await page.locator(".material-review").waitFor({ state: "detached" });
+  await tools.locator(":scope > summary").click();
+  await advancedFirst.getByRole("textbox").waitFor();
+  assert.equal(
+    await advancedFirst.getByRole("textbox").inputValue(),
+    "My unsaved advanced correction.",
+    "closing Advanced tools also preserves drafts",
+  );
+  await advancedFirst
+    .getByRole("button", { name: "Cancel editing", exact: true })
+    .click();
   await tools.locator(":scope > summary").click();
   await page.locator(".material-review").waitFor({ state: "detached" });
   assert.equal(requests.sources(), initialSources + 1);

@@ -68,6 +68,29 @@ export function Materials({
   const [job, setJob] = useState<Job | null>(null);
   const [mode, setMode] = useState("fast");
   const [reviewDocument, setReviewDocument] = useState<number | null>(null);
+  // Review views unmount when closed; corrections and reading position do not.
+  const [reviewDrafts, setReviewDrafts] = useState<Map<number, string>>(
+    () => new Map(),
+  );
+  const [reviewOffsets, setReviewOffsets] = useState<
+    Map<number | "all", number>
+  >(() => new Map());
+  const updateDraft = useCallback((id: number, content: string | null) => {
+    setReviewDrafts((previous) => {
+      if (
+        (content === null && !previous.has(id)) ||
+        previous.get(id) === content
+      )
+        return previous;
+      const next = new Map(previous);
+      if (content === null) next.delete(id);
+      else next.set(id, content);
+      return next;
+    });
+  }, []);
+  const rememberOffset = useCallback((id: number | "all", offset: number) => {
+    setReviewOffsets((previous) => new Map(previous).set(id, offset));
+  }, []);
   const refresh = useCallback(
     async (signal?: AbortSignal) => {
       const [documents, prepared] = await Promise.all([
@@ -317,6 +340,10 @@ export function Materials({
                     key={`${exam}:${document.id}`}
                     exam={exam}
                     documentId={document.id}
+                    drafts={reviewDrafts}
+                    onDraftChange={updateDraft}
+                    offsets={reviewOffsets}
+                    onOffsetChange={rememberOffset}
                     revision={reviewRevision}
                     busy={busy || preparing || processing}
                     save={(unit, status, content) =>
@@ -458,6 +485,10 @@ export function Materials({
             <MaterialReview
               key={`advanced:${exam}`}
               exam={exam}
+              drafts={reviewDrafts}
+              onDraftChange={updateDraft}
+              offsets={reviewOffsets}
+              onOffsetChange={rememberOffset}
               revision={reviewRevision}
               busy={busy || preparing || processing}
               technical

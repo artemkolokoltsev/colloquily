@@ -6,7 +6,7 @@
 - **Original pages on demand.** Use **View original page** on a passage to load its PDF preview. Scrolling through extracted text no longer starts many PDF downloads, workers and canvases.
 - **Readable extracted text.** Source line breaks are preserved alongside Markdown lists, tables and LaTeX math. Table-of-contents rows no longer run together into a single paragraph. The original PDF remains the visual reference for positioned equations and layouts.
 - **Contents pages are reference material.** Spaced dot-leader contents entries are excluded from explanatory study evidence, including evidence accepted by older versions. Review shows a Table of contents label. Raw text, saved review decisions and past answers are retained.
-- Unsaved passage edits block page navigation until saved or cancelled. Failed passage requests can be retried; stale requests are cancelled on navigation.
+- Unsaved passage edits block page navigation until saved or cancelled. Closing and reopening Details or Advanced tools preserves corrections and the current passage page while Materials remains open. Failed passage requests can be retried; stale requests are cancelled on navigation.
 
 Existing lecture-script revisions, exercise solutions and submission settings remain available. No database schema change is required. Existing extracted passages benefit from the display fix without reprocessing.
 

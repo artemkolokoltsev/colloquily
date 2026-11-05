@@ -194,7 +194,9 @@ custom packages, macro definitions and file operations require external editing.
 Under a material's **Details → Review content**, use **Previous passages** and
 **Next passages** to review ten passages at a time. Only the current set is
 loaded. Save or cancel edits before changing pages. Closing Details or Advanced
-tools unloads its review view.
+tools unloads the heavy review view, while preserving unsaved corrections and
+the current passage page until you leave Materials. Save corrections before
+leaving Materials.
 
 Extracted source text keeps its line breaks. **View original page** loads a PDF
 preview for that passage when requested; scrolling through text does not load

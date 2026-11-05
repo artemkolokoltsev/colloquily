@@ -85,6 +85,8 @@ try {
         failNotes = false,
         sourceRequests = 0;
       let materialPageRequests = 0, legacyReviewRequests = 0;
+      const savedMaterial = new Map();
+      let failCorrection = false;
       let emptyWorkspace = false;
       let language = "en";
       let modelSettings = {
@@ -126,7 +128,15 @@ try {
           const query = new URL(request.url()).searchParams;
           const offset = Number(query.get('offset') || 0), limit = Number(query.get('limit') || 10);
           assert.ok(limit <= 25);
-          return json({items:Array.from({length:Math.min(limit,1000-offset)},(_,index)=>materialFixture(offset+index)),total:1000,offset,limit});
+          return json({items:Array.from({length:Math.min(limit,1000-offset)},(_,index)=>savedMaterial.get(offset+index+1) || materialFixture(offset+index)),total:1000,offset,limit});
+        }
+        if (path.startsWith('/exams/1/review/') && request.method() === 'PATCH') {
+          if (failCorrection) { failCorrection=false; return route.fulfill({status:503,json:{detail:'Temporary correction failure'}}); }
+          const id = Number(path.split('/').at(-1));
+          const body = request.postDataJSON();
+          const value = {...materialFixture(id-1),content:body.content,review_status:body.status};
+          savedMaterial.set(id,value);
+          return json(value);
         }
         if (path === "/health") return json({ status: "ready" });
         if (path === "/preferences") {
@@ -294,7 +304,7 @@ try {
         .click();
       const open = () =>
         page.getByRole("button", { name: "Open PDF", exact: true }).click();
-      await verifyMaterialReview(page, name, { sources:() => sourceRequests, legacy:() => legacyReviewRequests, pages:() => materialPageRequests });
+      await verifyMaterialReview(page, name, { sources:() => sourceRequests, legacy:() => legacyReviewRequests, pages:() => materialPageRequests, failNextSave:() => { failCorrection=true; } });
       const rendered = async () => {
         await page.waitForFunction(() => {
           const c = document.querySelector("canvas");
