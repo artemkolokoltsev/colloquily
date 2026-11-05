@@ -71,7 +71,7 @@ jobs:
           toolchain: ${{ steps.project-rust.outputs.toolchain }}
       - name: Import Developer ID before signing Python libraries
         if: runner.os == 'macOS'
-        uses: apple-actions/import-codesign-certs@77ba2a2a8f5cfc8c405ebf3159f767c323e238f9 # v7.1.0
+        uses: apple-actions/import-codesign-certs@288b8ec97b82c66b6f2a6baaf7acc8dfbcbe331c # v7.2.0
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -83,7 +83,7 @@ jobs:
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run build:sidecar
       - run: python scripts/smoke_sidecar.py
-      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+      - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
