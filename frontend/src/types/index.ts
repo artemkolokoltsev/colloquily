@@ -48,7 +48,7 @@ export interface Question {
 }
 export interface Evaluation {
   status?: string;
-  expected_core_points?: {text: string}[];
+  expected_core_points?: { text: string }[];
   sources?: Source[];
   subject_id?: number;
   score?: number;
@@ -120,4 +120,25 @@ export interface LearningData {
     overdue: boolean;
     schedule: { date: string; questions: number; sessions: number }[];
   };
+}
+
+export interface LectureScript {
+  document_id: number;
+  revision: number;
+  filename: string;
+  relative_path: string;
+}
+export interface SubmissionProfile {
+  course_name: string;
+  semester: string;
+  authors: { name: string; matrikelnummer: string }[];
+}
+export interface ExerciseSheet {
+  id: number;
+  title: string;
+  filename: string;
+  pages: number;
+  revision: number;
+  updated_at: string;
+  latex: string;
 }

@@ -6,6 +6,8 @@ on:
     paths:
       - 'frontend/**'
       - 'scripts/smoke_pdf_reader.mjs'
+      - 'scripts/smoke_coursework.mjs'
+      - 'backend/**'
       - 'tests/frontend/fixtures/**'
       - 'src-tauri/tauri.conf.json'
       - 'package*.json'
@@ -26,3 +28,34 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:pdf
+
+  coursework:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with: { python-version: '3.11', cache: pip }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with: { node-version: '22', cache: npm }
+      - name: Install local TeX compiler
+        timeout-minutes: 8
+        run: |
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends texlive-latex-base texlive-latex-recommended
+      - run: python -m pip install -r backend/requirements.txt
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run build
+      - name: Verify real exercise API, local PDF export, draft recovery and script updates
+        env:
+          COLLOQUILY_TEST_PYTHON: python
+        run: node scripts/smoke_coursework.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: coursework-verification
+          path: |
+            output/playwright/
+            output/pdf/
+          if-no-files-found: ignore

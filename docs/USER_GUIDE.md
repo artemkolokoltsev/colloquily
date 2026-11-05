@@ -161,3 +161,29 @@ Duration cards offer 5, 10, 15, 30, 45, 60 and 90 minutes. The selected time cov
 Open About Colloquily from the sidebar footer, Settings, or the native application menu. It contains the installed version, update controls, data/privacy information, feedback limitations, platform, storage folder and license. Background update checks continue without a permanent workspace banner. A compact countdown still appears before an unattended restart.
 
 Settings provides English/Deutsch cards that save the interface language immediately. Backups and advanced model settings remain available; advanced changes use their own Save settings button. Completed background jobs use a compact confirmation rather than displaying stale phase percentages.
+
+## Updating a cumulative lecture script
+
+Use **Materials → Lecture script** for the PDF your professor extends or corrects
+throughout the semester. Select an existing PDF before the first update if it is
+already in your library. Future uploads replace that same active document even
+when the filename changes. The history offers previous PDFs and page-note exports.
+Keep lecture-by-lecture slides in the separate upload area. Close the PDF reader
+before updating a script; prepare practice again afterward. Previously reviewed
+passages are retired until current material is processed.
+
+## Exercise submissions
+
+Open **Exercises** and upload a PDF sheet. **Submission details** stores the course
+name, semester, each author's name and Matrikelnummer for this course. The editor
+accepts a LaTeX document body, for example `\section*{Problem 1}` and `$x^2$`.
+Use **Save solution** to persist it. Unsaved changes are recovered on this device
+when returning to the sheet. **Load saved solution** discards a recovery draft only
+after confirmation, which also lets you resolve concurrent-save conflicts.
+
+**Export .tex** supplies the complete document, including packages and header.
+**Export PDF** saves first, runs local `pdflatex`, downloads the result and shows a
+preview. Install MacTeX or TeX Live with the packages listed in the release notes
+if PDF export is unavailable, then restart Colloquily. No content is uploaded to a
+compiler service. In-app compilation supports ordinary mathematical solutions;
+custom packages, macro definitions and file operations require external editing.

@@ -26,11 +26,21 @@ def upsert_document(subject_id: int, source: dict) -> tuple[dict, bool]:
                 ) VALUES (?, ?, ?, ?, ?, 'raw', 'needs_review', 0, ?, ?)
                 """,
                 (
-                    subject_id, source["title"], source["relative_path"], source["source_type"],
-                    source["source_hash"], now, now,
+                    subject_id,
+                    source["title"],
+                    source["relative_path"],
+                    source["source_type"],
+                    source["source_hash"],
+                    now,
+                    now,
                 ),
             )
-            document_id = int(connection.execute("SELECT id FROM documents WHERE subject_id=? AND relative_path=?", (subject_id, source["relative_path"])).fetchone()["id"])
+            document_id = int(
+                connection.execute(
+                    "SELECT id FROM documents WHERE subject_id=? AND relative_path=?",
+                    (subject_id, source["relative_path"]),
+                ).fetchone()["id"]
+            )
         else:
             document_id = int(existing["id"])
             if changed:
@@ -40,10 +50,18 @@ def upsert_document(subject_id: int, source: dict) -> tuple[dict, bool]:
                         processing_status = 'raw', quality_status = 'needs_review',
                         enabled_for_training = 0, updated_at = ? WHERE id = ?
                     """,
-                    (source["title"], source["source_type"], source["source_hash"], now, document_id),
+                    (
+                        source["title"],
+                        source["source_type"],
+                        source["source_hash"],
+                        now,
+                        document_id,
+                    ),
                 )
         connection.commit()
-        row = connection.execute("SELECT * FROM documents WHERE id = ?", (document_id,)).fetchone()
+        row = connection.execute(
+            "SELECT * FROM documents WHERE id = ?", (document_id,)
+        ).fetchone()
         return dict(row), changed
 
 
@@ -102,8 +120,14 @@ def normalize_subject_topics(subject_id: int) -> dict:
             original = str(row["name"])
             titles = normalize_topic_titles(original)
             if len(titles) != 1:
-                connection.execute("UPDATE knowledge_units SET topic_id = NULL WHERE topic_id = ?", (topic_id,))
-                connection.execute("UPDATE questions SET topic_id = NULL WHERE topic_id = ?", (topic_id,))
+                connection.execute(
+                    "UPDATE knowledge_units SET topic_id = NULL WHERE topic_id = ?",
+                    (topic_id,),
+                )
+                connection.execute(
+                    "UPDATE questions SET topic_id = NULL WHERE topic_id = ?",
+                    (topic_id,),
+                )
                 connection.execute("DELETE FROM topics WHERE id = ?", (topic_id,))
                 unassigned += 1
                 continue
@@ -118,8 +142,14 @@ def normalize_subject_topics(subject_id: int) -> dict:
                 target_id = int(existing["id"]) if existing else topic_id
                 canonical[key] = target_id
             if target_id != topic_id:
-                connection.execute("UPDATE knowledge_units SET topic_id = ? WHERE topic_id = ?", (target_id, topic_id))
-                connection.execute("UPDATE questions SET topic_id = ? WHERE topic_id = ?", (target_id, topic_id))
+                connection.execute(
+                    "UPDATE knowledge_units SET topic_id = ? WHERE topic_id = ?",
+                    (target_id, topic_id),
+                )
+                connection.execute(
+                    "UPDATE questions SET topic_id = ? WHERE topic_id = ?",
+                    (target_id, topic_id),
+                )
                 connection.execute("DELETE FROM topics WHERE id = ?", (topic_id,))
                 merged += 1
                 continue
@@ -163,13 +193,28 @@ def normalize_subject_topics(subject_id: int) -> dict:
 def prepare_document_units(document_id: int, *, force: bool = False) -> None:
     with closing(_connect()) as connection:
         # Preserve reviewed decisions and historical citation IDs across retries.
-        connection.execute('UPDATE knowledge_units SET manually_authoritative=1 WHERE document_id=? AND id IN (SELECT knowledge_unit_id FROM review_events)', (document_id,))
-        previous = connection.execute('SELECT id, quality_problems_json FROM knowledge_units WHERE document_id=? AND manually_authoritative=0', (document_id,)).fetchall()
+        connection.execute(
+            "UPDATE knowledge_units SET manually_authoritative=1 WHERE document_id=? AND quality_problems_json NOT LIKE '%superseded_source%' AND id IN (SELECT knowledge_unit_id FROM review_events)",
+            (document_id,),
+        )
+        previous = connection.execute(
+            "SELECT id, quality_problems_json FROM knowledge_units WHERE document_id=? AND manually_authoritative=0",
+            (document_id,),
+        ).fetchall()
         for row in previous:
-            problems = sorted(set(json.loads(row['quality_problems_json'] or '[]')) | {'superseded_extraction'})
-            connection.execute('UPDATE knowledge_units SET enabled_for_retrieval=0, quality_problems_json=? WHERE id=?', (json.dumps(problems), row['id']))
+            problems = sorted(
+                set(json.loads(row["quality_problems_json"] or "[]"))
+                | {"superseded_extraction"}
+            )
+            connection.execute(
+                "UPDATE knowledge_units SET enabled_for_retrieval=0, quality_problems_json=? WHERE id=?",
+                (json.dumps(problems), row["id"]),
+            )
         if force:
-            connection.execute("DELETE FROM processing_checkpoints WHERE document_id = ?", (document_id,))
+            connection.execute(
+                "DELETE FROM processing_checkpoints WHERE document_id = ?",
+                (document_id,),
+            )
         connection.commit()
 
 
@@ -196,6 +241,7 @@ def insert_knowledge_units(subject_id: int, document_id: int, units: list[dict])
                 detected_topic = None
             if detected_topic:
                 from services.question_topics import resolve_topic
+
                 topic_id = resolve_topic(connection, subject_id, detected_topic)
             cursor = connection.execute(
                 """
@@ -214,11 +260,24 @@ def insert_knowledge_units(subject_id: int, document_id: int, units: list[dict])
                 WHERE knowledge_units.manually_authoritative=0
                 """,
                 (
-                    subject_id, document_id, topic_id, unit["raw_content"], unit["cleaned_content"], unit["content_type"],
-                    unit["source_location"], unit.get("source_start"), unit.get("source_end"), unit["source_hash"],
-                    unit["quality_score"], unit["extraction_confidence"],
-                    json.dumps(unit["quality_problems"], ensure_ascii=False), unit["source_support"],
-                    unit["recommended_status"], int(unit["recommended_status"] == "accepted"), now, now,
+                    subject_id,
+                    document_id,
+                    topic_id,
+                    unit["raw_content"],
+                    unit["cleaned_content"],
+                    unit["content_type"],
+                    unit["source_location"],
+                    unit.get("source_start"),
+                    unit.get("source_end"),
+                    unit["source_hash"],
+                    unit["quality_score"],
+                    unit["extraction_confidence"],
+                    json.dumps(unit["quality_problems"], ensure_ascii=False),
+                    unit["source_support"],
+                    unit["recommended_status"],
+                    int(unit["recommended_status"] == "accepted"),
+                    now,
+                    now,
                 ),
             )
             inserted += max(0, cursor.rowcount)
@@ -272,9 +331,18 @@ def save_checkpoint(
                 updated_at = excluded.updated_at
             """,
             (
-                subject_id, document_id, source_hash, stage, total_batches,
-                json.dumps(sorted(set(completed_batches))), json.dumps(sorted(set(failed_batches))),
-                local_model, prompt_version, output_path, now, now,
+                subject_id,
+                document_id,
+                source_hash,
+                stage,
+                total_batches,
+                json.dumps(sorted(set(completed_batches))),
+                json.dumps(sorted(set(failed_batches))),
+                local_model,
+                prompt_version,
+                output_path,
+                now,
+                now,
             ),
         )
         connection.commit()
@@ -310,7 +378,11 @@ def finalize_document(document_id: int) -> dict:
             (document_id,),
         )
         connection.commit()
-        return {"document_id": document_id, "quality_status": quality_status, "counts": counts}
+        return {
+            "document_id": document_id,
+            "quality_status": quality_status,
+            "counts": counts,
+        }
 
 
 def accepted_units(subject_id: int) -> list[dict]:
@@ -367,19 +439,31 @@ def list_review_units(
         items = []
         for row in rows:
             item = dict(row)
-            item["quality_problems"] = json.loads(item.pop("quality_problems_json") or "[]")
+            item["quality_problems"] = json.loads(
+                item.pop("quality_problems_json") or "[]"
+            )
             items.append(item)
         return items
 
 
-def batch_accept_high_confidence(subject_id: int, unit_ids: list[int], user_id: int | None = None) -> int:
+def batch_accept_high_confidence(
+    subject_id: int, unit_ids: list[int], user_id: int | None = None
+) -> int:
     accepted = 0
     for unit in list_review_units(subject_id, suspicious_only=True):
         if unit["id"] not in unit_ids:
             continue
         if unit["confidence"] < 0.9:
             raise ValueError("Batch approval is restricted to confidence >= 0.90")
-        if set(unit["quality_problems"]) & {"meaningless_fragment", "corrupted_table", "broken_formula", "source_traceability_failure", "possible_diagram_or_broken_reading_order", "heading_without_explanation", "low_information_fragment"}:
+        if set(unit["quality_problems"]) & {
+            "meaningless_fragment",
+            "corrupted_table",
+            "broken_formula",
+            "source_traceability_failure",
+            "possible_diagram_or_broken_reading_order",
+            "heading_without_explanation",
+            "low_information_fragment",
+        }:
             raise ValueError("Suspicious extraction problems require individual review")
         review_unit(unit["id"], "accepted", user_id=user_id, subject_id=subject_id)
         accepted += 1
@@ -388,11 +472,14 @@ def batch_accept_high_confidence(subject_id: int, unit_ids: list[int], user_id: 
 
 def document_quality_report(document_id: int) -> dict:
     with closing(_connect()) as connection:
-        document = connection.execute("SELECT * FROM documents WHERE id = ?", (document_id,)).fetchone()
+        document = connection.execute(
+            "SELECT * FROM documents WHERE id = ?", (document_id,)
+        ).fetchone()
         if not document:
             raise ValueError("Document not found")
         units = connection.execute(
-            "SELECT * FROM knowledge_units WHERE document_id = ? AND quality_problems_json NOT LIKE '%\"superseded_extraction\"%' ORDER BY source_start, id", (document_id,)
+            "SELECT * FROM knowledge_units WHERE document_id = ? AND quality_problems_json NOT LIKE '%\"superseded_extraction\"%' ORDER BY source_start, id",
+            (document_id,),
         ).fetchall()
         issue_counts: dict[str, int] = {}
         unit_rows = []
@@ -405,22 +492,38 @@ def document_quality_report(document_id: int) -> dict:
                 issue_counts[problem] = issue_counts.get(problem, 0) + 1
             unit_rows.append(
                 {
-                    "id": item["id"], "source_location": item["source_location"],
-                    "status": item["review_status"], "confidence": item["confidence"],
+                    "id": item["id"],
+                    "source_location": item["source_location"],
+                    "status": item["review_status"],
+                    "confidence": item["confidence"],
                     "problems": problems,
                 }
             )
         return {
-            "document_id": document_id, "relative_path": document["relative_path"],
-            "source_hash": document["source_hash"], "statuses": statuses,
-            "issues": issue_counts, "units": unit_rows,
+            "document_id": document_id,
+            "relative_path": document["relative_path"],
+            "source_hash": document["source_hash"],
+            "statuses": statuses,
+            "issues": issue_counts,
+            "units": unit_rows,
             "coverage_warnings": [
-                warning for warning, present in (
+                warning
+                for warning, present in (
                     ("no_accepted_evidence", not statuses.get("accepted")),
-                    ("original_visual_inspection_required", bool(issue_counts.get("visual_fragment"))),
-                    ("broken_tables_present", bool(issue_counts.get("corrupted_table"))),
-                    ("broken_formulas_present", bool(issue_counts.get("broken_formula"))),
-                ) if present
+                    (
+                        "original_visual_inspection_required",
+                        bool(issue_counts.get("visual_fragment")),
+                    ),
+                    (
+                        "broken_tables_present",
+                        bool(issue_counts.get("corrupted_table")),
+                    ),
+                    (
+                        "broken_formulas_present",
+                        bool(issue_counts.get("broken_formula")),
+                    ),
+                )
+                if present
             ],
         }
 
@@ -437,15 +540,21 @@ def review_unit(
         raise ValueError("Invalid review status")
     now = datetime.now().isoformat(timespec="seconds")
     with closing(_connect()) as connection:
-        row = connection.execute("SELECT * FROM knowledge_units WHERE id = ?", (unit_id,)).fetchone()
+        row = connection.execute(
+            "SELECT * FROM knowledge_units WHERE id = ?", (unit_id,)
+        ).fetchone()
         if not row:
             raise ValueError("Knowledge unit not found")
         if subject_id is not None and int(row["subject_id"]) != int(subject_id):
             raise ValueError("Knowledge unit does not belong to subject")
+        if "superseded_source" in json.loads(row["quality_problems_json"] or "[]"):
+            raise ValueError("SOURCE_SUPERSEDED")
         new_content = row["content"] if content is None else content.strip()
         if status == "accepted" and not new_content:
             raise ValueError("Accepted knowledge cannot be empty")
-        manual = 1  # All explicit review actions, including rejection, survive reprocessing.
+        manual = (
+            1  # All explicit review actions, including rejection, survive reprocessing.
+        )
         connection.execute(
             """
             UPDATE knowledge_units SET content = ?, review_status = ?, enabled_for_retrieval = ?,
@@ -460,10 +569,20 @@ def review_unit(
                 previous_content, new_content, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (unit_id, user_id, row["review_status"], status, row["content"], new_content, now),
+            (
+                unit_id,
+                user_id,
+                row["review_status"],
+                status,
+                row["content"],
+                new_content,
+                now,
+            ),
         )
         connection.commit()
-        updated = connection.execute("SELECT * FROM knowledge_units WHERE id = ?", (unit_id,)).fetchone()
+        updated = connection.execute(
+            "SELECT * FROM knowledge_units WHERE id = ?", (unit_id,)
+        ).fetchone()
         return dict(updated)
 
 
@@ -479,6 +598,9 @@ def remove_document(subject_id: int, relative_path: str) -> dict:
         evidence = connection.execute(
             "SELECT COUNT(*) FROM knowledge_units WHERE document_id = ?", (row["id"],)
         ).fetchone()[0]
-        connection.execute("DELETE FROM documents WHERE id = ? AND subject_id = ?", (row["id"], subject_id))
+        connection.execute(
+            "DELETE FROM documents WHERE id = ? AND subject_id = ?",
+            (row["id"], subject_id),
+        )
         connection.commit()
         return {"document": row["title"], "evidence_removed": int(evidence)}

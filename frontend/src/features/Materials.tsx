@@ -1,3 +1,4 @@
+import { LectureScript } from "./LectureScript";
 import { StudyText } from "../components/StudyText";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
@@ -125,10 +126,16 @@ export function Materials({
       <h2>{t("nav.materials")}</h2>
       <p>{t("ui.libraryIntro")}</p>
       <ErrorNotice error={error} />
+      <LectureScript
+        exam={exam}
+        documents={data?.documents || []}
+        disabled={busy || preparing || processing || !!reader}
+        onChanged={refresh}
+      />
       {preparing && <Progress job={preparation?.job || null} />}
       <label>
         {" "}
-        {t("ui.s9098f1f65b")}{" "}
+        {t("ui.courseSlidesUpload")}{" "}
         <input
           disabled={busy || preparing || processing}
           type="file"
