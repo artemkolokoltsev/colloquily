@@ -1336,6 +1336,20 @@ h3 {
 .study-text > :first-child {
   margin-top: 0;
 }
+.source-text p,
+.source-text li {
+  white-space: pre-wrap;
+}
+.source-text .katex {
+  white-space: normal;
+}
+.material-review .review-navigation {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-block: 1rem;
+}
 .study-text table {
   display: block;
   overflow-x: auto;

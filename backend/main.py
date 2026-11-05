@@ -50,7 +50,7 @@ async def lifespan(app):
     yield
 
 
-app = FastAPI(title="Colloquily local API", version="0.1.11", lifespan=lifespan)
+app = FastAPI(title="Colloquily local API", version="0.1.12", lifespan=lifespan)
 app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=["localhost", "127.0.0.1", "[::1]", "testserver"],

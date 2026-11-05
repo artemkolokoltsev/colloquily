@@ -453,5 +453,15 @@
   "courseExportPreview": "Exported submission",
   "courseExportPreviewHelp": "Preview of the PDF just exported. Export again after changing your solution or submission details.",
   "courseLoadSaved": "Load saved solution",
-  "courseDiscardDraft": "Replace this recovery draft with the last solution saved in Colloquily? Copy any text you want to keep first."
+  "courseDiscardDraft": "Replace this recovery draft with the last solution saved in Colloquily? Copy any text you want to keep first.",
+  "materialPassages": "Extracted passages",
+  "materialNavigation": "Passage navigation",
+  "materialPrevious": "Previous passages",
+  "materialNext": "Next passages",
+  "materialRange": "{{start}}–{{end}} of {{total}} passages",
+  "materialUnsaved": "Save or cancel your edits before changing passages.",
+  "materialOriginal": "View original page",
+  "materialCancelEdit": "Cancel editing",
+  "materialOutline": "Table of contents",
+  "materialOutlineReason": "This is an outline, not explanatory study evidence. It is kept here for reference and excluded from question generation."
 }

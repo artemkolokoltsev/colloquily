@@ -187,3 +187,22 @@ preview. Install MacTeX or TeX Live with the packages listed in the release note
 if PDF export is unavailable, then restart Colloquily. No content is uploaded to a
 compiler service. In-app compilation supports ordinary mathematical solutions;
 custom packages, macro definitions and file operations require external editing.
+
+
+## Reviewing long lecture scripts
+
+Under a material's **Details → Review content**, use **Previous passages** and
+**Next passages** to review ten passages at a time. Only the current set is
+loaded. Save or cancel edits before changing pages. Closing Details or Advanced
+tools unloads the heavy review view, while preserving unsaved corrections and
+the current passage page until you leave Materials. Save corrections before
+leaving Materials.
+
+Extracted source text keeps its line breaks. **View original page** loads a PDF
+preview for that passage when requested; scrolling through text does not load
+more previews. Markdown tables and existing LaTeX remain supported, while the
+original PDF is the reference for spatial layout and glyph-based equations.
+Detected contents pages are labelled **Table of contents** and excluded from
+question generation, even if previously accepted. Raw extracts and historical
+review decisions remain unchanged. Existing text does not need to be reprocessed
+for these display improvements.

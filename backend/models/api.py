@@ -31,6 +31,13 @@ class ReviewInput(BaseModel):
     content: str | None = None
 
 
+class ReviewPage(BaseModel):
+    items: list[Record]
+    total: int
+    offset: int
+    limit: int
+
+
 class ProcessInput(BaseModel):
     mode: Literal["fast", "deep", "deterministic"] = "fast"
     force: bool = False
