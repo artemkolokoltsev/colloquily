@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the **implemented** Colloquily 0.1.10 design, not an aspirational service architecture. Start with the [README](../README.md) for installation and the [engineering standards](ENGINEERING_STANDARDS.md) for change invariants.
+This document describes the **implemented** Colloquily 0.1.11 design, not an aspirational service architecture. Start with the [README](../README.md) for installation and the [engineering standards](ENGINEERING_STANDARDS.md) for change invariants.
 
 ## Context and responsibilities
 
@@ -89,3 +89,13 @@ Native packaging and clean-machine GUI validation are different gates. Signed up
 ## Change guide
 
 Follow the [contributing guide](../CONTRIBUTING.md), [standards](ENGINEERING_STANDARDS.md), and scoped `AGENTS.md` files. Architecture changes should add a short decision record under `docs/adr/`; behavior changes need focused regression tests and updated contracts.
+
+## Coursework
+
+`backend/services/lecture_scripts.py` manages the active script and archived
+revisions; `backend/services/coursework.py` persists exercise sheets, solutions and
+submission profiles and compiles local exports. `backend/api/coursework.py` exposes
+exam-scoped contracts through the main router. Schema 12 is additive. See
+[ADR 0003](adr/0003-coursework-and-script-revisions.md) for recovery, migration,
+LaTeX execution limits and rollback. The existing PDF.js preview displays both
+uploaded sheets and generated submissions without remote resources.

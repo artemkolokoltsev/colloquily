@@ -227,6 +227,7 @@ try {
             practised_questions: 0,
             average_score: null,
           });
+        if (path.endsWith("/lecture-script")) return json({current:null,revisions:[]});
         if (path.endsWith("/preparation"))
           return json({ job: null, questions: practiceReady ? 3 : 0 });
         if (path === "/exams/1/documents")

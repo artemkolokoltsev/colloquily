@@ -1,3 +1,4 @@
+import { Exercises } from "../features/Exercises";
 import appPackage from "../../../package.json";
 import { useEffect, useState } from "react";
 import { api, connect } from "../api/client";
@@ -22,6 +23,7 @@ import type { Job } from "../types";
 const pages = [
   "Dashboard",
   "Materials",
+  "Exercises",
   "Practice",
   "Study",
   "Advanced settings",
@@ -29,6 +31,7 @@ const pages = [
 const pageLabels = {
   Dashboard: "nav.dashboard",
   Materials: "nav.materials",
+  Exercises: "ui.courseExercises",
   Questions: "nav.questions",
   Practice: "nav.practice",
   Progress: "nav.progress",
@@ -456,6 +459,7 @@ export default function App() {
                 navigate={navigate}
               />
             )}
+            {page === "Exercises" && <Exercises exam={selected} />}
             {page === "Materials" && (
               <Materials
                 exam={selected}

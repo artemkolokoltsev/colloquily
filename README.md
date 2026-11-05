@@ -215,3 +215,36 @@ used instead of PyMuPDF; the distribution checks reject AGPL dependencies.
 Model weights and personal course documents are not bundled or relicensed.
 
 Permanent website installer URLs and update-channel setup: [Download integration](docs/DOWNLOADS.md).
+
+## Lecture scripts and exercise submissions
+
+In **Materials → Lecture script**, upload the cumulative script after each lecture.
+Each revision replaces the active document even if the filename changes. For an
+already uploaded script, select it before the first update to retain its document
+identity. Upload lecture-by-lecture slides separately below. Previous scripts and
+page notes are available in the version history; only the current script supplies
+study evidence. Prepare practice again after an update to process its new content.
+
+Open **Exercises** to upload a PDF sheet and write a LaTeX solution alongside it.
+Set the course name, semester (for example `WS26/27`), and each partner's name and
+Matrikelnummer in **Submission details**. Save the solution, or export it as `.tex`
+or PDF; export saves the current solution and submission details first. Unsaved
+edits have a device-local recovery draft. Exercise material is separate from the
+lecture evidence used for practice.
+
+PDF export requires a local TeX installation (`pdflatex`, `amsmath`, `amssymb`,
+`amsthm`, and `geometry`), such as MacTeX or TeX Live. Restart the application after
+installing it. TeX is not bundled or downloaded by Colloquily. The in-app compiler
+supports ordinary mathematical solutions, lists, matrices, tables, and proofs;
+custom macros, packages, and file commands require external editing of the `.tex`
+export. A PDF preview shows the actual exported document. The editor works without
+AI models or internet access.
+
+**Deutsch:** Unter **Materialien → Vorlesungsskript** ersetzt jede neue Version
+das aktive Skript. Wähle ein bereits hochgeladenes Skript vor der ersten
+Aktualisierung aus; einzelne Vorlesungsfolien bleiben separate Dateien. Alte PDFs
+und Seitennotizen bleiben im Versionsverlauf erhalten. Bereite die Übung nach einer
+Aktualisierung erneut vor. Unter **Übungsblätter** kannst du Aufgaben-PDFs hochladen,
+LaTeX-Lösungen schreiben und Abgaben mit Kursname, Semester, Namen und
+Matrikelnummern exportieren. PDF-Export benötigt eine lokale TeX-Installation;
+`.tex`-Export und Speichern funktionieren auch ohne sie.

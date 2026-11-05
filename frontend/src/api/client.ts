@@ -104,3 +104,42 @@ export async function downloadBackup(filename: string) {
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
+
+export async function apiBytes(
+  path: string,
+  method = "GET",
+  signal?: AbortSignal,
+) {
+  const response = await fetch(`${base}/api${path}`, {
+    method,
+    signal,
+    headers: token ? { "X-Colloquily-Token": token } : {},
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    const message =
+      body.error?.message || body.detail || i18n.t("errors.unknown");
+    const code = body.error?.code;
+    throw new Error(
+      code && i18n.exists(`errors.${code}`)
+        ? i18n.t(`errors.${code}`, { defaultValue: message })
+        : message,
+    );
+  }
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+export function downloadBytes(
+  bytes: Uint8Array,
+  filename: string,
+  type: string,
+) {
+  const url = URL.createObjectURL(
+    new Blob([bytes.slice().buffer as ArrayBuffer], { type }),
+  );
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}

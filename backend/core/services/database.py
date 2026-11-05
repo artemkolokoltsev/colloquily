@@ -15,7 +15,7 @@ import config
 
 LOGGER = logging.getLogger(__name__)
 LEGACY_SUBJECT_ID = 1
-CURRENT_SCHEMA_VERSION = 11
+CURRENT_SCHEMA_VERSION = 12
 
 
 def _connect() -> sqlite3.Connection:
@@ -163,6 +163,37 @@ def init_db(*, seed_admin: bool = True) -> None:
                 updated_at TEXT NOT NULL,
                 UNIQUE(subject_id, relative_path),
                 FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS lecture_scripts (
+                subject_id INTEGER PRIMARY KEY REFERENCES subjects(id) ON DELETE CASCADE,
+                document_id INTEGER NOT NULL UNIQUE REFERENCES documents(id) ON DELETE CASCADE,
+                revision INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS script_revisions (
+                document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+                revision INTEGER NOT NULL,
+                filename TEXT NOT NULL,
+                source_hash TEXT NOT NULL,
+                content BLOB NOT NULL,
+                notes_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(document_id, revision)
+            );
+            CREATE TABLE IF NOT EXISTS submission_profiles (
+                subject_id INTEGER PRIMARY KEY REFERENCES subjects(id) ON DELETE CASCADE,
+                settings_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS exercise_sheets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                pages INTEGER NOT NULL,
+                source_pdf BLOB NOT NULL,
+                latex TEXT NOT NULL DEFAULT '',
+                revision INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS document_page_notes (
@@ -433,22 +464,59 @@ def init_db(*, seed_admin: bool = True) -> None:
         _migrate_reported_training_cards(connection)
         _migrate_question_pools(connection)
         migration_time = datetime.now().isoformat(timespec="seconds")
-        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (3, ?)", (migration_time,))
-        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (4, ?)", (migration_time,))
-        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (5, ?)", (migration_time,))
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (3, ?)",
+            (migration_time,),
+        )
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (4, ?)",
+            (migration_time,),
+        )
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (5, ?)",
+            (migration_time,),
+        )
         # Keep the learner's language intact. Older builds accidentally mapped
         # German and English alike to English during every startup.
-        connection.execute("UPDATE subjects SET language = 'de' WHERE lower(language) IN ('deu', 'german', 'deutsch')")
-        connection.execute("UPDATE subjects SET language = 'en' WHERE lower(language) IN ('eng', 'english')")
-        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (6, ?)", (migration_time,))
-        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (7, ?)", (migration_time,))
-        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (8, ?)", (migration_time,))
-        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (9, ?)", (migration_time,))
-        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (10, ?)", (migration_time,))
-        connection.execute("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (11, ?)", (migration_time,))
+        connection.execute(
+            "UPDATE subjects SET language = 'de' WHERE lower(language) IN ('deu', 'german', 'deutsch')"
+        )
+        connection.execute(
+            "UPDATE subjects SET language = 'en' WHERE lower(language) IN ('eng', 'english')"
+        )
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (6, ?)",
+            (migration_time,),
+        )
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (7, ?)",
+            (migration_time,),
+        )
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (8, ?)",
+            (migration_time,),
+        )
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (9, ?)",
+            (migration_time,),
+        )
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (10, ?)",
+            (migration_time,),
+        )
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (11, ?)",
+            (migration_time,),
+        )
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (12, ?)",
+            (migration_time,),
+        )
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
-            raise RuntimeError(f"Database validation failed after migration: {integrity}")
+            raise RuntimeError(
+                f"Database validation failed after migration: {integrity}"
+            )
         connection.commit()
     if seed_admin:
         get_local_user()
@@ -456,7 +524,9 @@ def init_db(*, seed_admin: bool = True) -> None:
 
 
 def _column_names(connection: sqlite3.Connection, table: str) -> set[str]:
-    return {row[1] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()}
+    return {
+        row[1] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+    }
 
 
 def _prepare_migration() -> None:
@@ -470,7 +540,15 @@ def _prepare_migration() -> None:
         has_versions = source.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
         ).fetchone()
-        version = int(source.execute("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").fetchone()[0]) if has_versions else 0
+        version = (
+            int(
+                source.execute(
+                    "SELECT COALESCE(MAX(version), 0) FROM schema_migrations"
+                ).fetchone()[0]
+            )
+            if has_versions
+            else 0
+        )
         if version > CURRENT_SCHEMA_VERSION:
             raise RuntimeError(
                 f"This workspace uses schema {version}, newer than supported schema {CURRENT_SCHEMA_VERSION}. "
@@ -480,13 +558,18 @@ def _prepare_migration() -> None:
             return
         backup_dir = path.parent / "backups" / "migrations"
         backup_dir.mkdir(parents=True, exist_ok=True)
-        destination = backup_dir / f"colloquily-schema-{version}-before-{CURRENT_SCHEMA_VERSION}.db"
+        destination = (
+            backup_dir
+            / f"colloquily-schema-{version}-before-{CURRENT_SCHEMA_VERSION}.db"
+        )
         if destination.exists():
             return
         with closing(sqlite3.connect(destination)) as target:
             source.backup(target)
             if target.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
-                raise RuntimeError("The pre-migration database backup failed validation")
+                raise RuntimeError(
+                    "The pre-migration database backup failed validation"
+                )
 
 
 def _add_subject_column(connection: sqlite3.Connection, table: str) -> None:
@@ -494,7 +577,9 @@ def _add_subject_column(connection: sqlite3.Connection, table: str) -> None:
         # SQLite cannot add a REFERENCES column with a non-null default while
         # foreign-key enforcement is enabled. The value is still mandatory and
         # all new domain tables use proper FK constraints.
-        connection.execute(f"ALTER TABLE {table} ADD COLUMN subject_id INTEGER NOT NULL DEFAULT {LEGACY_SUBJECT_ID}")
+        connection.execute(
+            f"ALTER TABLE {table} ADD COLUMN subject_id INTEGER NOT NULL DEFAULT {LEGACY_SUBJECT_ID}"
+        )
 
 
 def _migrate_subject_scope(connection: sqlite3.Connection) -> None:
@@ -523,7 +608,13 @@ def _migrate_subject_scope(connection: sqlite3.Connection) -> None:
         """,
         (now, LEGACY_SUBJECT_ID),
     )
-    for table in ("requests", "request_sources", "quiz_sessions", "quiz_questions", "quiz_attempts"):
+    for table in (
+        "requests",
+        "request_sources",
+        "quiz_sessions",
+        "quiz_questions",
+        "quiz_attempts",
+    ):
         _add_subject_column(connection, table)
     connection.execute(
         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (1, ?)",
@@ -531,7 +622,9 @@ def _migrate_subject_scope(connection: sqlite3.Connection) -> None:
     )
 
 
-def _ensure_column(connection: sqlite3.Connection, table: str, name: str, definition: str) -> None:
+def _ensure_column(
+    connection: sqlite3.Connection, table: str, name: str, definition: str
+) -> None:
     if name not in _column_names(connection, table):
         connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
 
@@ -610,8 +703,13 @@ def _migrate_conversation_history(connection: sqlite3.Connection) -> None:
                 WHERE id = ?
                 """,
                 (
-                    evidence["id"], evidence["title"], evidence["relative_path"],
-                    evidence["source_location"], evidence["source_type"], evidence["content"], source["id"],
+                    evidence["id"],
+                    evidence["title"],
+                    evidence["relative_path"],
+                    evidence["source_location"],
+                    evidence["source_type"],
+                    evidence["content"],
+                    source["id"],
                 ),
             )
     connection.execute(
@@ -645,14 +743,17 @@ def _migrate_conversation_history(connection: sqlite3.Connection) -> None:
         WHERE q.origin_request_uuid IS NOT NULL AND q.review_status = 'needs_review'
         """
     ).fetchall():
-        evidence_ids = [int(row["knowledge_unit_id"]) for row in connection.execute(
-            """
+        evidence_ids = [
+            int(row["knowledge_unit_id"])
+            for row in connection.execute(
+                """
             SELECT DISTINCT knowledge_unit_id FROM request_sources
             WHERE request_uuid = ? AND knowledge_unit_id IS NOT NULL
             ORDER BY knowledge_unit_id
             """,
-            (question["origin_request_uuid"],),
-        ).fetchall()]
+                (question["origin_request_uuid"],),
+            ).fetchall()
+        ]
         connection.execute(
             """
             UPDATE questions SET evidence_ids_json = ?, expected_core_points_json = ?,
@@ -660,8 +761,12 @@ def _migrate_conversation_history(connection: sqlite3.Connection) -> None:
             """,
             (
                 json.dumps(evidence_ids),
-                json.dumps(_core_points_from_answer(question["output_text"], evidence_ids), ensure_ascii=False),
-                0.7 if evidence_ids else 0.25, question["id"],
+                json.dumps(
+                    _core_points_from_answer(question["output_text"], evidence_ids),
+                    ensure_ascii=False,
+                ),
+                0.7 if evidence_ids else 0.25,
+                question["id"],
             ),
         )
 
@@ -693,12 +798,24 @@ def _migrate_question_pools(connection: sqlite3.Connection) -> None:
         "import_provenance_json": "TEXT NOT NULL DEFAULT '{}'",
     }.items():
         _ensure_column(connection, "questions", name, definition)
-    connection.execute("CREATE INDEX IF NOT EXISTS idx_question_pools_subject ON question_pools(subject_id)")
-    connection.execute("CREATE INDEX IF NOT EXISTS idx_questions_pool ON questions(question_pool_id)")
-    connection.execute("CREATE INDEX IF NOT EXISTS idx_questions_subject_topic_name ON questions(subject_id, topic_name)")
-    connection.execute("CREATE INDEX IF NOT EXISTS idx_questions_subject_priority ON questions(subject_id, priority)")
-    connection.execute("CREATE INDEX IF NOT EXISTS idx_questions_subject_concept ON questions(subject_id, concept_id)")
-    connection.execute("CREATE INDEX IF NOT EXISTS idx_questions_subject_difficulty ON questions(subject_id, difficulty)")
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_question_pools_subject ON question_pools(subject_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_questions_pool ON questions(question_pool_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_questions_subject_topic_name ON questions(subject_id, topic_name)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_questions_subject_priority ON questions(subject_id, priority)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_questions_subject_concept ON questions(subject_id, concept_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_questions_subject_difficulty ON questions(subject_id, difficulty)"
+    )
     connection.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_questions_subject_external "
         "ON questions(subject_id, external_id) WHERE external_id IS NOT NULL AND trim(external_id) <> ''"
@@ -723,19 +840,27 @@ def _decode_subject(row: sqlite3.Row | None) -> dict | None:
 
 def list_subjects() -> list[dict]:
     with closing(_connect()) as connection:
-        rows = connection.execute("SELECT * FROM subjects ORDER BY name COLLATE NOCASE").fetchall()
+        rows = connection.execute(
+            "SELECT * FROM subjects ORDER BY name COLLATE NOCASE"
+        ).fetchall()
         return [_decode_subject(row) for row in rows]
 
 
 def get_subject(subject_id: int) -> dict | None:
     with closing(_connect()) as connection:
-        return _decode_subject(connection.execute("SELECT * FROM subjects WHERE id = ?", (subject_id,)).fetchone())
+        return _decode_subject(
+            connection.execute(
+                "SELECT * FROM subjects WHERE id = ?", (subject_id,)
+            ).fetchone()
+        )
 
 
 def get_subject_by_slug(slug: str) -> dict | None:
     with closing(_connect()) as connection:
         return _decode_subject(
-            connection.execute("SELECT * FROM subjects WHERE slug = ?", (_subject_slug(slug),)).fetchone()
+            connection.execute(
+                "SELECT * FROM subjects WHERE slug = ?", (_subject_slug(slug),)
+            ).fetchone()
         )
 
 
@@ -790,10 +915,16 @@ def update_subject(subject_id: int, values: dict) -> dict:
         "name": str(values.get("name", current["name"])).strip(),
         "description": str(values.get("description", current["description"])).strip(),
         "language": str(values.get("language", current["language"])).strip() or "en",
-        "exam_duration_minutes": max(1, int(values.get("exam_duration_minutes", current["exam_duration_minutes"]))),
+        "exam_duration_minutes": max(
+            1,
+            int(values.get("exam_duration_minutes", current["exam_duration_minutes"])),
+        ),
         "local_llm_config": values.get("local_llm_config", current["local_llm_config"]),
         "embedding_config": values.get("embedding_config", current["embedding_config"]),
-        "active_index_profile": str(values.get("active_index_profile", current["active_index_profile"])).strip() or "default",
+        "active_index_profile": str(
+            values.get("active_index_profile", current["active_index_profile"])
+        ).strip()
+        or "default",
     }
     with closing(_connect()) as connection:
         connection.execute(
@@ -803,10 +934,16 @@ def update_subject(subject_id: int, values: dict) -> dict:
                 active_index_profile = ?, updated_at = ? WHERE id = ?
             """,
             (
-                payload["slug"], payload["name"], payload["description"], payload["language"],
-                payload["exam_duration_minutes"], json.dumps(payload["local_llm_config"], ensure_ascii=False),
-                json.dumps(payload["embedding_config"], ensure_ascii=False), payload["active_index_profile"],
-                datetime.now().isoformat(timespec="seconds"), subject_id,
+                payload["slug"],
+                payload["name"],
+                payload["description"],
+                payload["language"],
+                payload["exam_duration_minutes"],
+                json.dumps(payload["local_llm_config"], ensure_ascii=False),
+                json.dumps(payload["embedding_config"], ensure_ascii=False),
+                payload["active_index_profile"],
+                datetime.now().isoformat(timespec="seconds"),
+                subject_id,
             ),
         )
         connection.commit()
@@ -815,13 +952,24 @@ def update_subject(subject_id: int, values: dict) -> dict:
 
 def delete_subject(subject_id: int) -> bool:
     with closing(_connect()) as connection:
-        connection.execute('BEGIN IMMEDIATE')
-        connection.execute('PRAGMA defer_foreign_keys = ON')
-        connection.execute('DELETE FROM evaluation_corrections WHERE attempt_id IN (SELECT id FROM attempts WHERE subject_id=?)', (subject_id,))
-        connection.execute('DELETE FROM attempts WHERE subject_id=?', (subject_id,))
-        connection.execute('DELETE FROM exam_sessions WHERE subject_id=?', (subject_id,))
-        for table in ('quiz_attempts', 'quiz_questions', 'quiz_sessions', 'request_sources', 'requests'):
-            connection.execute(f'DELETE FROM {table} WHERE subject_id=?', (subject_id,))
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute("PRAGMA defer_foreign_keys = ON")
+        connection.execute(
+            "DELETE FROM evaluation_corrections WHERE attempt_id IN (SELECT id FROM attempts WHERE subject_id=?)",
+            (subject_id,),
+        )
+        connection.execute("DELETE FROM attempts WHERE subject_id=?", (subject_id,))
+        connection.execute(
+            "DELETE FROM exam_sessions WHERE subject_id=?", (subject_id,)
+        )
+        for table in (
+            "quiz_attempts",
+            "quiz_questions",
+            "quiz_sessions",
+            "request_sources",
+            "requests",
+        ):
+            connection.execute(f"DELETE FROM {table} WHERE subject_id=?", (subject_id,))
         cursor = connection.execute("DELETE FROM subjects WHERE id = ?", (subject_id,))
         connection.commit()
         return cursor.rowcount > 0
@@ -837,7 +985,11 @@ def get_local_user() -> dict:
             return dict(row)
         connection.execute(
             "INSERT OR IGNORE INTO users (username, password_hash, is_admin, created_at) VALUES (?, ?, 0, ?)",
-            ("local", generate_password_hash(secrets.token_urlsafe(48)), datetime.now().isoformat(timespec="seconds")),
+            (
+                "local",
+                generate_password_hash(secrets.token_urlsafe(48)),
+                datetime.now().isoformat(timespec="seconds"),
+            ),
         )
         connection.commit()
     return get_user_by_username("local")
@@ -850,20 +1002,29 @@ def create_user(username: str, password: str, is_admin: bool = False) -> None:
             INSERT INTO users (username, password_hash, is_admin, created_at)
             VALUES (?, ?, ?, ?)
             """,
-            (username.strip(), generate_password_hash(password), int(is_admin), datetime.now().isoformat(timespec="seconds")),
+            (
+                username.strip(),
+                generate_password_hash(password),
+                int(is_admin),
+                datetime.now().isoformat(timespec="seconds"),
+            ),
         )
         connection.commit()
 
 
 def get_user_by_username(username: str) -> dict | None:
     with closing(_connect()) as connection:
-        row = connection.execute("SELECT * FROM users WHERE username = ?", (username.strip(),)).fetchone()
+        row = connection.execute(
+            "SELECT * FROM users WHERE username = ?", (username.strip(),)
+        ).fetchone()
         return dict(row) if row else None
 
 
 def get_user_by_id(user_id: int) -> dict | None:
     with closing(_connect()) as connection:
-        row = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        row = connection.execute(
+            "SELECT * FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
         return dict(row) if row else None
 
 
@@ -897,7 +1058,9 @@ def _source_page_number(source: dict) -> int | None:
             return value
         if isinstance(value, str) and value.strip().isdigit() and int(value) > 0:
             return int(value)
-    match = re.search(r"\b(?:page|seite)\s*(\d+)\b", str(source.get("source_location") or ""), re.I)
+    match = re.search(
+        r"\b(?:page|seite)\s*(\d+)\b", str(source.get("source_location") or ""), re.I
+    )
     return int(match.group(1)) if match else None
 
 
@@ -905,56 +1068,84 @@ def _core_points_from_answer(answer: str | None, evidence_ids: list[int]) -> lis
     """Create a conservative draft rubric from a grounded answer for human review."""
     if not evidence_ids or not str(answer or "").strip():
         return []
-    body = re.split(r"\n\s*(?:Citations?|Sources?|Evidence)\s*:", str(answer), maxsplit=1, flags=re.I)[0]
+    body = re.split(
+        r"\n\s*(?:Citations?|Sources?|Evidence)\s*:",
+        str(answer),
+        maxsplit=1,
+        flags=re.I,
+    )[0]
     body = re.sub(r"\[(?:E|Q)\d+\]", "", body)
-    sentences = [re.sub(r"\s+", " ", item).strip(" -•\t") for item in re.split(r"(?<=[.!?])\s+|\n+", body)]
+    sentences = [
+        re.sub(r"\s+", " ", item).strip(" -•\t")
+        for item in re.split(r"(?<=[.!?])\s+|\n+", body)
+    ]
     points = []
     for sentence in sentences:
         if len(sentence) < 25:
             continue
         text = sentence if len(sentence) <= 360 else sentence[:357].rstrip() + "…"
-        points.append({"text": text, "priority": "must_know", "evidence_ids": evidence_ids})
+        points.append(
+            {"text": text, "priority": "must_know", "evidence_ids": evidence_ids}
+        )
         if len(points) == 4:
             break
     if not points and body.strip():
         fallback = re.sub(r"\s+", " ", body).strip()
-        points.append({
-            "text": fallback if len(fallback) <= 360 else fallback[:357].rstrip() + "…",
-            "priority": "must_know",
-            "evidence_ids": evidence_ids,
-        })
+        points.append(
+            {
+                "text": fallback
+                if len(fallback) <= 360
+                else fallback[:357].rstrip() + "…",
+                "priority": "must_know",
+                "evidence_ids": evidence_ids,
+            }
+        )
     return points
 
 
 def _store_question_card_for_request(
     connection: sqlite3.Connection, user_id: int, subject_id: int, request_entry: dict
 ) -> None:
-    if request_entry.get("request_type") != "ask" or not str(request_entry.get("input_text") or "").strip():
+    if (
+        request_entry.get("request_type") != "ask"
+        or not str(request_entry.get("input_text") or "").strip()
+    ):
         return
-    requested_ids = sorted({
-        int(source.get("knowledge_unit_id") or source.get("evidence_id"))
-        for source in request_entry.get("sources", [])
-        if str(source.get("knowledge_unit_id") or source.get("evidence_id") or "").isdigit()
-    })
+    requested_ids = sorted(
+        {
+            int(source.get("knowledge_unit_id") or source.get("evidence_id"))
+            for source in request_entry.get("sources", [])
+            if str(
+                source.get("knowledge_unit_id") or source.get("evidence_id") or ""
+            ).isdigit()
+        }
+    )
     evidence_ids: list[int] = []
     if requested_ids:
         placeholders = ",".join("?" for _ in requested_ids)
-        evidence_ids = [int(row["id"]) for row in connection.execute(
-            f"""
+        evidence_ids = [
+            int(row["id"])
+            for row in connection.execute(
+                f"""
             SELECT id FROM knowledge_units
             WHERE subject_id = ? AND review_status = 'accepted' AND enabled_for_retrieval = 1
               AND id IN ({placeholders})
             ORDER BY id
             """,
-            [subject_id, *requested_ids],
-        ).fetchall()]
+                [subject_id, *requested_ids],
+            ).fetchall()
+        ]
     request_uuid = str(request_entry["request_id"])
     existing = connection.execute(
         "SELECT id, review_status FROM questions WHERE origin_request_uuid = ?",
         (request_uuid,),
     ).fetchone()
-    now = str(request_entry.get("timestamp") or datetime.now().isoformat(timespec="seconds"))
-    core_points = _core_points_from_answer(request_entry.get("output_text"), evidence_ids)
+    now = str(
+        request_entry.get("timestamp") or datetime.now().isoformat(timespec="seconds")
+    )
+    core_points = _core_points_from_answer(
+        request_entry.get("output_text"), evidence_ids
+    )
     if existing:
         if existing["review_status"] == "needs_review":
             connection.execute(
@@ -963,9 +1154,12 @@ def _store_question_card_for_request(
                     expected_core_points_json = ?, quality_score = ?, updated_at = ? WHERE id = ?
                 """,
                 (
-                    str(request_entry["input_text"]).strip(), json.dumps(evidence_ids),
+                    str(request_entry["input_text"]).strip(),
+                    json.dumps(evidence_ids),
                     json.dumps(core_points, ensure_ascii=False),
-                    0.7 if evidence_ids else 0.25, now, existing["id"],
+                    0.7 if evidence_ids else 0.25,
+                    now,
+                    existing["id"],
                 ),
             )
         return
@@ -980,14 +1174,22 @@ def _store_question_card_for_request(
                   'needs_review', ?, ?, ?, ?)
         """,
         (
-            subject_id, str(request_entry["input_text"]).strip(),
-            json.dumps(core_points, ensure_ascii=False), json.dumps(evidence_ids),
-            0.7 if evidence_ids else 0.25, request_uuid, user_id, now, now,
+            subject_id,
+            str(request_entry["input_text"]).strip(),
+            json.dumps(core_points, ensure_ascii=False),
+            json.dumps(evidence_ids),
+            0.7 if evidence_ids else 0.25,
+            request_uuid,
+            user_id,
+            now,
+            now,
         ),
     )
 
 
-def store_request(user_id: int, request_entry: dict, subject_id: int = LEGACY_SUBJECT_ID) -> None:
+def store_request(
+    user_id: int, request_entry: dict, subject_id: int = LEGACY_SUBJECT_ID
+) -> None:
     with closing(_connect()) as connection:
         connection.execute(
             """
@@ -1011,7 +1213,10 @@ def store_request(user_id: int, request_entry: dict, subject_id: int = LEGACY_SU
                 subject_id,
             ),
         )
-        connection.execute("DELETE FROM request_sources WHERE request_uuid = ?", (request_entry["request_id"],))
+        connection.execute(
+            "DELETE FROM request_sources WHERE request_uuid = ?",
+            (request_entry["request_id"],),
+        )
         for source in request_entry.get("sources", []):
             connection.execute(
                 """
@@ -1073,7 +1278,7 @@ def list_conversation_history(
             FROM requests r
             LEFT JOIN subjects s ON s.id = r.subject_id
             LEFT JOIN questions q ON q.origin_request_uuid = r.request_uuid
-            WHERE {' AND '.join(clauses)}
+            WHERE {" AND ".join(clauses)}
             ORDER BY r.created_at DESC, r.id DESC
             LIMIT ?
             """,
@@ -1081,16 +1286,27 @@ def list_conversation_history(
         ).fetchall()
         conversations = [dict(row) for row in rows]
         for item in conversations:
-            item["sources"] = [dict(row) for row in connection.execute(
-                "SELECT * FROM request_sources WHERE request_uuid = ? ORDER BY id",
-                (item["request_uuid"],),
-            ).fetchall()]
+            item["sources"] = [
+                dict(row)
+                for row in connection.execute(
+                    "SELECT * FROM request_sources WHERE request_uuid = ? ORDER BY id",
+                    (item["request_uuid"],),
+                ).fetchall()
+            ]
         return conversations
 
 
-def store_feedback(user_id: int, request_uuid: str, helpful: bool, details: str) -> None:
+def store_feedback(
+    user_id: int, request_uuid: str, helpful: bool, details: str
+) -> None:
     attempts = 2
-    payload = (request_uuid, user_id, int(helpful), details.strip(), datetime.now().isoformat(timespec="seconds"))
+    payload = (
+        request_uuid,
+        user_id,
+        int(helpful),
+        details.strip(),
+        datetime.now().isoformat(timespec="seconds"),
+    )
     for attempt in range(1, attempts + 1):
         try:
             with closing(_connect()) as connection:
@@ -1110,17 +1326,27 @@ def store_feedback(user_id: int, request_uuid: str, helpful: bool, details: str)
         except sqlite3.OperationalError:
             if attempt >= attempts:
                 raise
-            LOGGER.warning("Retrying feedback write after SQLite operational error", extra={"request_uuid": request_uuid})
+            LOGGER.warning(
+                "Retrying feedback write after SQLite operational error",
+                extra={"request_uuid": request_uuid},
+            )
 
 
-def create_quiz_session(user_id: int, topic: str, request_uuid: str | None, questions: list[dict]) -> int:
+def create_quiz_session(
+    user_id: int, topic: str, request_uuid: str | None, questions: list[dict]
+) -> int:
     with closing(_connect()) as connection:
         cursor = connection.execute(
             """
             INSERT INTO quiz_sessions (user_id, topic, request_uuid, created_at)
             VALUES (?, ?, ?, ?)
             """,
-            (user_id, topic, request_uuid, datetime.now().isoformat(timespec="seconds")),
+            (
+                user_id,
+                topic,
+                request_uuid,
+                datetime.now().isoformat(timespec="seconds"),
+            ),
         )
         session_id = cursor.lastrowid
         for index, question in enumerate(questions, start=1):
@@ -1146,7 +1372,9 @@ def create_quiz_session(user_id: int, topic: str, request_uuid: str | None, ques
 
 def get_quiz_session(session_id: int) -> dict | None:
     with closing(_connect()) as connection:
-        session_row = connection.execute("SELECT * FROM quiz_sessions WHERE id = ?", (session_id,)).fetchone()
+        session_row = connection.execute(
+            "SELECT * FROM quiz_sessions WHERE id = ?", (session_id,)
+        ).fetchone()
         if not session_row:
             return None
         question_rows = connection.execute(
@@ -1163,13 +1391,17 @@ def get_quiz_session(session_id: int) -> dict | None:
         return session
 
 
-def save_quiz_evaluation(session_id: int, score_percent: float, report_text: str, attempts: list[dict]) -> None:
+def save_quiz_evaluation(
+    session_id: int, score_percent: float, report_text: str, attempts: list[dict]
+) -> None:
     with closing(_connect()) as connection:
         connection.execute(
             "UPDATE quiz_sessions SET score_percent = ?, report_text = ? WHERE id = ?",
             (score_percent, report_text, session_id),
         )
-        connection.execute("DELETE FROM quiz_attempts WHERE session_id = ?", (session_id,))
+        connection.execute(
+            "DELETE FROM quiz_attempts WHERE session_id = ?", (session_id,)
+        )
         for attempt in attempts:
             connection.execute(
                 """
@@ -1190,27 +1422,37 @@ def save_quiz_evaluation(session_id: int, score_percent: float, report_text: str
 
 def build_admin_analytics() -> dict:
     with closing(_connect()) as connection:
-        requests_count_row = connection.execute("SELECT COUNT(*) AS total FROM requests").fetchone()
-        users = [dict(row) for row in connection.execute(
-            """
+        requests_count_row = connection.execute(
+            "SELECT COUNT(*) AS total FROM requests"
+        ).fetchone()
+        users = [
+            dict(row)
+            for row in connection.execute(
+                """
             SELECT users.id, users.username, users.is_admin, COUNT(requests.id) AS requests_count
             FROM users
             LEFT JOIN requests ON requests.user_id = users.id
             GROUP BY users.id
             ORDER BY requests_count DESC, users.username
             """
-        ).fetchall()]
-        recent_requests = [dict(row) for row in connection.execute(
-            """
+            ).fetchall()
+        ]
+        recent_requests = [
+            dict(row)
+            for row in connection.execute(
+                """
             SELECT requests.*, users.username
             FROM requests
             JOIN users ON users.id = requests.user_id
             ORDER BY requests.created_at DESC
             LIMIT 20
             """
-        ).fetchall()]
-        feedback = [dict(row) for row in connection.execute(
-            """
+            ).fetchall()
+        ]
+        feedback = [
+            dict(row)
+            for row in connection.execute(
+                """
             SELECT feedback.*, users.username, requests.input_text
             FROM feedback
             JOIN users ON users.id = feedback.user_id
@@ -1218,9 +1460,12 @@ def build_admin_analytics() -> dict:
             ORDER BY feedback.created_at DESC
             LIMIT 20
             """
-        ).fetchall()]
-        per_user_questions = [dict(row) for row in connection.execute(
-            """
+            ).fetchall()
+        ]
+        per_user_questions = [
+            dict(row)
+            for row in connection.execute(
+                """
             SELECT users.username, requests.input_text, COUNT(*) AS count
             FROM requests
             JOIN users ON users.id = requests.user_id
@@ -1228,25 +1473,32 @@ def build_admin_analytics() -> dict:
             ORDER BY count DESC, users.username
             LIMIT 30
             """
-        ).fetchall()]
-        top_questions = [dict(row) for row in connection.execute(
-            """
+            ).fetchall()
+        ]
+        top_questions = [
+            dict(row)
+            for row in connection.execute(
+                """
             SELECT input_text AS question, COUNT(*) AS count
             FROM requests
             GROUP BY input_text
             ORDER BY count DESC
             LIMIT 10
             """
-        ).fetchall()]
-        top_sources = [dict(row) for row in connection.execute(
-            """
+            ).fetchall()
+        ]
+        top_sources = [
+            dict(row)
+            for row in connection.execute(
+                """
             SELECT doc_name || ', Seite ' || page_number AS label, COUNT(*) AS count
             FROM request_sources
             GROUP BY doc_name, page_number
             ORDER BY count DESC
             LIMIT 10
             """
-        ).fetchall()]
+            ).fetchall()
+        ]
         feedback_summary_row = connection.execute(
             """
             SELECT
@@ -1256,13 +1508,21 @@ def build_admin_analytics() -> dict:
             """
         ).fetchone()
         return {
-            "requests_count": int((requests_count_row["total"] or 0) if requests_count_row else 0),
+            "requests_count": int(
+                (requests_count_row["total"] or 0) if requests_count_row else 0
+            ),
             "users": users,
             "recent_requests": recent_requests,
             "recent_feedback": feedback,
             "feedback_summary": {
-                "like": int((feedback_summary_row["likes"] or 0) if feedback_summary_row else 0),
-                "dislike": int((feedback_summary_row["dislikes"] or 0) if feedback_summary_row else 0),
+                "like": int(
+                    (feedback_summary_row["likes"] or 0) if feedback_summary_row else 0
+                ),
+                "dislike": int(
+                    (feedback_summary_row["dislikes"] or 0)
+                    if feedback_summary_row
+                    else 0
+                ),
             },
             "per_user_questions": per_user_questions,
             "top_questions": top_questions,
@@ -1272,19 +1532,25 @@ def build_admin_analytics() -> dict:
 
 def build_user_analytics(user_id: int) -> dict:
     with closing(_connect()) as connection:
-        requests = [dict(row) for row in connection.execute(
-            """
+        requests = [
+            dict(row)
+            for row in connection.execute(
+                """
             SELECT * FROM requests WHERE user_id = ? ORDER BY created_at DESC LIMIT 20
             """,
-            (user_id,),
-        ).fetchall()]
-        quizzes = [dict(row) for row in connection.execute(
-            """
+                (user_id,),
+            ).fetchall()
+        ]
+        quizzes = [
+            dict(row)
+            for row in connection.execute(
+                """
             SELECT id, topic, created_at, score_percent FROM quiz_sessions WHERE user_id = ?
             ORDER BY created_at DESC LIMIT 20
             """,
-            (user_id,),
-        ).fetchall()]
+                (user_id,),
+            ).fetchall()
+        ]
         totals_row = connection.execute(
             """
             SELECT
@@ -1317,18 +1583,23 @@ def build_user_analytics(user_id: int) -> dict:
             """,
             (user_id,),
         ).fetchone()
-        request_types = [dict(row) for row in connection.execute(
-            """
+        request_types = [
+            dict(row)
+            for row in connection.execute(
+                """
             SELECT request_type AS label, COUNT(*) AS count
             FROM requests
             WHERE user_id = ?
             GROUP BY request_type
             ORDER BY count DESC, request_type
             """,
-            (user_id,),
-        ).fetchall()]
-        top_sources = [dict(row) for row in connection.execute(
-            """
+                (user_id,),
+            ).fetchall()
+        ]
+        top_sources = [
+            dict(row)
+            for row in connection.execute(
+                """
             SELECT
                 request_sources.doc_name || ', Seite ' || request_sources.page_number AS label,
                 COUNT(*) AS count
@@ -1341,10 +1612,13 @@ def build_user_analytics(user_id: int) -> dict:
             ORDER BY count DESC, label
             LIMIT 8
             """,
-            (user_id,),
-        ).fetchall()]
-        weekly_activity = [dict(row) for row in connection.execute(
-            """
+                (user_id,),
+            ).fetchall()
+        ]
+        weekly_activity = [
+            dict(row)
+            for row in connection.execute(
+                """
             SELECT
                 substr(created_at, 1, 10) AS label,
                 COUNT(*) AS count
@@ -1354,10 +1628,13 @@ def build_user_analytics(user_id: int) -> dict:
             GROUP BY substr(created_at, 1, 10)
             ORDER BY label
             """,
-            (user_id,),
-        ).fetchall()]
-        quiz_trend = [dict(row) for row in connection.execute(
-            """
+                (user_id,),
+            ).fetchall()
+        ]
+        quiz_trend = [
+            dict(row)
+            for row in connection.execute(
+                """
             SELECT
                 substr(created_at, 1, 10) AS label,
                 ROUND(score_percent, 1) AS score
@@ -1367,8 +1644,9 @@ def build_user_analytics(user_id: int) -> dict:
             ORDER BY created_at DESC
             LIMIT 8
             """,
-            (user_id,),
-        ).fetchall()]
+                (user_id,),
+            ).fetchall()
+        ]
         quiz_trend.reverse()
 
         feedback_row = connection.execute(
@@ -1384,12 +1662,24 @@ def build_user_analytics(user_id: int) -> dict:
 
         return {
             "summary": {
-                "requests_total": int((totals_row["requests_total"] or 0) if totals_row else 0),
-                "avg_duration_ms": int(round((totals_row["avg_duration_ms"] or 0))) if totals_row and totals_row["avg_duration_ms"] else 0,
-                "quizzes_total": int((quizzes_row["quizzes_total"] or 0) if quizzes_row else 0),
-                "avg_score_percent": float(quizzes_row["avg_score_percent"] or 0) if quizzes_row else 0.0,
-                "best_score_percent": float(quizzes_row["best_score_percent"] or 0) if quizzes_row else 0.0,
-                "favorite_request_type": favorite_request_type["request_type"] if favorite_request_type else None,
+                "requests_total": int(
+                    (totals_row["requests_total"] or 0) if totals_row else 0
+                ),
+                "avg_duration_ms": int(round((totals_row["avg_duration_ms"] or 0)))
+                if totals_row and totals_row["avg_duration_ms"]
+                else 0,
+                "quizzes_total": int(
+                    (quizzes_row["quizzes_total"] or 0) if quizzes_row else 0
+                ),
+                "avg_score_percent": float(quizzes_row["avg_score_percent"] or 0)
+                if quizzes_row
+                else 0.0,
+                "best_score_percent": float(quizzes_row["best_score_percent"] or 0)
+                if quizzes_row
+                else 0.0,
+                "favorite_request_type": favorite_request_type["request_type"]
+                if favorite_request_type
+                else None,
                 "likes": int((feedback_row["likes"] or 0) if feedback_row else 0),
                 "dislikes": int((feedback_row["dislikes"] or 0) if feedback_row else 0),
             },

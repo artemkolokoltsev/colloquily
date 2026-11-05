@@ -6,17 +6,23 @@ import {
   type PDFDocumentProxy,
 } from "pdfjs-dist/legacy/build/pdf.mjs";
 import worker from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
-import { sourceBytes } from "../api/client";
+import { sourceBytes, apiBytes } from "../api/client";
 GlobalWorkerOptions.workerSrc = worker;
 
 export default function SourcePdfPreview({
   exam,
   path,
   page,
+  apiPath,
+  bytes,
+  onPageCount,
 }: {
   exam: number;
   path: string;
   page: number;
+  apiPath?: string;
+  bytes?: Uint8Array;
+  onPageCount?: (count: number) => void;
 }) {
   const { t } = useTranslation();
   const [pdf, setPdf] = useState<PDFDocumentProxy>();
@@ -33,7 +39,13 @@ export default function SourcePdfPreview({
     setPdf(undefined);
     setError(false);
     setReady(false);
-    void sourceBytes(exam, path)
+    void (
+      bytes
+        ? Promise.resolve(bytes.slice())
+        : apiPath
+          ? apiBytes(apiPath)
+          : sourceBytes(exam, path)
+    )
       .then(async (data) => {
         if (!active) return;
         task = getDocument({
@@ -47,7 +59,10 @@ export default function SourcePdfPreview({
         const document = await task.promise;
         if (page < 1 || page > document.numPages)
           throw new Error("Invalid cited page");
-        if (active) setPdf(document);
+        if (active) {
+          setPdf(document);
+          onPageCount?.(document.numPages);
+        }
       })
       .catch(() => {
         if (active) setError(true);
@@ -56,7 +71,7 @@ export default function SourcePdfPreview({
       active = false;
       void task?.destroy();
     };
-  }, [exam, path, page, retry]);
+  }, [exam, path, page, retry, apiPath, bytes, onPageCount]);
   useEffect(() => {
     if (!holder.current) return;
     const observer = new ResizeObserver((entries) =>
