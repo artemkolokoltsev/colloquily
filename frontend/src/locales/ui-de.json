@@ -453,5 +453,15 @@
   "courseExportPreview": "Exportierte Abgabe",
   "courseExportPreviewHelp": "Vorschau des gerade exportierten PDFs. Exportiere nach Änderungen an Lösung oder Abgabedaten erneut.",
   "courseLoadSaved": "Gespeicherte Lösung laden",
-  "courseDiscardDraft": "Diesen Wiederherstellungsentwurf durch die zuletzt in Colloquily gespeicherte Lösung ersetzen? Kopiere vorher Text, den du behalten möchtest."
+  "courseDiscardDraft": "Diesen Wiederherstellungsentwurf durch die zuletzt in Colloquily gespeicherte Lösung ersetzen? Kopiere vorher Text, den du behalten möchtest.",
+  "materialPassages": "Extrahierte Abschnitte",
+  "materialNavigation": "Abschnittsnavigation",
+  "materialPrevious": "Vorherige Abschnitte",
+  "materialNext": "Nächste Abschnitte",
+  "materialRange": "{{start}}–{{end}} von {{total}} Abschnitten",
+  "materialUnsaved": "Änderungen speichern oder verwerfen, bevor du die Abschnitte wechselst.",
+  "materialOriginal": "Originalseite anzeigen",
+  "materialCancelEdit": "Bearbeitung abbrechen",
+  "materialOutline": "Inhaltsverzeichnis",
+  "materialOutlineReason": "Dies ist eine Übersicht ohne Erläuterungen. Sie bleibt als Referenz sichtbar und wird nicht für die Fragenerstellung verwendet."
 }

@@ -1,7 +1,7 @@
 import { LectureScript } from "./LectureScript";
-import { StudyText } from "../components/StudyText";
+import { MaterialReview } from "./MaterialReview";
 import { useTranslation } from "react-i18next";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { lazy, Suspense } from "react";
 const PdfReader = lazy(() =>
   import("../components/PdfReader").then((module) => ({
@@ -9,19 +9,8 @@ const PdfReader = lazy(() =>
   })),
 );
 import { api, operation } from "../api/client";
-import { ErrorNotice, Progress, Sources } from "../components/Common";
-import type { Job } from "../types";
-interface Unit {
-  id: number;
-  document_id: number;
-  content: string;
-  review_status: string;
-  document_title: string;
-  relative_path: string;
-  source_location: string;
-  source_start?: number;
-  quality_problems?: string[];
-}
+import { ErrorNotice, Progress } from "../components/Common";
+import type { Job, MaterialUnit } from "../types";
 interface MaterialsData {
   raw: string[];
   documents: {
@@ -31,6 +20,9 @@ interface MaterialsData {
     processing_status?: string;
     accepted_count?: number;
     review_count?: number;
+    unit_count?: number;
+    source_page_count?: number;
+    question_count?: number;
     created_at?: string;
     extraction?: {
       state?: string;
@@ -70,38 +62,54 @@ export function Materials({
   const [reader, setReader] = useState<MaterialsData["documents"][number]>();
   const [advanced, setAdvanced] = useState(false);
   const [data, setData] = useState<MaterialsData>();
-  const [units, setUnits] = useState<Unit[]>([]);
+  const [reviewRevision, setReviewRevision] = useState(0);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
   const [mode, setMode] = useState("fast");
   const [reviewDocument, setReviewDocument] = useState<number | null>(null);
-  const [questions, setQuestions] = useState<{ evidence_ids?: number[] }[]>([]);
-  async function refresh() {
-    const [d, u, p, q] = await Promise.all([
-      api<MaterialsData>(`/exams/${exam}/documents`),
-      advanced ? api<Unit[]>(`/exams/${exam}/review`) : Promise.resolve([]),
-      api<{ job: Job | null; questions: number }>(`/exams/${exam}/preparation`),
-      advanced
-        ? api<{ evidence_ids?: number[] }[]>(`/exams/${exam}/questions`)
-        : Promise.resolve([]),
-    ]);
-    setData(d);
-    setUnits(u);
-    setPreparation(p);
-    setQuestions(q);
-  }
+  const refresh = useCallback(
+    async (signal?: AbortSignal) => {
+      const [documents, prepared] = await Promise.all([
+        api<MaterialsData>(
+          `/exams/${exam}/documents`,
+          "GET",
+          undefined,
+          signal,
+        ),
+        api<{ job: Job | null; questions: number }>(
+          `/exams/${exam}/preparation`,
+          "GET",
+          undefined,
+          signal,
+        ),
+      ]);
+      if (signal?.aborted) return;
+      setData(documents);
+      setPreparation(prepared);
+      setReviewRevision((value) => value + 1);
+    },
+    [exam],
+  );
   useEffect(() => {
-    void refresh().catch((e) => setError(String(e)));
+    const controller = new AbortController();
+    const update = () =>
+      void refresh(controller.signal).catch((e) => {
+        if (!controller.signal.aborted) setError(String(e));
+      });
+    update();
     const timer = setInterval(() => {
       if (
         ["queued", "running"].includes(preparation?.job?.status || "") ||
         ["queued", "running"].includes(data?.processing?.status || "")
       )
-        void refresh().catch((e) => setError(String(e)));
+        update();
     }, 2500);
-    return () => clearInterval(timer);
-  }, [exam, advanced, preparation?.job?.status, data?.processing?.status]);
+    return () => {
+      controller.abort();
+      clearInterval(timer);
+    };
+  }, [refresh, preparation?.job?.status, data?.processing?.status]);
   async function act(work: () => Promise<unknown>) {
     setBusy(true);
     setError("");
@@ -130,7 +138,7 @@ export function Materials({
         exam={exam}
         documents={data?.documents || []}
         disabled={busy || preparing || processing || !!reader}
-        onChanged={refresh}
+        onChanged={() => refresh()}
       />
       {preparing && <Progress job={preparation?.job || null} />}
       <label>
@@ -175,12 +183,8 @@ export function Materials({
       {data && !data.raw.length && <p>{t("ui.s579041d84b")}</p>}
       <div className="document-grid">
         {data?.documents.map((document) => {
-          const passages = units.filter(
-            (unit) => unit.document_id === document.id,
-          );
           const ready = document.accepted_count || 0;
           const review = document.review_count || 0;
-          const ids = new Set(passages.map((unit) => unit.id));
           return (
             <article key={document.id}>
               <h3>{document.title}</h3>
@@ -188,7 +192,7 @@ export function Materials({
                 disabled={busy || processing}
                 onClick={() =>
                   void act(async () => {
-                    const passages = await api<Unit[]>(
+                    const passages = await api<MaterialUnit[]>(
                       `/exams/${exam}/review?document_id=${document.id}`,
                     );
                     if (!passages.length) throw new Error(t("ui.noStudyText"));
@@ -236,17 +240,15 @@ export function Materials({
                   {t("ui.redesignDocumentSummary", {
                     pages:
                       document.extraction?.pages_processed ??
-                      new Set(
-                        passages
-                          .map((unit) => unit.source_start)
-                          .filter(Boolean),
-                      ).size,
+                      document.source_page_count ??
+                      0,
                     ready,
                     review,
-                    unusable: passages.length - ready - review,
-                    questions: questions.filter((question) =>
-                      question.evidence_ids?.some((id) => ids.has(id)),
-                    ).length,
+                    unusable: Math.max(
+                      0,
+                      (document.unit_count || 0) - ready - review,
+                    ),
+                    questions: document.question_count || 0,
                   })}
                 </p>
               )}
@@ -277,11 +279,17 @@ export function Materials({
                   ? new Date(document.created_at).toLocaleDateString()
                   : "—"}
               </p>
-              <details>
+              <details
+                onToggle={(event) => {
+                  if (!event.currentTarget.open)
+                    setReviewDocument((current) =>
+                      current === document.id ? null : current,
+                    );
+                }}
+              >
                 <summary>{t("ui.details")}</summary>
                 <button
                   onClick={() => {
-                    setAdvanced(true);
                     setReviewDocument(
                       reviewDocument === document.id ? null : document.id,
                     );
@@ -304,23 +312,23 @@ export function Materials({
                 >
                   {t("ui.redesignReprocess")}
                 </button>
-                {reviewDocument === document.id &&
-                  passages.map((unit) => (
-                    <StudentEvidence
-                      key={`${unit.id}:${unit.content}:${unit.review_status}`}
-                      unit={unit}
-                      exam={exam}
-                      busy={busy || preparing || processing}
-                      save={(status, content) =>
-                        act(() =>
-                          api(`/exams/${exam}/review/${unit.id}`, "PATCH", {
-                            status,
-                            content,
-                          }),
-                        )
-                      }
-                    />
-                  ))}
+                {reviewDocument === document.id && (
+                  <MaterialReview
+                    key={`${exam}:${document.id}`}
+                    exam={exam}
+                    documentId={document.id}
+                    revision={reviewRevision}
+                    busy={busy || preparing || processing}
+                    save={(unit, status, content) =>
+                      act(() =>
+                        api(`/exams/${exam}/review/${unit.id}`, "PATCH", {
+                          status,
+                          content,
+                        }),
+                      )
+                    }
+                  />
+                )}
               </details>
             </article>
           );
@@ -392,172 +400,79 @@ export function Materials({
       </details>
       <details onToggle={(e) => setAdvanced(e.currentTarget.open)}>
         <summary>{t("ui.sc933415600")}</summary>
-        <p className="muted"> {t("ui.s29f1fc0e10")} </p>
-        <div className="toolbar">
-          <select
-            aria-label={t("ui.s25aaa653a5")}
-            value={mode}
-            onChange={(e) => setMode(e.target.value)}
-          >
-            <option value="fast">{t("ui.s5d28dddc38")}</option>
-            <option value="deep">{t("ui.s938c8b62b7")}</option>
-            <option value="deterministic">{t("ui.s29aa06dc22")}</option>
-          </select>
-          <button
-            disabled={
-              busy ||
-              ["queued", "running"].includes(data?.processing?.status || "")
-            }
-            onClick={() =>
-              act(() => api(`/exams/${exam}/process`, "POST", { mode }))
-            }
-          >
-            {" "}
-            {t("ui.s9ba15dba5c")}{" "}
-          </button>
-          <button
-            disabled={busy || preparing || processing}
-            onClick={() =>
-              act(() => api(`/exams/${exam}/process/retry`, "POST"))
-            }
-          >
-            {" "}
-            {t("ui.s2c4517af49")}{" "}
-          </button>
-          <button
-            disabled={busy || preparing || processing}
-            onClick={() =>
-              act(() => operation(`/exams/${exam}/index`, {}, setJob))
-            }
-          >
-            {" "}
-            {t("ui.s0c123f1916")}{" "}
-          </button>
-        </div>
-        {data?.processing && (
-          <div role="status">
-            <p>
-              {data.processing.status} · {data.processing.current_document}
-            </p>
-            <progress max="100" value={data.processing.progress_percent} />
-            <ErrorNotice error={data.processing.error_text || ""} />
-          </div>
-        )}
-        <Progress job={job} />
-        <h3>{t("ui.sbcb9c2e713")}</h3>
-        {!units.length && <p>{t("ui.s6adfed4d6a")}</p>}
-        {units.map((unit) => (
-          <article key={unit.id}>
-            <strong>
-              {unit.document_title} · {unit.source_location}
-            </strong>
-            <span>{unit.review_status}</span>
-            <textarea
-              aria-label={t("ui.sef57bb58eb")}
-              defaultValue={unit.content}
-              key={`${unit.id}:${unit.content}`}
-              onBlur={(e) => {
-                if (e.target.value !== unit.content)
-                  void act(() =>
-                    api(`/exams/${exam}/review/${unit.id}`, "PATCH", {
-                      status: unit.review_status,
-                      content: e.target.value,
-                    }),
-                  );
-              }}
-            />
+        {advanced && (
+          <>
+            <p className="muted"> {t("ui.s29f1fc0e10")} </p>
             <div className="toolbar">
-              {["accepted", "needs_review", "rejected"].map((status) => (
-                <button
-                  disabled={busy || preparing || processing}
-                  key={status}
-                  onClick={() =>
-                    act(() =>
-                      api(`/exams/${exam}/review/${unit.id}`, "PATCH", {
-                        status,
-                      }),
-                    )
-                  }
-                >
-                  {status.replace("_", " ")}
-                </button>
-              ))}
+              <select
+                aria-label={t("ui.s25aaa653a5")}
+                value={mode}
+                onChange={(e) => setMode(e.target.value)}
+              >
+                <option value="fast">{t("ui.s5d28dddc38")}</option>
+                <option value="deep">{t("ui.s938c8b62b7")}</option>
+                <option value="deterministic">{t("ui.s29aa06dc22")}</option>
+              </select>
+              <button
+                disabled={
+                  busy ||
+                  ["queued", "running"].includes(data?.processing?.status || "")
+                }
+                onClick={() =>
+                  act(() => api(`/exams/${exam}/process`, "POST", { mode }))
+                }
+              >
+                {" "}
+                {t("ui.s9ba15dba5c")}{" "}
+              </button>
+              <button
+                disabled={busy || preparing || processing}
+                onClick={() =>
+                  act(() => api(`/exams/${exam}/process/retry`, "POST"))
+                }
+              >
+                {" "}
+                {t("ui.s2c4517af49")}{" "}
+              </button>
+              <button
+                disabled={busy || preparing || processing}
+                onClick={() =>
+                  act(() => operation(`/exams/${exam}/index`, {}, setJob))
+                }
+              >
+                {" "}
+                {t("ui.s0c123f1916")}{" "}
+              </button>
             </div>
-            <Sources exam={exam} sources={[unit]} technical />
-          </article>
-        ))}
+            {data?.processing && (
+              <div role="status">
+                <p>
+                  {data.processing.status} · {data.processing.current_document}
+                </p>
+                <progress max="100" value={data.processing.progress_percent} />
+                <ErrorNotice error={data.processing.error_text || ""} />
+              </div>
+            )}
+            <Progress job={job} />
+            <h3>{t("ui.sbcb9c2e713")}</h3>
+            <MaterialReview
+              key={`advanced:${exam}`}
+              exam={exam}
+              revision={reviewRevision}
+              busy={busy || preparing || processing}
+              technical
+              save={(unit, status, content) =>
+                act(() =>
+                  api(`/exams/${exam}/review/${unit.id}`, "PATCH", {
+                    status,
+                    content,
+                  }),
+                )
+              }
+            />
+          </>
+        )}
       </details>
     </section>
-  );
-}
-
-function StudentEvidence({
-  unit,
-  exam,
-  busy,
-  save,
-}: {
-  unit: Unit;
-  exam: number;
-  busy: boolean;
-  save: (status: string, content: string) => Promise<void>;
-}) {
-  const { t } = useTranslation();
-  const [editing, setEditing] = useState(false);
-  const [content, setContent] = useState(unit.content);
-  const unusable = ["quarantined", "rejected"].includes(unit.review_status);
-  return (
-    <div className="evidence-snippet">
-      <strong>
-        {unit.source_location.replace(/,\s*lines?\s*\d+-\d+/i, "")}
-      </strong>
-      <span className="status-badge">
-        {t(
-          unit.review_status === "accepted"
-            ? "ui.redesignReady"
-            : unusable
-              ? "ui.redesignUnusable"
-              : "ui.redesignReview",
-        )}
-      </span>
-      {editing ? (
-        <label>
-          {t("ui.redesignEditContent")}
-          <p className="muted">{t("ui.mathHelp")}</p>
-          <StudyText>{content}</StudyText>
-          <textarea
-            value={content}
-            onChange={(event) => setContent(event.target.value)}
-            disabled={busy}
-          />
-        </label>
-      ) : (
-        <StudyText>{unit.content}</StudyText>
-      )}
-      {unit.review_status !== "accepted" && (
-        <p className="muted">
-          {t(
-            unusable ? "ui.redesignUnusableReason" : "ui.redesignReviewReason",
-          )}
-        </p>
-      )}
-      <Sources exam={exam} sources={[{ ...unit, id: undefined }]} />
-      <button disabled={busy} onClick={() => setEditing(!editing)}>
-        {t("ui.redesignEditContent")}
-      </button>
-      <button
-        disabled={
-          busy ||
-          !content.trim() ||
-          (unusable && content.trim() === unit.content.trim())
-        }
-        onClick={() => void save("accepted", content)}
-      >
-        {t("ui.redesignConfirmReady")}
-      </button>
-      <button disabled={busy} onClick={() => void save("rejected", content)}>
-        {t("ui.redesignDoNotUse")}
-      </button>
-    </div>
   );
 }

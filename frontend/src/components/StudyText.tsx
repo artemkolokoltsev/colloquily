@@ -5,9 +5,15 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 
 /** Source HTML stays disabled; all math and fonts are rendered locally. */
-export function StudyText({ children }: { children?: string | null }) {
+export function StudyText({
+  children,
+  preserveLines = false,
+}: {
+  children?: string | null;
+  preserveLines?: boolean;
+}) {
   return (
-    <div className="study-text">
+    <div className={`study-text${preserveLines ? " source-text" : ""}`}>
       <Markdown
         skipHtml
         remarkPlugins={[remarkGfm, remarkMath]}

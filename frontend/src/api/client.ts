@@ -1,4 +1,4 @@
-import type { Job } from "../types";
+import type { Job, MaterialReviewPage } from "../types";
 import i18n from "../i18n";
 let base = "";
 let token = "";
@@ -71,6 +71,21 @@ export async function operation<T>(
   if (job.status !== "completed")
     throw new Error(job.error || i18n.t("common.operationFailed"));
   return job.result as T;
+}
+export function materialReviewPage(
+  exam: number,
+  documentId: number | undefined,
+  offset: number,
+  signal: AbortSignal,
+) {
+  const query = new URLSearchParams({ offset: String(offset), limit: "10" });
+  if (documentId !== undefined) query.set("document_id", String(documentId));
+  return api<MaterialReviewPage>(
+    `/exams/${exam}/review-page?${query}`,
+    "GET",
+    undefined,
+    signal,
+  );
 }
 async function sourceResponse(exam: number, filename: string) {
   const response = await fetch(

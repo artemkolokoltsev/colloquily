@@ -208,7 +208,7 @@ export function Sources({
       )}
       <details open={!pdf}>
         <summary>{t("ui.insightExtracted")}</summary>
-        <StudyText>{source.content || source.preview}</StudyText>
+        <StudyText preserveLines>{source.content || source.preview}</StudyText>
       </details>
     </section>
   );

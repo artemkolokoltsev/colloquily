@@ -58,6 +58,10 @@ def run():
         assert not SubjectIndex(exam["id"], embedder=Embedder()).load()
         assert (PROMPT_ROOT / "training.json").is_file(), PROMPT_ROOT
         assert json.loads((PROMPT_ROOT / "training.json").read_text())
+        review = client.get(f"/api/exams/{exam['id']}/review-page?limit=1")
+        assert review.status_code == 200, review.text
+        assert len(review.json()["items"]) == 1
+        assert "raw_content" not in review.json()["items"][0]
         _check_coursework(client)
     print(
         "Frozen backend self-test passed: API, PDF/Markdown, SQLite, FAISS, review filtering, prompts."

@@ -5,7 +5,7 @@ from contextlib import closing
 from datetime import datetime
 
 from services.database import _connect
-from services.study_content import study_evidence
+from services.study_content import study_content_problem, study_evidence
 from services.topic_normalization import normalize_topic_titles, single_topic_title
 
 
@@ -72,7 +72,14 @@ def list_documents(subject_id: int) -> list[dict]:
             SELECT d.*,
                 SUM(CASE WHEN ku.review_status = 'accepted' THEN 1 ELSE 0 END) AS accepted_count,
                 SUM(CASE WHEN ku.review_status = 'needs_review' THEN 1 ELSE 0 END) AS review_count,
-                SUM(CASE WHEN ku.review_status = 'quarantined' THEN 1 ELSE 0 END) AS quarantined_count
+                SUM(CASE WHEN ku.review_status = 'quarantined' THEN 1 ELSE 0 END) AS quarantined_count,
+                COUNT(ku.id) AS unit_count,
+                COUNT(DISTINCT ku.source_start) AS source_page_count,
+                (SELECT COUNT(*) FROM questions q WHERE q.subject_id = d.subject_id
+                    AND EXISTS (SELECT 1 FROM json_each(q.evidence_ids_json) e
+                        JOIN knowledge_units support ON support.id = e.value
+                        WHERE support.document_id = d.id
+                        AND support.quality_problems_json NOT LIKE '%"superseded_extraction"%')) AS question_count
             FROM documents d LEFT JOIN knowledge_units ku ON ku.document_id = d.id
                 AND ku.quality_problems_json NOT LIKE '%"superseded_extraction"%'
             WHERE d.subject_id = ? GROUP BY d.id ORDER BY d.relative_path
@@ -444,6 +451,42 @@ def list_review_units(
             )
             items.append(item)
         return items
+
+
+def review_page(
+    subject_id: int,
+    *,
+    document_id: int | None = None,
+    offset: int = 0,
+    limit: int = 10,
+) -> dict:
+    """Bound the material viewer without loading raw extracts or every passage."""
+    if offset < 0 or not 1 <= limit <= 25:
+        raise ValueError("INVALID_REVIEW_PAGE")
+    where = "ku.subject_id = ? AND ku.quality_problems_json NOT LIKE '%\"superseded_extraction\"%'"
+    params = [subject_id]
+    if document_id is not None:
+        where += " AND ku.document_id = ?"
+        params.append(document_id)
+    with closing(_connect()) as connection:
+        total = connection.execute(
+            f"SELECT COUNT(*) FROM knowledge_units ku WHERE {where}", params
+        ).fetchone()[0]
+        rows = connection.execute(
+            f"""SELECT ku.id,ku.document_id,ku.content,ku.review_status,
+                ku.source_location,ku.source_start,ku.source_end,ku.quality_problems_json,
+                d.title AS document_title,d.relative_path
+            FROM knowledge_units ku JOIN documents d ON d.id=ku.document_id
+            WHERE {where} ORDER BY d.relative_path,ku.source_start,ku.id LIMIT ? OFFSET ?""",
+            [*params, limit, offset],
+        ).fetchall()
+    items = []
+    for row in rows:
+        item = dict(row)
+        item["quality_problems"] = json.loads(item.pop("quality_problems_json") or "[]")
+        item["study_problem"] = study_content_problem(item["content"])
+        items.append(item)
+    return {"items": items, "total": total, "offset": offset, "limit": limit}
 
 
 def batch_accept_high_confidence(

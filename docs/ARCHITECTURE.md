@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the **implemented** Colloquily 0.1.11 design, not an aspirational service architecture. Start with the [README](../README.md) for installation and the [engineering standards](ENGINEERING_STANDARDS.md) for change invariants.
+This document describes the **implemented** Colloquily 0.1.12 design, not an aspirational service architecture. Start with the [README](../README.md) for installation and the [engineering standards](ENGINEERING_STANDARDS.md) for change invariants.
 
 ## Context and responsibilities
 
@@ -99,3 +99,15 @@ exam-scoped contracts through the main router. Schema 12 is additive. See
 [ADR 0003](adr/0003-coursework-and-script-revisions.md) for recovery, migration,
 LaTeX execution limits and rollback. The existing PDF.js preview displays both
 uploaded sheets and generated submissions without remote resources.
+
+
+## Bounded source review
+
+Materials uses the exam-scoped `/review-page` contract (ten passages in the UI,
+maximum 25 per request) and metadata counts instead of downloading all evidence
+and questions to build document cards. Ordering is stable by document, source
+position and ID. Closed review views unmount their contents; source PDF previews
+mount only after an explicit request. Plain source line breaks are preserved in
+the Markdown view. The existing full `/review` contract remains available for
+explicit exports and internal workflows. Outline purpose checks apply to live
+evidence selection as well as ingestion, preserving historical review records.

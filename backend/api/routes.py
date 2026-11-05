@@ -7,7 +7,7 @@ from services.reported_questions import (
 from backend.api.coursework import router as coursework_router
 from pathlib import Path
 import shutil
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query
 from fastapi.responses import FileResponse
 from werkzeug.utils import secure_filename
 import config
@@ -17,6 +17,7 @@ from backend.models.api import (
     ExamInput,
     NewExamInput,
     ReviewInput,
+    ReviewPage,
     ProcessInput,
     Job,
     RunInput,
@@ -345,6 +346,19 @@ def review_one(ident: int, unit_id: int, body: ReviewInput):
     )
     clear_subject_index_cache()
     return result
+
+
+@router.get("/exams/{ident}/review-page", response_model=ReviewPage)
+def review_page(
+    ident: int,
+    document_id: int | None = None,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=10, ge=1, le=25),
+):
+    flow.exam(ident)
+    return knowledge.review_page(
+        ident, document_id=document_id, offset=offset, limit=limit
+    )
 
 
 @router.get("/exams/{ident}/questions", response_model=list[Record])

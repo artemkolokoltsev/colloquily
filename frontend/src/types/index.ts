@@ -128,6 +128,24 @@ export interface LectureScript {
   filename: string;
   relative_path: string;
 }
+export interface MaterialUnit {
+  id: number;
+  document_id: number;
+  content: string;
+  review_status: string;
+  document_title: string;
+  relative_path: string;
+  source_location: string;
+  source_start?: number;
+  quality_problems?: string[];
+  study_problem?: string | null;
+}
+export interface MaterialReviewPage {
+  items: MaterialUnit[];
+  total: number;
+  offset: number;
+  limit: number;
+}
 export interface SubmissionProfile {
   course_name: string;
   semester: string;

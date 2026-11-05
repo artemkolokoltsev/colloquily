@@ -8,7 +8,7 @@ on:
       - 'scripts/smoke_pdf_reader.mjs'
       - 'scripts/smoke_coursework.mjs'
       - 'backend/**'
-      - 'tests/frontend/fixtures/**'
+      - 'tests/frontend/**'
       - 'src-tauri/tauri.conf.json'
       - 'package*.json'
       - '.github/workflows/pdf-reader.yml'
@@ -28,6 +28,12 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:pdf
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: pdf-reader-verification
+          path: output/playwright/
+          if-no-files-found: ignore
 
   coursework:
     runs-on: ubuntu-24.04
